@@ -1,0 +1,41 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Secrets (just in case)
+*.lic
+*.key
+*.pem
+secrets/
+
+# Test outputs
+test-results/
+coverage/
+*.lcov
+
+DEPLOYMENT_CHECKLIST.md

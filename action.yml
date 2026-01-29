@@ -1,0 +1,404 @@
+name: 'Skyramp Test Bot'
+description: 'Automated test maintenance for Skyramp tests using AI-powered agents'
+author: 'Skyramp Inc'
+
+branding:
+  icon: 'zap'
+  color: 'purple'
+
+inputs:
+  # Required inputs
+  skyramp_license_file:
+    description: 'Skyramp license file content (store in GitHub Secrets)'
+    required: true
+  cursor_api_key:
+    description: 'Cursor API key for AI agent access (store in GitHub Secrets)'
+    required: true
+
+  # High priority optional inputs
+  test_directory:
+    description: 'Directory containing Skyramp tests'
+    required: false
+    default: 'tests'
+  test_file_pattern:
+    description: 'Pattern for test files to commit (e.g., tests/**/*)'
+    required: false
+    default: 'tests/**/*'
+  service_startup_command:
+    description: 'Command to start services before test maintenance'
+    required: false
+    default: 'docker compose up -d'
+
+  # Medium priority optional inputs
+  skyramp_executor_version:
+    description: 'Skyramp Executor Docker image version'
+    required: false
+    default: 'v1.3.3'
+  skyramp_mcp_version:
+    description: 'Skyramp MCP package version'
+    required: false
+    default: 'latest'
+  node_version:
+    description: 'Node.js version to use'
+    required: false
+    default: 'lts'
+  skip_service_startup:
+    description: 'Skip running service startup command'
+    required: false
+    default: 'false'
+  working_directory:
+    description: 'Working directory for the action'
+    required: false
+    default: '.'
+  auto_commit:
+    description: 'Automatically commit test changes'
+    required: false
+    default: 'true'
+  commit_message:
+    description: 'Commit message for test changes'
+    required: false
+    default: 'Skyramp Testbot: test maintenance suggestions'
+  post_pr_comment:
+    description: 'Post summary as PR comment'
+    required: false
+    default: 'true'
+  enable_debug:
+    description: 'Enable debug logging'
+    required: false
+    default: 'false'
+
+outputs:
+  test_summary:
+    description: 'Full summary of test maintenance actions'
+    value: ${{ steps.read-summary.outputs.summary }}
+  tests_modified:
+    description: 'Number of tests modified'
+    value: ${{ steps.parse-summary.outputs.modified }}
+  tests_created:
+    description: 'Number of tests created'
+    value: ${{ steps.parse-summary.outputs.created }}
+  tests_executed:
+    description: 'Number of tests executed'
+    value: ${{ steps.parse-summary.outputs.executed }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate Inputs
+      shell: bash
+      run: |
+        echo "::group::Validating inputs"
+
+        if [ -z "${{ inputs.skyramp_license_file }}" ]; then
+          echo "::error::skyramp_license_file is required but not provided"
+          exit 1
+        fi
+
+        if [ -z "${{ inputs.cursor_api_key }}" ]; then
+          echo "::error::cursor_api_key is required but not provided"
+          exit 1
+        fi
+
+        echo "::notice::All required inputs validated successfully"
+        echo "::endgroup::"
+
+    - name: Setup Directories
+      shell: bash
+      run: |
+        echo "::group::Setting up working directories"
+        mkdir -p ${{ runner.temp }}/skyramp
+        echo "Created temporary directory at ${{ runner.temp }}/skyramp"
+        echo "::endgroup::"
+
+    - name: Generate Git Diff
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "::group::Generating git diff"
+
+        if [ -z "${{ github.event.pull_request.base.sha }}" ]; then
+          echo "::warning::Not running in a pull request context, using HEAD~1 for diff"
+          git diff HEAD~1 > ${{ runner.temp }}/skyramp/git_diff
+        else
+          git diff ${{ github.event.pull_request.base.sha }} > ${{ runner.temp }}/skyramp/git_diff
+        fi
+
+        DIFF_SIZE=$(wc -l < ${{ runner.temp }}/skyramp/git_diff)
+        echo "Generated diff with $DIFF_SIZE lines"
+
+        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+          echo "::debug::Git diff content:"
+          cat ${{ runner.temp }}/skyramp/git_diff
+        fi
+
+        echo "::endgroup::"
+
+    - name: Inject Skyramp License
+      shell: bash
+      env:
+        LICENSE_FILE_CONTENT: ${{ inputs.skyramp_license_file }}
+      run: |
+        echo "::group::Configuring Skyramp license"
+
+        echo "$LICENSE_FILE_CONTENT" > ${{ runner.temp }}/skyramp/skyramp_license.lic
+        chmod 600 ${{ runner.temp }}/skyramp/skyramp_license.lic
+
+        if [ ! -s ${{ runner.temp }}/skyramp/skyramp_license.lic ]; then
+          echo "::error::License file is empty or could not be created"
+          exit 1
+        fi
+
+        echo "::notice::License file created successfully"
+        echo "::endgroup::"
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node_version }}
+
+    - name: Pull Skyramp Executor
+      shell: bash
+      run: |
+        echo "::group::Pulling Skyramp Executor Docker image"
+
+        MAX_RETRIES=3
+        RETRY_COUNT=0
+
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          if docker pull skyramp/executor:${{ inputs.skyramp_executor_version }} --platform linux/amd64; then
+            echo "::notice::Successfully pulled Skyramp Executor"
+            break
+          else
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "::warning::Failed to pull image, retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+              sleep 5
+            else
+              echo "::error::Failed to pull Skyramp Executor after $MAX_RETRIES attempts"
+              exit 1
+            fi
+          fi
+        done
+
+        echo "::endgroup::"
+
+    - name: Install Skyramp MCP
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "::group::Installing Skyramp MCP"
+
+        if [ "${{ inputs.skyramp_mcp_version }}" = "latest" ]; then
+          npm install @skyramp/mcp
+        else
+          npm install @skyramp/mcp@${{ inputs.skyramp_mcp_version }}
+        fi
+
+        echo "::notice::Skyramp MCP installed successfully"
+        echo "::endgroup::"
+
+    - name: Install Cursor CLI
+      shell: bash
+      run: |
+        echo "::group::Installing Cursor CLI"
+
+        # Check if Cursor CLI is already installed
+        if command -v agent &> /dev/null; then
+          INSTALLED_VERSION=$(agent --version 2>/dev/null || echo "unknown")
+          echo "::notice::Cursor CLI already installed (version: $INSTALLED_VERSION)"
+        else
+          echo "Installing Cursor CLI..."
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl https://cursor.com/install -fsS | bash; then
+              echo "::notice::Cursor CLI installed successfully"
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "::warning::Installation failed, retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+                sleep 5
+              else
+                echo "::error::Failed to install Cursor CLI after $MAX_RETRIES attempts"
+                exit 1
+              fi
+            fi
+          done
+        fi
+
+        # Add to PATH
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+        echo "::endgroup::"
+
+    - name: Configure MCP Server
+      shell: bash
+      run: |
+        echo "::group::Configuring MCP server"
+
+        mkdir -p $HOME/.cursor
+
+        cat << EOF > $HOME/.cursor/mcp.json
+        {
+          "mcpServers": {
+            "skyramp-mcp": {
+              "command": "npx",
+              "args": ["-y", "@skyramp/mcp@${{ inputs.skyramp_mcp_version }}"],
+              "env": {
+                "LICENSE_FILE": "${{ runner.temp }}/skyramp/skyramp_license.lic",
+                "CI": "true"
+              }
+            }
+          }
+        }
+        EOF
+
+        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+          echo "::debug::MCP configuration:"
+          cat $HOME/.cursor/mcp.json
+        fi
+
+        echo "::notice::MCP server configured"
+        echo "::endgroup::"
+
+    - name: Initialize Cursor Agent
+      shell: bash
+      env:
+        CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
+      run: |
+        echo "::group::Initializing Cursor agent"
+
+        # Enable MCP server
+        agent mcp enable skyramp-mcp
+
+        # Wait for initialization
+        sleep 10
+
+        # Verify MCP server is running
+        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+          echo "::debug::Active MCP servers:"
+          agent mcp list || echo "::warning::Could not list MCP servers"
+        fi
+
+        echo "::notice::Cursor agent initialized"
+        echo "::endgroup::"
+
+    - name: Start Services
+      if: inputs.skip_service_startup != 'true'
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "::group::Starting services"
+
+        echo "Running command: ${{ inputs.service_startup_command }}"
+
+        if ${{ inputs.service_startup_command }}; then
+          echo "::notice::Services started successfully"
+        else
+          echo "::warning::Service startup command failed, but continuing..."
+        fi
+
+        # Give services time to initialize
+        sleep 5
+
+        echo "::endgroup::"
+
+    - name: Run Test Maintenance
+      id: test-maintenance
+      shell: bash
+      env:
+        CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "::group::Running test maintenance"
+
+        PROMPT="Based on the git diff in ${{ runner.temp }}/skyramp/git_diff file, perform the following test maintenance tasks:
+
+        1. Check if there are any relevant Skyramp tests in the '${{ inputs.test_directory }}' directory that correspond to the code changes.
+        2. If there are relevant tests, use Skyramp MCP tools to analyze and modify them to ensure they pass with the new changes.
+        3. If there are no tests that can validate the changes, use Skyramp MCP to generate appropriate Skyramp tests for the new or modified code.
+        4. Use Skyramp MCP to execute the tests and validate the results.
+        5. Generate a detailed summary to '${{ runner.temp }}/skyramp/result.txt' that includes:
+           - What tests were impacted and updated
+           - What tests were created
+           - What tests were executed and their pass/fail status
+           - Any issues or recommendations
+
+        Use the skyramp-mcp tools available to you for test analysis, generation, and execution."
+
+        if agent -f -p "$PROMPT"; then
+          echo "::notice::Test maintenance completed successfully"
+        else
+          EXIT_CODE=$?
+          echo "::error::Test maintenance failed with exit code $EXIT_CODE"
+          echo "Check the agent logs for details"
+          exit $EXIT_CODE
+        fi
+
+        echo "::endgroup::"
+
+    - name: Read Summary
+      id: read-summary
+      shell: bash
+      run: |
+        echo "::group::Reading test summary"
+
+        if [ -f "${{ runner.temp }}/skyramp/result.txt" ]; then
+          SUMMARY=$(cat ${{ runner.temp }}/skyramp/result.txt)
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          if [ "${{ inputs.enable_debug }}" = "true" ]; then
+            echo "::debug::Summary content:"
+            echo "$SUMMARY"
+          fi
+        else
+          echo "::warning::No summary file generated"
+          echo "summary=No summary available" >> $GITHUB_OUTPUT
+        fi
+
+        echo "::endgroup::"
+
+    - name: Parse Summary Metrics
+      id: parse-summary
+      shell: bash
+      run: |
+        echo "::group::Parsing summary metrics"
+
+        if [ -f "${{ runner.temp }}/skyramp/result.txt" ]; then
+          SUMMARY=$(cat ${{ runner.temp }}/skyramp/result.txt)
+
+          # Simple parsing - adjust regex patterns based on actual summary format
+          MODIFIED=$(echo "$SUMMARY" | grep -ioE "modified[^0-9]*([0-9]+)" | grep -oE "[0-9]+" || echo "0")
+          CREATED=$(echo "$SUMMARY" | grep -ioE "created[^0-9]*([0-9]+)" | grep -oE "[0-9]+" || echo "0")
+          EXECUTED=$(echo "$SUMMARY" | grep -ioE "executed[^0-9]*([0-9]+)" | grep -oE "[0-9]+" || echo "0")
+
+          echo "modified=$MODIFIED" >> $GITHUB_OUTPUT
+          echo "created=$CREATED" >> $GITHUB_OUTPUT
+          echo "executed=$EXECUTED" >> $GITHUB_OUTPUT
+
+          echo "::notice::Metrics - Modified: $MODIFIED, Created: $CREATED, Executed: $EXECUTED"
+        else
+          echo "modified=0" >> $GITHUB_OUTPUT
+          echo "created=0" >> $GITHUB_OUTPUT
+          echo "executed=0" >> $GITHUB_OUTPUT
+        fi
+
+        echo "::endgroup::"
+
+    - name: Post PR Comment
+      if: inputs.post_pr_comment == 'true' && github.event.pull_request.number
+      uses: peter-evans/create-or-update-comment@v4
+      with:
+        issue-number: ${{ github.event.pull_request.number }}
+        body-path: ${{ runner.temp }}/skyramp/result.txt
+
+    - name: Auto-commit Changes
+      if: inputs.auto_commit == 'true'
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: ${{ inputs.commit_message }}
+        file_pattern: ${{ inputs.test_file_pattern }}

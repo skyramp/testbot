@@ -1,0 +1,44 @@
+name: Skyramp Test Automation (Manual Review)
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-maintenance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # Only read permissions
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Skyramp Test Bot (No Auto-commit)
+        id: skyramp
+        uses: skyramp/test-bot@v1
+        with:
+          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          auto_commit: false  # Disable auto-commit for manual review
+          post_pr_comment: true
+
+      - name: Upload test changes as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-changes
+          path: tests/
+          retention-days: 7
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ⚠️ Test Changes Ready for Review\n\nTest changes have been generated but not committed. Please review the artifact and commit manually if approved.\n\n**Summary:**\n${{ steps.skyramp.outputs.test_summary }}`
+            })

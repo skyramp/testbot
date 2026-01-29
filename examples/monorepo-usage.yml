@@ -1,0 +1,97 @@
+name: Skyramp Test Automation (Monorepo)
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Detect which services have changes
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      user-service: ${{ steps.filter.outputs.user-service }}
+      order-service: ${{ steps.filter.outputs.order-service }}
+      payment-service: ${{ steps.filter.outputs.payment-service }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            user-service:
+              - 'services/user-service/**'
+            order-service:
+              - 'services/order-service/**'
+            payment-service:
+              - 'services/payment-service/**'
+
+  # Run test maintenance for user service
+  user-service-tests:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.user-service == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Skyramp Test Bot for User Service
+        uses: skyramp/test-bot@v1
+        with:
+          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          test_directory: 'services/user-service/tests'
+          test_file_pattern: 'services/user-service/tests/**/*'
+          working_directory: 'services/user-service'
+          service_startup_command: 'docker compose -f services/user-service/docker-compose.yml up -d'
+          commit_message: 'test(user-service): update tests via Skyramp bot'
+
+  # Run test maintenance for order service
+  order-service-tests:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.order-service == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Skyramp Test Bot for Order Service
+        uses: skyramp/test-bot@v1
+        with:
+          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          test_directory: 'services/order-service/tests'
+          test_file_pattern: 'services/order-service/tests/**/*'
+          working_directory: 'services/order-service'
+          service_startup_command: 'docker compose -f services/order-service/docker-compose.yml up -d'
+          commit_message: 'test(order-service): update tests via Skyramp bot'
+
+  # Run test maintenance for payment service
+  payment-service-tests:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.payment-service == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Skyramp Test Bot for Payment Service
+        uses: skyramp/test-bot@v1
+        with:
+          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          test_directory: 'services/payment-service/tests'
+          test_file_pattern: 'services/payment-service/tests/**/*'
+          working_directory: 'services/payment-service'
+          service_startup_command: 'docker compose -f services/payment-service/docker-compose.yml up -d'
+          commit_message: 'test(payment-service): update tests via Skyramp bot'

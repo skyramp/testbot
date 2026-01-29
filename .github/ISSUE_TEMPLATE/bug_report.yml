@@ -1,0 +1,108 @@
+name: Bug Report
+description: Report a bug or issue with Skyramp Test Bot
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below.
+
+  - type: input
+    id: version
+    attributes:
+      label: Action Version
+      description: Which version of the action are you using?
+      placeholder: "e.g., v1.0.0, v1, latest"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: runner
+    attributes:
+      label: Runner OS
+      description: What runner are you using?
+      options:
+        - ubuntu-latest
+        - ubuntu-22.04
+        - ubuntu-20.04
+        - self-hosted
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Tell us what happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Tell us what you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow Configuration
+      description: Please provide your workflow YAML (remove sensitive information)
+      render: yaml
+      placeholder: |
+        - uses: skyramp/test-bot@v1
+          with:
+            skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+            cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: Please paste relevant error logs (with enable_debug: true if possible)
+      render: shell
+      placeholder: Paste logs here
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Create workflow with...
+        2. Open PR with...
+        3. See error...
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context about the problem
+      placeholder: Add any other context here
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: troubleshooting
+    attributes:
+      label: Troubleshooting Checklist
+      description: Please confirm you've checked these items
+      options:
+        - label: I've read the [troubleshooting guide](https://github.com/skyramp/test-bot/blob/main/docs/troubleshooting.md)
+          required: true
+        - label: I've searched for existing issues
+          required: true
+        - label: I've enabled debug mode and included logs
+          required: false
