@@ -41,7 +41,7 @@ inputs:
   node_version:
     description: 'Node.js version to use'
     required: false
-    default: 'lts'
+    default: 'lts/*'
   skip_service_startup:
     description: 'Skip running service startup command'
     required: false
@@ -320,11 +320,22 @@ runs:
         2. If there are relevant tests, use Skyramp MCP tools to analyze and modify them to ensure they pass with the new changes.
         3. If there are no tests that can validate the changes, use Skyramp MCP to generate appropriate Skyramp tests for the new or modified code.
         4. Use Skyramp MCP to execute the tests and validate the results.
-        5. Generate a detailed summary to '${{ runner.temp }}/skyramp/result.txt' that includes:
-           - What tests were impacted and updated
-           - What tests were created
-           - What tests were executed and their pass/fail status
-           - Any issues or recommendations
+        5. Generate a CONCISE summary to '${{ runner.temp }}/skyramp/result.txt' following this format:
+
+        ## 🤖 Skyramp Test Bot Summary
+
+        **Tests Modified:** [number] | **Tests Created:** [number] | **Tests Executed:** [number] | **Passed:** [number] | **Failed:** [number]
+
+        ### ✅ What Changed
+        - Brief one-line summary of test changes (details are in the commit)
+
+        ### ⚠️ Issues Found
+        - List any test failures or bugs discovered (if none, write 'None')
+
+        ### 💡 Recommendations
+        - Key action items only (if none, write 'All tests passing')
+
+        Keep the summary brief and scannable. Avoid repeating code diff details that are already visible in the PR.
 
         Use the skyramp-mcp tools available to you for test analysis, generation, and execution."
 

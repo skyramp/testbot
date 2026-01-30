@@ -209,7 +209,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 - **Issues**: [GitHub Issues](https://github.com/skyramp/test-bot/issues)
 - **Documentation**: [docs/](docs/)
-- **Website**: [skyramp.com](https://skyramp.com)
+- **Website**: [skyramp.dev](https://skyramp.dev)
 
 ## License
 
@@ -224,4 +224,4 @@ Built with:
 
 ---
 
-Made with ⚡ by [Skyramp](https://skyramp.com)
+Made with ⚡ by [Skyramp](https://skyramp.dev)
