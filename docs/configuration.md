@@ -4,11 +4,154 @@ This guide provides detailed information about configuring Skyramp Test Bot for 
 
 ## Table of Contents
 
+- [Workspace Configuration (.skyramp.yml)](#workspace-configuration-skyrampyml)
 - [Input Reference](#input-reference)
 - [Output Usage](#output-usage)
 - [Advanced Patterns](#advanced-patterns)
 - [Environment-Specific Setup](#environment-specific-setup)
 - [Best Practices](#best-practices)
+
+## Workspace Configuration (.skyramp.yml)
+
+Skyramp Test Bot supports project-level configuration through a `.skyramp.yml` file in your repository root. This allows you to define settings that apply to all workflow runs without modifying the workflow file itself.
+
+### Configuration Precedence
+
+The configuration system follows this precedence order (highest to lowest):
+
+1. **.skyramp.yml values** - Project-level configuration (source of truth)
+2. **GitHub Action inputs** - Values from workflow files or defaults
+
+When `.skyramp.yml` exists and contains a value, it always takes precedence over workflow inputs or defaults. This treats `.skyramp.yml` as the authoritative project configuration.
+
+### File Location
+
+By default, the action looks for `.skyramp.yml` in the repository root. You can customize this path using the `config_file` input:
+
+```yaml
+- uses: skyramp/test-bot@v1
+  with:
+    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+    config_file: 'config/skyramp-settings.yml'
+```
+
+### Complete .skyramp.yml Reference
+
+```yaml
+# .skyramp.yml - Skyramp Test Bot workspace configuration
+# All fields are optional. Only include fields you want to override.
+
+# Directory containing Skyramp tests
+# Default: "tests"
+test_directory: "tests"
+
+# Glob pattern for test files to commit
+# Default: "tests/**/*"
+test_file_pattern: "tests/**/*"
+
+# Command to start services before test maintenance
+# Default: "docker compose up -d"
+service_startup_command: "docker compose up -d"
+
+# Skyramp Executor Docker image version
+# Default: "v1.3.3"
+skyramp_executor_version: "v1.3.3"
+
+# Skyramp MCP npm package version
+# Default: "latest"
+skyramp_mcp_version: "latest"
+
+# Node.js version to use
+# Default: "lts/*"
+node_version: "lts/*"
+
+# Skip running service startup command
+# Default: false
+skip_service_startup: false
+
+# Working directory for the action
+# Default: "."
+working_directory: "."
+
+# Automatically commit test changes
+# Default: true
+auto_commit: true
+
+# Commit message for test changes
+# Default: "Skyramp Testbot: test maintenance suggestions"
+commit_message: "Skyramp Testbot: test maintenance suggestions"
+
+# Post summary as PR comment
+# Default: true
+post_pr_comment: true
+
+# Enable debug logging
+# Default: false
+enable_debug: false
+```
+
+### Excluded Settings
+
+The following settings cannot be configured in `.skyramp.yml` for security reasons and must always be provided via GitHub Secrets:
+
+- `skyramp_license_file` - Must be stored in GitHub Secrets
+- `cursor_api_key` - Must be stored in GitHub Secrets
+
+### Example Configurations
+
+#### Minimal Override
+
+Only override specific values:
+
+```yaml
+# .skyramp.yml
+test_directory: "api_tests"
+auto_commit: false
+```
+
+#### Monorepo Configuration
+
+Configure for a service in a monorepo:
+
+```yaml
+# .skyramp.yml
+working_directory: "services/user-api"
+test_directory: "tests"
+test_file_pattern: "services/user-api/tests/**/*"
+service_startup_command: "docker compose -f docker-compose.user-api.yml up -d"
+```
+
+#### Production-Ready Configuration
+
+Pin versions and disable auto-commit for manual review:
+
+```yaml
+# .skyramp.yml
+skyramp_executor_version: "v1.3.3"
+skyramp_mcp_version: "1.2.0"
+node_version: "20.x"
+auto_commit: false
+post_pr_comment: true
+enable_debug: false
+```
+
+#### Development/Debugging Configuration
+
+Enable verbose logging for troubleshooting:
+
+```yaml
+# .skyramp.yml
+enable_debug: true
+auto_commit: false
+```
+
+### Validation and Error Handling
+
+- If `.skyramp.yml` doesn't exist, the action proceeds with workflow/default values
+- If `.skyramp.yml` exists but is malformed, a warning is logged and defaults are used
+- Missing keys are ignored (defaults apply)
+- The action gracefully handles partial configurations
 
 ## Input Reference
 

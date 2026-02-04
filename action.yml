@@ -66,6 +66,10 @@ inputs:
     description: 'Enable debug logging'
     required: false
     default: 'false'
+  config_file:
+    description: 'Path to Skyramp workspace config file'
+    required: false
+    default: '.skyramp.yml'
 
 outputs:
   test_summary:
@@ -102,6 +106,86 @@ runs:
         echo "::notice::All required inputs validated successfully"
         echo "::endgroup::"
 
+    - name: Load Workspace Configuration
+      id: load-config
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "::group::Loading workspace configuration"
+
+        CONFIG_FILE="${{ inputs.config_file }}"
+
+        # Function to get config value with fallback to input default
+        get_config() {
+          local key=$1
+          local default=$2
+          local value=""
+
+          if [ -f "$CONFIG_FILE" ] && command -v yq &> /dev/null; then
+            value=$(yq ".$key // \"\"" "$CONFIG_FILE" 2>/dev/null)
+          fi
+
+          if [ -n "$value" ] && [ "$value" != "null" ]; then
+            echo "$value"
+          else
+            echo "$default"
+          fi
+        }
+
+        # Install yq if config file exists
+        if [ -f "$CONFIG_FILE" ]; then
+          echo "Found $CONFIG_FILE, loading configuration..."
+          if ! command -v yq &> /dev/null; then
+            echo "Installing yq..."
+            sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+            sudo chmod +x /usr/local/bin/yq
+          fi
+        else
+          echo "::notice::No $CONFIG_FILE found, using workflow/default values"
+        fi
+
+        # Resolve all configuration values (SKYRAMP.yml takes precedence over inputs)
+        TEST_DIRECTORY=$(get_config "test_directory" "${{ inputs.test_directory }}")
+        TEST_FILE_PATTERN=$(get_config "test_file_pattern" "${{ inputs.test_file_pattern }}")
+        SERVICE_STARTUP_COMMAND=$(get_config "service_startup_command" "${{ inputs.service_startup_command }}")
+        SKYRAMP_EXECUTOR_VERSION=$(get_config "skyramp_executor_version" "${{ inputs.skyramp_executor_version }}")
+        SKYRAMP_MCP_VERSION=$(get_config "skyramp_mcp_version" "${{ inputs.skyramp_mcp_version }}")
+        NODE_VERSION=$(get_config "node_version" "${{ inputs.node_version }}")
+        SKIP_SERVICE_STARTUP=$(get_config "skip_service_startup" "${{ inputs.skip_service_startup }}")
+        AUTO_COMMIT=$(get_config "auto_commit" "${{ inputs.auto_commit }}")
+        COMMIT_MESSAGE=$(get_config "commit_message" "${{ inputs.commit_message }}")
+        POST_PR_COMMENT=$(get_config "post_pr_comment" "${{ inputs.post_pr_comment }}")
+        ENABLE_DEBUG=$(get_config "enable_debug" "${{ inputs.enable_debug }}")
+
+        # Output all resolved values
+        echo "test_directory=$TEST_DIRECTORY" >> $GITHUB_OUTPUT
+        echo "test_file_pattern=$TEST_FILE_PATTERN" >> $GITHUB_OUTPUT
+        echo "service_startup_command=$SERVICE_STARTUP_COMMAND" >> $GITHUB_OUTPUT
+        echo "skyramp_executor_version=$SKYRAMP_EXECUTOR_VERSION" >> $GITHUB_OUTPUT
+        echo "skyramp_mcp_version=$SKYRAMP_MCP_VERSION" >> $GITHUB_OUTPUT
+        echo "node_version=$NODE_VERSION" >> $GITHUB_OUTPUT
+        echo "skip_service_startup=$SKIP_SERVICE_STARTUP" >> $GITHUB_OUTPUT
+        echo "auto_commit=$AUTO_COMMIT" >> $GITHUB_OUTPUT
+        echo "commit_message=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
+        echo "post_pr_comment=$POST_PR_COMMENT" >> $GITHUB_OUTPUT
+        echo "enable_debug=$ENABLE_DEBUG" >> $GITHUB_OUTPUT
+
+        # Log resolved configuration
+        echo "Resolved configuration:"
+        echo "  - test_directory: $TEST_DIRECTORY"
+        echo "  - test_file_pattern: $TEST_FILE_PATTERN"
+        echo "  - service_startup_command: $SERVICE_STARTUP_COMMAND"
+        echo "  - skyramp_executor_version: $SKYRAMP_EXECUTOR_VERSION"
+        echo "  - skyramp_mcp_version: $SKYRAMP_MCP_VERSION"
+        echo "  - node_version: $NODE_VERSION"
+        echo "  - skip_service_startup: $SKIP_SERVICE_STARTUP"
+        echo "  - auto_commit: $AUTO_COMMIT"
+        echo "  - commit_message: $COMMIT_MESSAGE"
+        echo "  - post_pr_comment: $POST_PR_COMMENT"
+        echo "  - enable_debug: $ENABLE_DEBUG"
+
+        echo "::endgroup::"
+
     - name: Setup Directories
       shell: bash
       run: |
@@ -126,7 +210,7 @@ runs:
         DIFF_SIZE=$(wc -l < ${{ runner.temp }}/skyramp/git_diff)
         echo "Generated diff with $DIFF_SIZE lines"
 
-        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+        if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
           echo "::debug::Git diff content:"
           cat ${{ runner.temp }}/skyramp/git_diff
         fi
@@ -154,18 +238,19 @@ runs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ inputs.node_version }}
+        node-version: ${{ steps.load-config.outputs.node_version }}
 
     - name: Pull Skyramp Executor
       shell: bash
       run: |
         echo "::group::Pulling Skyramp Executor Docker image"
 
+        EXECUTOR_VERSION="${{ steps.load-config.outputs.skyramp_executor_version }}"
         MAX_RETRIES=3
         RETRY_COUNT=0
 
         while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-          if docker pull skyramp/executor:${{ inputs.skyramp_executor_version }} --platform linux/amd64; then
+          if docker pull skyramp/executor:${EXECUTOR_VERSION} --platform linux/amd64; then
             echo "::notice::Successfully pulled Skyramp Executor"
             break
           else
@@ -188,10 +273,11 @@ runs:
       run: |
         echo "::group::Installing Skyramp MCP"
 
-        if [ "${{ inputs.skyramp_mcp_version }}" = "latest" ]; then
+        MCP_VERSION="${{ steps.load-config.outputs.skyramp_mcp_version }}"
+        if [ "$MCP_VERSION" = "latest" ]; then
           npm install @skyramp/mcp
         else
-          npm install @skyramp/mcp@${{ inputs.skyramp_mcp_version }}
+          npm install @skyramp/mcp@${MCP_VERSION}
         fi
 
         echo "::notice::Skyramp MCP installed successfully"
@@ -238,6 +324,8 @@ runs:
       run: |
         echo "::group::Configuring MCP server"
 
+        MCP_VERSION="${{ steps.load-config.outputs.skyramp_mcp_version }}"
+
         mkdir -p $HOME/.cursor
 
         cat << EOF > $HOME/.cursor/mcp.json
@@ -245,7 +333,7 @@ runs:
           "mcpServers": {
             "skyramp-mcp": {
               "command": "npx",
-              "args": ["-y", "@skyramp/mcp@${{ inputs.skyramp_mcp_version }}"],
+              "args": ["-y", "@skyramp/mcp@${MCP_VERSION}"],
               "env": {
                 "LICENSE_FILE": "${{ runner.temp }}/skyramp/skyramp_license.lic",
                 "CI": "true"
@@ -255,7 +343,7 @@ runs:
         }
         EOF
 
-        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+        if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
           echo "::debug::MCP configuration:"
           cat $HOME/.cursor/mcp.json
         fi
@@ -277,7 +365,7 @@ runs:
         sleep 10
 
         # Verify MCP server is running
-        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+        if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
           echo "::debug::Active MCP servers:"
           agent mcp list || echo "::warning::Could not list MCP servers"
         fi
@@ -286,15 +374,21 @@ runs:
         echo "::endgroup::"
 
     - name: Start Services
-      if: inputs.skip_service_startup != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
         echo "::group::Starting services"
 
-        echo "Running command: ${{ inputs.service_startup_command }}"
+        if [ "${{ steps.load-config.outputs.skip_service_startup }}" = "true" ]; then
+          echo "::notice::Skipping service startup (skip_service_startup=true)"
+          echo "::endgroup::"
+          exit 0
+        fi
 
-        if ${{ inputs.service_startup_command }}; then
+        SERVICE_CMD="${{ steps.load-config.outputs.service_startup_command }}"
+        echo "Running command: $SERVICE_CMD"
+
+        if eval "$SERVICE_CMD"; then
           echo "::notice::Services started successfully"
         else
           echo "::warning::Service startup command failed, but continuing..."
@@ -308,7 +402,7 @@ runs:
     - name: Run Test Recommendation
       id: skyramp-test-recommendations
       shell: bash
-      env: 
+      env:
         CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
         PR_TITLE: ${{ github.event.pull_request.title }}
         PR_BODY: ${{ github.event.pull_request.body }}
@@ -319,7 +413,7 @@ runs:
         <DESCRIPTION>$PR_BODY</DESCRIPTION>
 
         Use the MCP tools offered by Skyramp MCP server to analyze the pull request title and description to come up with a business justification
-        case for this code change. Based on your analysis of the business case , perform 
+        case for this code change. Based on your analysis of the business case , perform
 
         1. Get recommendations for new contract, e2e, smoke, load tests that can bey generated by Skyramp MCP tools
         2. Use Skyramp MCP to execute the tests and validate the results.
@@ -360,9 +454,11 @@ runs:
       run: |
         echo "::group::Running test maintenance"
 
+        TEST_DIR="${{ steps.load-config.outputs.test_directory }}"
+
         PROMPT="Based on the git diff in ${{ runner.temp }}/skyramp/git_diff file, perform the following test maintenance tasks:
 
-        1. Check if there are any relevant Skyramp tests in the '${{ inputs.test_directory }}' directory that correspond to the code changes.
+        1. Check if there are any relevant Skyramp tests in the '${TEST_DIR}' directory that correspond to the code changes.
         2. If there are relevant tests, use Skyramp MCP tools to analyze and modify them to ensure they pass with the new changes.
         3. If there are no tests that can validate the changes, use Skyramp MCP to generate appropriate Skyramp tests for the new or modified code.
         4. Use Skyramp MCP to execute the tests and validate the results.
@@ -402,14 +498,13 @@ runs:
       run: |
         echo "::group::Reading test summary"
 
-        # Read maintenance summary for metrics parsing
         if [ -f "${{ runner.temp }}/skyramp/result.txt" ]; then
           SUMMARY=$(cat ${{ runner.temp }}/skyramp/result.txt)
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          if [ "${{ inputs.enable_debug }}" = "true" ]; then
+          if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
             echo "::debug::Maintenance summary content:"
             echo "$SUMMARY"
           fi
@@ -429,10 +524,15 @@ runs:
         if [ -f "${{ runner.temp }}/skyramp/result.txt" ]; then
           SUMMARY=$(cat ${{ runner.temp }}/skyramp/result.txt)
 
-          # Simple parsing - adjust regex patterns based on actual summary format
-          MODIFIED=$(echo "$SUMMARY" | grep -ioE "modified[^0-9]*([0-9]+)" | grep -oE "[0-9]+" || echo "0")
-          CREATED=$(echo "$SUMMARY" | grep -ioE "created[^0-9]*([0-9]+)" | grep -oE "[0-9]+" || echo "0")
-          EXECUTED=$(echo "$SUMMARY" | grep -ioE "executed[^0-9]*([0-9]+)" | grep -oE "[0-9]+" || echo "0")
+          # Parse metrics from summary - use head -1 to ensure single value output
+          MODIFIED=$(echo "$SUMMARY" | grep -ioE "modified[^0-9]*[0-9]+" | grep -oE "[0-9]+" | head -1 || echo "0")
+          CREATED=$(echo "$SUMMARY" | grep -ioE "created[^0-9]*[0-9]+" | grep -oE "[0-9]+" | head -1 || echo "0")
+          EXECUTED=$(echo "$SUMMARY" | grep -ioE "executed[^0-9]*[0-9]+" | grep -oE "[0-9]+" | head -1 || echo "0")
+
+          # Ensure we have valid values (default to 0 if empty)
+          MODIFIED=${MODIFIED:-0}
+          CREATED=${CREATED:-0}
+          EXECUTED=${EXECUTED:-0}
 
           echo "modified=$MODIFIED" >> $GITHUB_OUTPUT
           echo "created=$CREATED" >> $GITHUB_OUTPUT
@@ -469,7 +569,7 @@ runs:
 
         if [ -f "$COMBINED_FILE" ]; then
           echo "::notice::Combined summary created successfully"
-          if [ "${{ inputs.enable_debug }}" = "true" ]; then
+          if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
             echo "::debug::Combined summary content:"
             cat "$COMBINED_FILE"
           fi
@@ -480,15 +580,15 @@ runs:
         echo "::endgroup::"
 
     - name: Post PR Comment
-      if: inputs.post_pr_comment == 'true' && github.event.pull_request.number
+      if: steps.load-config.outputs.post_pr_comment == 'true' && github.event.pull_request.number
       uses: peter-evans/create-or-update-comment@v4
       with:
         issue-number: ${{ github.event.pull_request.number }}
         body-path: ${{ runner.temp }}/skyramp/combined-result.txt
 
     - name: Auto-commit Changes
-      if: inputs.auto_commit == 'true'
+      if: steps.load-config.outputs.auto_commit == 'true'
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
-        commit_message: ${{ inputs.commit_message }}
-        file_pattern: ${{ inputs.test_file_pattern }}
+        commit_message: ${{ steps.load-config.outputs.commit_message }}
+        file_pattern: ${{ steps.load-config.outputs.test_file_pattern }}

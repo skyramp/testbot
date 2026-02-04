@@ -13,7 +13,8 @@
 - ✅ **Automated Test Execution** - Runs tests and validates results
 - 💬 **PR Integration** - Posts detailed summaries as PR comments
 - 🔄 **Auto-commit** - Optionally commits test changes automatically
-- 🎯 **Configurable** - 14 inputs for customization to your workflow
+- 🎯 **Configurable** - 15 inputs for customization to your workflow
+- 📁 **Workspace Config** - Project-level settings via .skyramp.yml
 
 ## Quick Start
 
@@ -80,6 +81,38 @@ Before using this action, ensure you have:
 | `commit_message` | Commit message for test changes | `Skyramp Testbot: test maintenance suggestions` |
 | `post_pr_comment` | Post summary as PR comment | `true` |
 | `enable_debug` | Enable debug logging | `false` |
+| `config_file` | Path to Skyramp workspace config file | `.skyramp.yml` |
+
+## Workspace Configuration (.skyramp.yml)
+
+You can configure Test Bot at the project level by creating a `.skyramp.yml` file in your repository root. Values in this file take precedence over workflow defaults.
+
+```yaml
+# .skyramp.yml
+test_directory: "tests"
+test_file_pattern: "tests/**/*"
+service_startup_command: "docker compose up -d"
+skyramp_executor_version: "v1.3.3"
+skyramp_mcp_version: "latest"
+node_version: "lts/*"
+skip_service_startup: false
+working_directory: "."
+auto_commit: true
+commit_message: "Skyramp Testbot: test maintenance suggestions"
+post_pr_comment: true
+enable_debug: false
+```
+
+### Configuration Precedence
+
+1. **.skyramp.yml values** - project-level configuration (highest priority)
+2. **GitHub Action inputs** - workflow file values or defaults
+
+This allows teams to define project-specific settings that override workflow defaults without modifying the workflow file.
+
+> **Note:** Secrets (`skyramp_license_file` and `cursor_api_key`) must always be provided via GitHub Secrets and cannot be configured in .skyramp.yml.
+
+For detailed configuration options, see [docs/configuration.md](docs/configuration.md).
 
 ## Outputs
 
