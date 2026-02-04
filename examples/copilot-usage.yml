@@ -1,0 +1,48 @@
+name: Skyramp Test Automation with GitHub Copilot
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test-maintenance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Skyramp Test Bot with GitHub Copilot
+        uses: skyramp/test-bot@v1
+        with:
+          # Required inputs
+          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+          # Requires a PAT with "Copilot Requests" permission
+          copilot_api_key: ${{ secrets.COPILOT_PAT }}
+
+          # Test configuration
+          test_directory: tests
+          test_file_pattern: tests/**/*
+
+          # Service configuration
+          service_startup_command: docker compose up -d
+          skip_service_startup: false
+
+          # Skyramp configuration
+          skyramp_executor_version: v1.3.3
+          skyramp_mcp_version: latest
+
+          # Workflow behavior
+          auto_commit: true
+          commit_message: 'Skyramp Testbot: test maintenance suggestions [Copilot]'
+          post_pr_comment: true
+
+          # Advanced settings
+          node_version: lts/*
+          working_directory: .
+          enable_debug: false

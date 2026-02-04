@@ -13,7 +13,10 @@ inputs:
     required: true
   cursor_api_key:
     description: 'Cursor API key for AI agent access (store in GitHub Secrets)'
-    required: true
+    required: false
+  copilot_api_key:
+    description: 'Copilot API key for AI agent access. Requires a GitHub PAT with "Copilot Requests" permission.'
+    required: false
 
   # High priority optional inputs
   test_directory:
@@ -88,7 +91,7 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Validate Inputs
+    - name: Validate Inputs and Detect Agent Type
       shell: bash
       run: |
         echo "::group::Validating inputs"
@@ -98,10 +101,27 @@ runs:
           exit 1
         fi
 
-        if [ -z "${{ inputs.cursor_api_key }}" ]; then
-          echo "::error::cursor_api_key is required but not provided"
+        # Detect which API keys are provided
+        HAS_CURSOR_KEY=$( [ -n "${{ inputs.cursor_api_key }}" ] && echo "true" || echo "false" )
+        HAS_GITHUB_TOKEN=$( [ -n "${{ inputs.copilot_api_key }}" ] && echo "true" || echo "false" )
+
+        # Determine agent_type from provided keys
+        if [ "$HAS_CURSOR_KEY" = "true" ] && [ "$HAS_GITHUB_TOKEN" = "true" ]; then
+          echo "::error::Both cursor_api_key and copilot_api_key provided. Please provide only one."
+          exit 1
+        elif [ "$HAS_CURSOR_KEY" = "true" ]; then
+          AGENT_TYPE="cursor"
+          echo "::notice::Using Cursor CLI agent (cursor_api_key provided)"
+        elif [ "$HAS_GITHUB_TOKEN" = "true" ]; then
+          AGENT_TYPE="copilot"
+          echo "::notice::Using GitHub Copilot CLI agent (copilot_api_key provided)"
+        else
+          echo "::error::Either cursor_api_key or copilot_api_key must be provided"
           exit 1
         fi
+
+        # Export agent_type for subsequent steps
+        echo "AGENT_TYPE=$AGENT_TYPE" >> $GITHUB_ENV
 
         echo "::notice::All required inputs validated successfully"
         echo "::endgroup::"
@@ -284,6 +304,7 @@ runs:
         echo "::endgroup::"
 
     - name: Install Cursor CLI
+      if: env.AGENT_TYPE == 'cursor'
       shell: bash
       run: |
         echo "::group::Installing Cursor CLI"
@@ -319,10 +340,53 @@ runs:
 
         echo "::endgroup::"
 
-    - name: Configure MCP Server
+    - name: Install GitHub Copilot CLI
+      if: env.AGENT_TYPE == 'copilot'
       shell: bash
       run: |
-        echo "::group::Configuring MCP server"
+        echo "::group::Installing GitHub Copilot CLI"
+
+        # Check if Copilot CLI is already installed
+        if command -v copilot &> /dev/null; then
+          INSTALLED_VERSION=$(copilot --version 2>/dev/null || echo "unknown")
+          echo "::notice::GitHub Copilot CLI already installed (version: $INSTALLED_VERSION)"
+        else
+          echo "Installing GitHub Copilot CLI via npm..."
+          MAX_RETRIES=3
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if npm install -g @github/copilot; then
+              echo "::notice::GitHub Copilot CLI installed successfully"
+              break
+            else
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                echo "::warning::Installation failed, retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+                sleep 5
+              else
+                echo "::error::Failed to install GitHub Copilot CLI after $MAX_RETRIES attempts"
+                exit 1
+              fi
+            fi
+          done
+        fi
+
+        # Verify installation
+        if command -v copilot &> /dev/null; then
+          echo "::notice::GitHub Copilot CLI is available"
+        else
+          echo "::error::GitHub Copilot CLI installation verification failed"
+          exit 1
+        fi
+
+        echo "::endgroup::"
+
+    - name: Configure MCP Server for Cursor
+      if: env.AGENT_TYPE == 'cursor'
+      shell: bash
+      run: |
+        echo "::group::Configuring MCP server for Cursor"
 
         MCP_VERSION="${{ steps.load-config.outputs.skyramp_mcp_version }}"
 
@@ -348,10 +412,66 @@ runs:
           cat $HOME/.cursor/mcp.json
         fi
 
-        echo "::notice::MCP server configured"
+        echo "::notice::MCP server configured for Cursor"
+        echo "::endgroup::"
+
+    - name: Configure MCP Server for Copilot
+      if: env.AGENT_TYPE == 'copilot'
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "::group::Configuring MCP server for Copilot"
+
+        # Create MCP config in home directory
+        mkdir -p $HOME/.copilot
+
+        cat << EOF > $HOME/.copilot/mcp-config.json
+        {
+          "mcpServers": {
+            "skyramp-mcp": {
+              "type": "local",
+              "command": "npx",
+              "args": ["-y", "@skyramp/mcp@${{ inputs.skyramp_mcp_version }}"],
+              "tools": ["*"],
+              "env": {
+                "LICENSE_FILE": "${{ runner.temp }}/skyramp/skyramp_license.lic",
+                "CI": "true"
+              }
+            }
+          }
+        }
+        EOF
+
+        # Also create repository-level config for Copilot to discover
+        mkdir -p .copilot
+
+        cat << EOF > .copilot/mcp-config.json
+        {
+          "mcpServers": {
+            "skyramp-mcp": {
+              "type": "local",
+              "command": "npx",
+              "args": ["-y", "@skyramp/mcp@${{ inputs.skyramp_mcp_version }}"],
+              "tools": ["*"],
+              "env": {
+                "LICENSE_FILE": "${{ runner.temp }}/skyramp/skyramp_license.lic",
+                "CI": "true"
+              }
+            }
+          }
+        }
+        EOF
+
+        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+          echo "::debug::MCP configuration:"
+          cat $HOME/.copilot/mcp-config.json
+        fi
+
+        echo "::notice::MCP server configured for Copilot"
         echo "::endgroup::"
 
     - name: Initialize Cursor Agent
+      if: env.AGENT_TYPE == 'cursor'
       shell: bash
       env:
         CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
@@ -371,6 +491,51 @@ runs:
         fi
 
         echo "::notice::Cursor agent initialized"
+        echo "::endgroup::"
+
+    - name: Initialize GitHub Copilot CLI
+      if: env.AGENT_TYPE == 'copilot'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.copilot_api_key }}
+      run: |
+        echo "::group::Initializing GitHub Copilot CLI"
+
+        # Copilot CLI authenticates via GH_TOKEN environment variable
+
+        # Wait for initialization
+        sleep 5
+
+        # Verify Copilot CLI is accessible
+        if copilot --version &> /dev/null; then
+          echo "::notice::GitHub Copilot CLI initialized successfully"
+        else
+          echo "::warning::Could not verify Copilot CLI version"
+        fi
+
+        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+          echo "::debug::Copilot CLI version:"
+          copilot --version || echo "::warning::Could not get version"
+        fi
+
+        echo "::endgroup::"
+
+    - name: Setup Agent Command
+      shell: bash
+      run: |
+        echo "::group::Setting up agent command"
+
+        # Set agent command based on agent_type
+        if [ "$AGENT_TYPE" = "cursor" ]; then
+          # Cursor CLI: -f enables file operations without prompting
+          echo "AGENT_CMD=agent -f -p" >> $GITHUB_ENV
+          echo "::notice::Agent command set for Cursor"
+        else
+          # Copilot CLI: --allow-all-tools (required for non-interactive) --allow-all-paths (for file writes)
+          echo "AGENT_CMD=copilot --additional-mcp-config @$HOME/.copilot/mcp-config.json --allow-all-tools --allow-all-paths -p" >> $GITHUB_ENV
+          echo "::notice::Agent command set for Copilot"
+        fi
+
         echo "::endgroup::"
 
     - name: Start Services
@@ -404,8 +569,10 @@ runs:
       shell: bash
       env:
         CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
+        GH_TOKEN: ${{ inputs.copilot_api_key }}
         PR_TITLE: ${{ github.event.pull_request.title }}
         PR_BODY: ${{ github.event.pull_request.body }}
+      working-directory: ${{ inputs.working_directory }}
       run: |
         echo "::group::Running test recommendations"
 
@@ -413,11 +580,11 @@ runs:
         <DESCRIPTION>$PR_BODY</DESCRIPTION>
 
         Use the MCP tools offered by Skyramp MCP server to analyze the pull request title and description to come up with a business justification
-        case for this code change. Based on your analysis of the business case , perform
+        case for this code change. Based on your analysis of the business case, perform
 
-        1. Get recommendations for new contract, e2e, smoke, load tests that can bey generated by Skyramp MCP tools
+        1. Get recommendations for new contract, e2e, smoke, load tests that can be generated by Skyramp MCP tools
         2. Use Skyramp MCP to execute the tests and validate the results.
-        5. Generate a CONCISE summary to '${{ runner.temp }}/skyramp/recommendation-result.txt' following this format:
+        3. Generate a CONCISE summary to '${{ runner.temp }}/skyramp/recommendation-result.txt' following this format:
 
         ## 🤖 Skyramp Test Bot Recommendations
 
@@ -434,7 +601,7 @@ runs:
 
         Use the skyramp-mcp tools available to you for test analysis, generation, and execution."
 
-        if agent -f -p "$PROMPT"; then
+        if $AGENT_CMD "$PROMPT"; then
           echo "::notice::Test recommendations completed successfully"
         else
           EXIT_CODE=$?
@@ -450,13 +617,17 @@ runs:
       shell: bash
       env:
         CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
+        GH_TOKEN: ${{ inputs.copilot_api_key }}
       working-directory: ${{ inputs.working_directory }}
       run: |
         echo "::group::Running test maintenance"
 
         TEST_DIR="${{ steps.load-config.outputs.test_directory }}"
 
-        PROMPT="Based on the git diff in ${{ runner.temp }}/skyramp/git_diff file, perform the following test maintenance tasks:
+        # Copy git diff to working directory for consistent access
+        cp ${{ runner.temp }}/skyramp/git_diff ./.skyramp_git_diff
+
+        PROMPT="Based on the git diff in .skyramp_git_diff file, perform the following test maintenance tasks:
 
         1. Check if there are any relevant Skyramp tests in the '${TEST_DIR}' directory that correspond to the code changes.
         2. If there are relevant tests, use Skyramp MCP tools to analyze and modify them to ensure they pass with the new changes.
@@ -481,7 +652,7 @@ runs:
 
         Use the skyramp-mcp tools available to you for test analysis, generation, and execution."
 
-        if agent -f -p "$PROMPT"; then
+        if $AGENT_CMD "$PROMPT"; then
           echo "::notice::Test maintenance completed successfully"
         else
           EXIT_CODE=$?
@@ -489,6 +660,9 @@ runs:
           echo "Check the agent logs for details"
           exit $EXIT_CODE
         fi
+
+        # Clean up temporary file
+        rm -f .skyramp_git_diff
 
         echo "::endgroup::"
 

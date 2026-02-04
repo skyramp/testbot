@@ -183,7 +183,7 @@ with:
 
 **Type:** String
 
-**Storage:** GitHub Secrets (required)
+**Storage:** GitHub Secrets
 
 **Example:**
 ```yaml
@@ -193,8 +193,36 @@ with:
 
 **Notes:**
 - Obtain from Cursor dashboard
-- Required for agent to make API calls
+- Required when using Cursor CLI agent (default)
 - Check quota limits for high-frequency workflows
+
+#### `copilot_api_key`
+
+**Description:** GitHub Copilot API token for agent access
+
+**Type:** String
+
+**Storage:** GitHub Secrets
+
+**Example:**
+```yaml
+with:
+  copilot_api_key: ${{ secrets.COPILOT_API_KEY }}
+```
+
+**Notes:**
+- Obtain from GitHub (requires active Copilot subscription)
+- Required when using GitHub Copilot CLI agent
+- Can use fine-grained personal access token with "Copilot Requests" permission
+
+### Agent Configuration
+
+This is infered by which API key is provided, `cursor_api_key` v/s `copilot_api_key`.
+
+**Notes:**
+- Determines which CLI will be installed and configured
+- Must have corresponding API key configured
+- Both agents work with the same Skyramp MCP server
 
 ### Optional Inputs - High Priority
 

@@ -1,55 +1,95 @@
 # Skyramp Test Bot
 
-> Automated test maintenance for your REST APIs using AI-powered agents
+> Automated test maintenance for your REST APIs using Skyramp's AI-powered TestBot
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Skyramp%20Test%20Bot-blue?logo=github)](https://github.com/marketplace/actions/skyramp-test-bot)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 ## Features
 
-- 🤖 **AI-Powered Test Maintenance** - Automatically updates tests when code changes
+- 🤖 **Skyramp Powered Test Maintenance** - Automatically updates tests when code changes
 - 🔍 **Smart Change Detection** - Analyzes git diffs to identify impacted tests
 - ✨ **Test Generation** - Creates new tests for uncovered code changes
 - ✅ **Automated Test Execution** - Runs tests and validates results
 - 💬 **PR Integration** - Posts detailed summaries as PR comments
 - 🔄 **Auto-commit** - Optionally commits test changes automatically
-- 🎯 **Configurable** - 15 inputs for customization to your workflow
 - 📁 **Workspace Config** - Project-level settings via .skyramp.yml
 
 ## Quick Start
 
-Add this workflow to your repository:
+1. Setup your repository with 2 secrets
+    1. Obtain [Skyramp](https://skyramp.dev) license key.
+    2. Generate a Cursor or GitHub Copilot API Key.
+2. Add this workflow to your repository:
 
-```yaml
-name: Skyramp Test Automation
-on: [pull_request]
+    Cursor version
 
-jobs:
-  test-maintenance:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    ```yaml
+    name: Skyramp TestBot
+    on: [pull_request]
 
-      - uses: skyramp/test-bot@v1
-        with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-```
+    jobs:
+      test-maintenance:
+        runs-on: ubuntu-latest
+        permissions:
+          contents: write
+          pull-requests: write
+        steps:
+          - uses: actions/checkout@v6
+            with:
+              fetch-depth: 0
+
+          - uses: skyramp/test-bot@v0.2
+            with:
+              skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+              cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+    ```
+
+    GitHub Copilot version
+
+    ```yaml
+    name: Skyramp TestBot
+    on: [pull_request]
+
+    jobs:
+      test-maintenance:
+        runs-on: ubuntu-latest
+        permissions:
+          contents: write
+          pull-requests: write
+        steps:
+          - uses: actions/checkout@v6
+            with:
+              fetch-depth: 0
+
+          - uses: skyramp/test-bot@v0.2
+            with:
+              skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+              copilot_api_key: ${{ secrets.COPILOT_API_KEY }}
+    ```
+
+
+## Agent Selection
+
+This action supports two AI agents:
+
+- **Cursor CLI** - Powerful AI agent from Cursor
+- **GitHub Copilot CLI** - GitHub's AI coding assistant
+
+Choose the agent that best fits your needs and existing subscriptions.
 
 ## Prerequisites
 
 Before using this action, ensure you have:
 
 - [ ] Skyramp license file content stored in GitHub Secrets as `SKYRAMP_LICENSE`
-- [ ] Cursor API key stored in GitHub Secrets as `CURSOR_API_KEY`
+- [ ] **For Cursor**: Cursor API key stored in GitHub Secrets as `CURSOR_API_KEY`
+- [ ] **For Copilot**: GitHub token with Copilot access stored in GitHub Secrets as `GITHUB_TOKEN` or `COPILOT_PAT`
 - [ ] Docker available in your runner (for Skyramp Executor)
 - [ ] Node.js compatible project (action installs Node.js automatically)
 - [ ] Existing Skyramp tests or a test directory structure
+
+> **Note:** The agent type is automatically detected based on which API key you provide. Provide only one key (not both).
 
 ## Inputs
 
@@ -58,7 +98,8 @@ Before using this action, ensure you have:
 | Input | Description |
 |-------|-------------|
 | `skyramp_license_file` | Skyramp license file content (store in GitHub Secrets) |
-| `cursor_api_key` | Cursor API key for AI agent access (store in GitHub Secrets) |
+| `cursor_api_key` | Cursor API key (provide this to use Cursor agent) |
+| `copilot_api_key` | GitHub token with Copilot access (provide this to use Copilot agent) |
 
 ### Optional - High Priority
 
@@ -125,13 +166,22 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 
 ## Usage Examples
 
-### Basic Usage with Docker Compose
+### Basic Usage with Cursor (Default)
 
 ```yaml
 - uses: skyramp/test-bot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+```
+
+### Using GitHub Copilot CLI
+
+```yaml
+- uses: skyramp/test-bot@v1
+  with:
+    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+    copilot_api_key: ${{ secrets.COPILOT_PAT }}
 ```
 
 ### Custom Service Startup Command
@@ -185,10 +235,10 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 
 1. **Change Detection** - Generates a git diff between the base branch and current PR
 2. **License Setup** - Configures Skyramp license from secrets
-3. **Environment Setup** - Installs Node.js, Skyramp MCP, and Cursor CLI
+3. **Environment Setup** - Installs Node.js, Skyramp MCP, and selected AI agent CLI
 4. **MCP Configuration** - Configures the Skyramp MCP server for agent access
 5. **Service Startup** - Starts your services using the configured command
-6. **AI Analysis** - Cursor agent analyzes changes and identifies test impacts
+6. **AI Analysis** - AI agent analyzes changes and identifies test impacts
 7. **Test Maintenance** - Updates existing tests or generates new ones using Skyramp MCP
 8. **Test Execution** - Runs tests and validates results
 9. **Summary Generation** - Creates detailed summary of actions taken
@@ -199,10 +249,11 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 
 ### Common Issues
 
-**Cursor CLI installation fails**
+**CLI installation fails**
 - Check runner network connectivity
 - Verify the installation endpoint is accessible
 - Try enabling debug mode: `enable_debug: true`
+- For Copilot: Ensure npm is working correctly
 
 **License validation errors**
 - Ensure license content is properly stored in GitHub Secrets
@@ -216,7 +267,8 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 - Customize with `service_startup_command` for different startup methods
 
 **Agent timeout or failures**
-- Check Cursor API key is valid and has quota remaining
+- **Cursor**: Check API key is valid and has quota remaining
+- **Copilot**: Verify Copilot subscription is active and token is valid
 - Review agent logs for specific errors
 - Enable debug mode for more detailed output
 
@@ -251,9 +303,9 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ## Acknowledgments
 
 Built with:
-- [Cursor CLI](https://cursor.com) for AI-powered agent capabilities
-- [Skyramp MCP](https://github.com/skyramp/mcp) for test generation and execution
-- [GitHub Actions](https://github.com/features/actions) for CI/CD automation
+- [Cursor CLI](https://cursor.com) - AI-powered agent capabilities
+- [GitHub Copilot CLI](https://github.com/features/copilot/cli) - GitHub's AI coding assistant
+- [GitHub Actions](https://github.com/features/actions) - CI/CD automation
 
 ---
 

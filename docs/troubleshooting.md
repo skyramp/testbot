@@ -12,81 +12,6 @@ This guide covers common issues and their solutions when using Skyramp Test Bot.
 - [Permission Issues](#permission-issues)
 - [Debug Mode](#debug-mode)
 
-## Installation Issues
-
-### Cursor CLI Installation Fails
-
-**Symptoms:**
-```
-::error::Failed to install Cursor CLI after 3 attempts
-```
-
-**Possible Causes:**
-1. Network connectivity issues
-2. Installation endpoint unavailable
-3. Runner firewall restrictions
-
-**Solutions:**
-
-1. **Check network connectivity:**
-   ```yaml
-   - name: Test connectivity
-     run: curl -I https://cursor.com/install
-   ```
-
-2. **Use a different runner:**
-   - Try `ubuntu-22.04` instead of `ubuntu-latest`
-   - Consider self-hosted runners if corporate firewall is blocking
-
-3. **Enable debug mode to see detailed errors:**
-   ```yaml
-   - uses: skyramp/test-bot@v1
-     with:
-       enable_debug: true
-   ```
-
-### Node.js Setup Fails
-
-**Symptoms:**
-```
-Error: Unable to locate executable file: node
-```
-
-**Solutions:**
-
-1. **Specify a different Node.js version:**
-   ```yaml
-   - uses: skyramp/test-bot@v1
-     with:
-       node_version: '18.x'
-   ```
-
-2. **Verify setup-node action version:**
-   - The action uses `actions/setup-node@v4`
-   - Check for any GitHub Actions service issues
-
-### Skyramp MCP Installation Fails
-
-**Symptoms:**
-```
-npm ERR! 404 Not Found - GET https://registry.npmjs.org/@skyramp/mcp
-```
-
-**Solutions:**
-
-1. **Check npm registry access:**
-   ```yaml
-   - name: Test npm connectivity
-     run: npm ping
-   ```
-
-2. **Use a specific MCP version:**
-   ```yaml
-   - uses: skyramp/test-bot@v1
-     with:
-       skyramp_mcp_version: '1.0.0'
-   ```
-
 ## License Issues
 
 ### License File Empty or Invalid
@@ -208,10 +133,21 @@ Agent command hangs or times out
 
 **Solutions:**
 
+**For Cursor:**
+
 1. **Check Cursor API key:**
    - Verify API key is valid
    - Check API quota/limits
    - Ensure key has necessary permissions
+
+**For GitHub Copilot:**
+
+1. **Check Copilot token:**
+   - Verify token is valid and not expired
+   - Ensure Copilot subscription is active
+   - Check token has "Copilot Requests" permission
+
+**General:**
 
 2. **Simplify the task:**
    - Reduce number of files in diff
@@ -220,23 +156,42 @@ Agent command hangs or times out
 
 3. **Increase timeout (if possible):**
    - This is handled by the agent itself
-   - Contact Cursor support if persistent
+   - Contact support if persistent
 
 ### Agent Fails to Enable MCP
 
 **Symptoms:**
+
+**Cursor:**
 ```
 agent mcp enable skyramp-mcp
 Error: Could not enable MCP server
 ```
 
+**Copilot:**
+```
+Copilot CLI cannot find MCP servers
+```
+
 **Solutions:**
+
+**For Cursor:**
 
 1. **Verify MCP configuration:**
    ```yaml
    - name: Debug MCP config
      run: cat $HOME/.cursor/mcp.json
    ```
+
+**For Copilot:**
+
+1. **Verify MCP configuration:**
+   ```yaml
+   - name: Debug MCP config
+     run: cat $HOME/.copilot/mcp-config.json
+   ```
+
+**General:**
 
 2. **Check MCP server installation:**
    ```yaml
@@ -245,7 +200,7 @@ Error: Could not enable MCP server
    ```
 
 3. **Wait longer for initialization:**
-   - Current wait time is 10 seconds
+   - Current wait time is 5-10 seconds
    - May need adjustment based on runner performance
 
 ### Agent Cannot Access Git Diff
@@ -270,33 +225,6 @@ Agent reports it cannot read diff file
    ```yaml
    - name: Fix permissions
      run: chmod 644 ${{ runner.temp }}/skyramp/git_diff
-   ```
-
-## Network Issues
-
-### Docker Pull Fails
-
-**Symptoms:**
-```
-::error::Failed to pull Skyramp Executor after 3 attempts
-```
-
-**Solutions:**
-
-1. **Check Docker Hub access:**
-   ```yaml
-   - name: Test Docker pull
-     run: docker pull hello-world
-   ```
-
-2. **Use different registry mirror:**
-   - Configure Docker daemon with mirror
-   - Use self-hosted runner with better connectivity
-
-3. **Pull image in separate step:**
-   ```yaml
-   - name: Pre-pull Skyramp Executor
-     run: docker pull skyramp/executor:v1.3.3
    ```
 
 ## Permission Issues
@@ -391,9 +319,11 @@ If you've tried these solutions and still have issues:
 | Error Message | Common Cause | Quick Fix |
 |--------------|--------------|-----------|
 | `skyramp_license_file is required` | Missing secret | Add SKYRAMP_LICENSE to secrets |
-| `cursor_api_key is required` | Missing secret | Add CURSOR_API_KEY to secrets |
+| `cursor_api_key is required` | Missing secret (Cursor) | Add CURSOR_API_KEY to secrets |
+| `copilot_api_key is required` | Missing secret (Copilot) | Add COPILOT_API_KEY to secrets |
 | `License file is empty` | Empty secret value | Check secret content |
 | `Failed to install Cursor CLI` | Network/firewall | Check connectivity, try different runner |
+| `Failed to install GitHub Copilot CLI` | npm/Node.js issue | Check Node.js version (needs 22+) |
 | `Service startup command failed` | Missing compose file | Verify docker-compose.yml exists |
 | `Test maintenance failed` | Various | Enable debug mode, check agent logs |
 | `Resource not accessible` | Missing permissions | Add contents: write, pull-requests: write |
