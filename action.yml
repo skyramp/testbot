@@ -94,14 +94,27 @@ runs:
     - name: Validate Inputs and Detect Agent Type
       id: validate-inputs
       shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         echo "::group::Validating inputs"
         mkdir -p ${{ runner.temp }}/skyramp
-        VALIDATION_ERRORS=""
+
+        # Helper to post a PR comment on validation failure
+        post_validation_error() {
+          local error_msg="$1"
+          echo "::error::$error_msg"
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            printf -v body "## :warning: Skyramp Test Bot - Validation Error\n\n**Error:** %s\n\nPlease check your workflow configuration and ensure all required secrets are set correctly." "$error_msg"
+            gh pr comment "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" \
+              --body "$body" || true
+          fi
+        }
 
         if [ -z "${{ inputs.skyramp_license_file }}" ]; then
-          echo "::error::skyramp_license_file is required but not provided"
-          VALIDATION_ERRORS="${VALIDATION_ERRORS}- \`skyramp_license_file\` is required but not provided\n"
+          post_validation_error "skyramp_license_file is required but not provided"
+          exit 1
         fi
 
         # Detect which API keys are provided
@@ -110,8 +123,8 @@ runs:
 
         # Determine agent_type from provided keys
         if [ "$HAS_CURSOR_KEY" = "true" ] && [ "$HAS_GITHUB_TOKEN" = "true" ]; then
-          echo "::error::Both cursor_api_key and copilot_api_key provided. Please provide only one."
-          VALIDATION_ERRORS="${VALIDATION_ERRORS}- Both \`cursor_api_key\` and \`copilot_api_key\` provided. Please provide only one.\n"
+          post_validation_error "Both cursor_api_key and copilot_api_key provided. Please provide only one."
+          exit 1
         elif [ "$HAS_CURSOR_KEY" = "true" ]; then
           AGENT_TYPE="cursor"
           echo "::notice::Using Cursor CLI agent (cursor_api_key provided)"
@@ -119,37 +132,15 @@ runs:
           AGENT_TYPE="copilot"
           echo "::notice::Using GitHub Copilot CLI agent (copilot_api_key provided)"
         else
-          echo "::error::Either cursor_api_key or copilot_api_key must be provided"
-          VALIDATION_ERRORS="${VALIDATION_ERRORS}- Either \`cursor_api_key\` or \`copilot_api_key\` must be provided\n"
-        fi
-
-        if [ -n "$VALIDATION_ERRORS" ]; then
-          echo "validation_failed=true" >> $GITHUB_OUTPUT
-          ERROR_FILE="${{ runner.temp }}/skyramp/validation-error.txt"
-          echo "## :x: Skyramp TestBot - Validation Error" > "$ERROR_FILE"
-          echo "" >> "$ERROR_FILE"
-          echo "The following required inputs are missing or invalid:" >> "$ERROR_FILE"
-          echo "" >> "$ERROR_FILE"
-          echo -e "$VALIDATION_ERRORS" >> "$ERROR_FILE"
-          echo "" >> "$ERROR_FILE"
-          echo "Please ensure these inputs are configured in your workflow file." >> "$ERROR_FILE"
-          echo "::endgroup::"
+          post_validation_error "Either cursor_api_key or copilot_api_key must be provided"
           exit 1
         fi
 
         # Export agent_type for subsequent steps
         echo "AGENT_TYPE=$AGENT_TYPE" >> $GITHUB_ENV
 
-        echo "validation_failed=false" >> $GITHUB_OUTPUT
         echo "::notice::All required inputs validated successfully"
         echo "::endgroup::"
-
-    - name: Post Validation Error Comment
-      if: failure() && steps.validate-inputs.outputs.validation_failed == 'true' && github.event.pull_request.number
-      uses: peter-evans/create-or-update-comment@v4
-      with:
-        issue-number: ${{ github.event.pull_request.number }}
-        body-path: ${{ runner.temp }}/skyramp/validation-error.txt
 
     - name: Load Workspace Configuration
       id: load-config
@@ -266,6 +257,7 @@ runs:
       shell: bash
       env:
         LICENSE_FILE_CONTENT: ${{ inputs.skyramp_license_file }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         echo "::group::Configuring Skyramp license"
 
@@ -274,6 +266,12 @@ runs:
 
         if [ ! -s ${{ runner.temp }}/skyramp/skyramp_license.lic ]; then
           echo "::error::License file is empty or could not be created"
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            printf -v body "## :warning: Skyramp Test Bot - License Error\n\n**Error:** License file is empty or could not be created.\n\nPlease ensure your \`skyramp_license_file\` secret is configured correctly. You can generate a new license file by running \`skyramp get-license-file\`."
+            gh pr comment "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" \
+              --body "$body" || true
+          fi
           exit 1
         fi
 
@@ -284,6 +282,57 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ steps.load-config.outputs.node_version }}
+
+    - name: Install Skyramp MCP
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "::group::Installing Skyramp MCP"
+
+        MCP_VERSION="${{ steps.load-config.outputs.skyramp_mcp_version }}"
+        if [ "$MCP_VERSION" = "latest" ]; then
+          npm install @skyramp/mcp
+        else
+          npm install @skyramp/mcp@${MCP_VERSION}
+        fi
+
+        echo "::notice::Skyramp MCP installed successfully"
+        echo "::endgroup::"
+
+    - name: Validate Skyramp License
+      shell: bash
+      env:
+        LICENSE_FILE: ${{ runner.temp }}/skyramp/skyramp_license.lic
+        CI: "true"
+        GH_TOKEN: ${{ github.token }}
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "::group::Validating Skyramp license"
+
+        VALIDATION_OUTPUT=$(node -e "
+          const { SkyrampClient } = require('@skyramp/skyramp');
+          const client = new SkyrampClient();
+          client.login().then((result) => {
+            console.log(result);
+          }).catch((err) => {
+            console.error(err.message);
+            process.exit(1);
+          });
+        " 2>&1) || {
+          echo "::error::License validation failed: $VALIDATION_OUTPUT"
+
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            printf -v body "## :warning: Skyramp Test Bot - License Validation Failed\n\n**Error:** Skyramp license validation failed.\n\n\`\`\`\n%s\n\`\`\`\n\nYour Skyramp license may be expired or invalid. Please generate a new license file by running \`skyramp get-license-file\` and update the \`skyramp_license_file\` secret in your repository settings." "$VALIDATION_OUTPUT"
+            gh pr comment "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" \
+              --body "$body" || true
+          fi
+
+          exit 1
+        }
+
+        echo "::notice::License validation successful"
+        echo "::endgroup::"
 
     - name: Pull Skyramp Executor
       shell: bash
@@ -310,22 +359,6 @@ runs:
           fi
         done
 
-        echo "::endgroup::"
-
-    - name: Install Skyramp MCP
-      shell: bash
-      working-directory: ${{ inputs.working_directory }}
-      run: |
-        echo "::group::Installing Skyramp MCP"
-
-        MCP_VERSION="${{ steps.load-config.outputs.skyramp_mcp_version }}"
-        if [ "$MCP_VERSION" = "latest" ]; then
-          npm install @skyramp/mcp
-        else
-          npm install @skyramp/mcp@${MCP_VERSION}
-        fi
-
-        echo "::notice::Skyramp MCP installed successfully"
         echo "::endgroup::"
 
     - name: Install Cursor CLI
