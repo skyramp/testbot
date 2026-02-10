@@ -1,0 +1,28 @@
+name: Skyramp Test Automation (Early Access)
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test-maintenance:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for git diff
+
+      - name: Run Skyramp Test Bot (early access)
+        uses: skyramp/test-bot@archit/early-access
+        with:
+          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+
+          # Install @skyramp/mcp from the private GitHub repo
+          skyramp_mcp_source: github
+          skyramp_mcp_github_token: ${{ secrets.SKYRAMP_MCP_GITHUB_TOKEN }}
+          skyramp_mcp_github_ref: main  # branch, tag, or commit SHA

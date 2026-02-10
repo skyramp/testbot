@@ -41,6 +41,17 @@ inputs:
     description: 'Skyramp MCP package version'
     required: false
     default: 'latest'
+  skyramp_mcp_source:
+    description: 'Source for Skyramp MCP package: "npm" or "github"'
+    required: false
+    default: 'npm'
+  skyramp_mcp_github_token:
+    description: 'GitHub PAT with read access to letsramp/mcp (required when source is "github")'
+    required: false
+  skyramp_mcp_github_ref:
+    description: 'Git ref (branch/tag/commit) for letsramp/mcp (used when source is "github")'
+    required: false
+    default: 'main'
   node_version:
     description: 'Node.js version to use'
     required: false
@@ -231,6 +242,8 @@ runs:
         SERVICE_STARTUP_COMMAND=$(get_config "service_startup_command" "${{ inputs.service_startup_command }}")
         SKYRAMP_EXECUTOR_VERSION=$(get_config "skyramp_executor_version" "${{ inputs.skyramp_executor_version }}")
         SKYRAMP_MCP_VERSION=$(get_config "skyramp_mcp_version" "${{ inputs.skyramp_mcp_version }}")
+        SKYRAMP_MCP_SOURCE=$(get_config "skyramp_mcp_source" "${{ inputs.skyramp_mcp_source }}")
+        SKYRAMP_MCP_GITHUB_REF=$(get_config "skyramp_mcp_github_ref" "${{ inputs.skyramp_mcp_github_ref }}")
         NODE_VERSION=$(get_config "node_version" "${{ inputs.node_version }}")
         SKIP_SERVICE_STARTUP=$(get_config "skip_service_startup" "${{ inputs.skip_service_startup }}")
         AUTO_COMMIT=$(get_config "auto_commit" "${{ inputs.auto_commit }}")
@@ -244,6 +257,8 @@ runs:
         echo "service_startup_command=$SERVICE_STARTUP_COMMAND" >> $GITHUB_OUTPUT
         echo "skyramp_executor_version=$SKYRAMP_EXECUTOR_VERSION" >> $GITHUB_OUTPUT
         echo "skyramp_mcp_version=$SKYRAMP_MCP_VERSION" >> $GITHUB_OUTPUT
+        echo "skyramp_mcp_source=$SKYRAMP_MCP_SOURCE" >> $GITHUB_OUTPUT
+        echo "skyramp_mcp_github_ref=$SKYRAMP_MCP_GITHUB_REF" >> $GITHUB_OUTPUT
         echo "node_version=$NODE_VERSION" >> $GITHUB_OUTPUT
         echo "skip_service_startup=$SKIP_SERVICE_STARTUP" >> $GITHUB_OUTPUT
         echo "auto_commit=$AUTO_COMMIT" >> $GITHUB_OUTPUT
@@ -258,6 +273,8 @@ runs:
         echo "  - service_startup_command: $SERVICE_STARTUP_COMMAND"
         echo "  - skyramp_executor_version: $SKYRAMP_EXECUTOR_VERSION"
         echo "  - skyramp_mcp_version: $SKYRAMP_MCP_VERSION"
+        echo "  - skyramp_mcp_source: $SKYRAMP_MCP_SOURCE"
+        echo "  - skyramp_mcp_github_ref: $SKYRAMP_MCP_GITHUB_REF"
         echo "  - node_version: $NODE_VERSION"
         echo "  - skip_service_startup: $SKIP_SERVICE_STARTUP"
         echo "  - auto_commit: $AUTO_COMMIT"
@@ -265,6 +282,41 @@ runs:
         echo "  - post_pr_comment: $POST_PR_COMMENT"
         echo "  - enable_debug: $ENABLE_DEBUG"
 
+        echo "::endgroup::"
+
+    - name: Validate MCP Source Config
+      if: steps.self-trigger-check.outputs.skip != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        echo "::group::Validating MCP source configuration"
+
+        # Helper to post a PR comment on validation failure
+        post_validation_error() {
+          local error_msg="$1"
+          echo "::error::$error_msg"
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            printf -v body "## :warning: Skyramp Test Bot - Validation Error\n\n**Error:** %s\n\nPlease check your workflow configuration and ensure all required secrets are set correctly." "$error_msg"
+            gh pr comment "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" \
+              --body "$body" || true
+          fi
+        }
+
+        # Validate against resolved config values (which may come from .skyramp.yml)
+        MCP_SOURCE="${{ steps.load-config.outputs.skyramp_mcp_source }}"
+        if [ "$MCP_SOURCE" != "npm" ] && [ "$MCP_SOURCE" != "github" ]; then
+          post_validation_error "skyramp_mcp_source must be 'npm' or 'github', got '$MCP_SOURCE'"
+          exit 1
+        fi
+
+        if [ "$MCP_SOURCE" = "github" ] && [ -z "${{ inputs.skyramp_mcp_github_token }}" ]; then
+          post_validation_error "skyramp_mcp_github_token is required when skyramp_mcp_source is 'github'"
+          exit 1
+        fi
+
+        echo "::notice::MCP source configuration valid (source: $MCP_SOURCE)"
         echo "::endgroup::"
 
     - name: Setup Directories
@@ -336,17 +388,74 @@ runs:
       if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
+      env:
+        SKYRAMP_MCP_GITHUB_TOKEN: ${{ inputs.skyramp_mcp_github_token }}
       run: |
         echo "::group::Installing Skyramp MCP"
 
         MCP_VERSION="${{ steps.load-config.outputs.skyramp_mcp_version }}"
-        if [ "$MCP_VERSION" == "latest" ]; then
-          npm install @skyramp/mcp
+        MCP_SOURCE="${{ steps.load-config.outputs.skyramp_mcp_source }}"
+        MCP_GITHUB_REF="${{ steps.load-config.outputs.skyramp_mcp_github_ref }}"
+
+        if [ "$MCP_SOURCE" = "github" ]; then
+          # Mask the PAT token to prevent log leakage
+          echo "::add-mask::${SKYRAMP_MCP_GITHUB_TOKEN}"
+
+          # Clone full source (npm install git+https:// strips files not in package.json "files" field,
+          # which excludes tsconfig.json and src/, making the build impossible)
+          MCP_PKG_DIR="$(pwd)/node_modules/@skyramp/mcp"
+          mkdir -p "$(dirname "$MCP_PKG_DIR")"
+
+          REPO_URL="https://x-access-token:${SKYRAMP_MCP_GITHUB_TOKEN}@github.com/letsramp/mcp.git"
+
+          # Handle branch/tag vs commit SHA
+          if echo "${MCP_GITHUB_REF}" | grep -Eq '^[0-9a-fA-F]{7,40}$'; then
+            echo "Fetching @skyramp/mcp from github.com/letsramp/mcp at commit ${MCP_GITHUB_REF}"
+            git init "$MCP_PKG_DIR"
+            git -C "$MCP_PKG_DIR" remote add origin "$REPO_URL"
+            git -C "$MCP_PKG_DIR" fetch --depth 1 origin "${MCP_GITHUB_REF}"
+            git -C "$MCP_PKG_DIR" checkout FETCH_HEAD
+          else
+            echo "Cloning @skyramp/mcp from github.com/letsramp/mcp (ref: ${MCP_GITHUB_REF})"
+            git clone --depth 1 --branch "${MCP_GITHUB_REF}" "$REPO_URL" "$MCP_PKG_DIR"
+          fi
+
+          # Log the exact commit SHA used
+          MCP_COMMIT_SHA=$(git -C "$MCP_PKG_DIR" rev-parse HEAD)
+          echo "::notice::@skyramp/mcp commit: ${MCP_COMMIT_SHA} (ref: ${MCP_GITHUB_REF})"
+
+          # Remove .git to prevent PAT token persistence in .git/config
+          rm -rf "$MCP_PKG_DIR/.git"
+
+          # Install dependencies and build
+          echo "Installing dependencies and building..."
+          (cd "$MCP_PKG_DIR" && npm install --include=dev && npm run build)
+
+          # Set env vars for downstream MCP config steps
+          echo "SKYRAMP_MCP_CMD=node" >> $GITHUB_ENV
+          echo "SKYRAMP_MCP_ARGS=${MCP_PKG_DIR}/build/index.js" >> $GITHUB_ENV
+
+          # Expose mcp's dependencies (e.g. @skyramp/skyramp) to the top-level node resolution
+          echo "NODE_PATH=${MCP_PKG_DIR}/node_modules" >> $GITHUB_ENV
         else
-          npm install @skyramp/mcp@${MCP_VERSION}
+          # npm source (default)
+          if [ "$MCP_VERSION" = "latest" ]; then
+            npm install @skyramp/mcp
+          else
+            npm install @skyramp/mcp@${MCP_VERSION}
+          fi
+
+          # Set env vars for downstream MCP config steps
+          if [ "$MCP_VERSION" = "latest" ]; then
+            echo "SKYRAMP_MCP_CMD=npx" >> $GITHUB_ENV
+            echo "SKYRAMP_MCP_ARGS=-y @skyramp/mcp" >> $GITHUB_ENV
+          else
+            echo "SKYRAMP_MCP_CMD=npx" >> $GITHUB_ENV
+            echo "SKYRAMP_MCP_ARGS=-y @skyramp/mcp@${MCP_VERSION}" >> $GITHUB_ENV
+          fi
         fi
 
-        echo "::notice::Skyramp MCP installed successfully"
+        echo "::notice::Skyramp MCP installed successfully (source: ${MCP_SOURCE})"
         echo "::endgroup::"
 
     - name: Validate Skyramp License
@@ -498,24 +607,29 @@ runs:
       run: |
         echo "::group::Configuring MCP server for Cursor"
 
-        MCP_VERSION="${{ steps.load-config.outputs.skyramp_mcp_version }}"
+        # Build args array from SKYRAMP_MCP_ARGS env var
+        IFS=' ' read -ra ARGS_ARRAY <<< "$SKYRAMP_MCP_ARGS"
+        ARGS_JSON=$(printf '%s\n' "${ARGS_ARRAY[@]}" | jq -R . | jq -s .)
 
         mkdir -p $HOME/.cursor
 
-        cat << EOF > $HOME/.cursor/mcp.json
-        {
-          "mcpServers": {
-            "skyramp-mcp": {
-              "command": "npx",
-              "args": ["-y", "@skyramp/mcp@${MCP_VERSION}"],
-              "env": {
-                "LICENSE_FILE": "${{ runner.temp }}/skyramp/skyramp_license.lic",
-                "CI": "true"
+        jq -n \
+          --arg cmd "$SKYRAMP_MCP_CMD" \
+          --argjson args "$ARGS_JSON" \
+          --arg license "${{ runner.temp }}/skyramp/skyramp_license.lic" \
+          '{
+            mcpServers: {
+              "skyramp-mcp": {
+                command: $cmd,
+                args: $args,
+                env: {
+                  LICENSE_FILE: $license,
+                  CI: "true",
+                  SKYRAMP_FEATURE_TESTBOT: "1"
+                }
               }
             }
-          }
-        }
-        EOF
+          }' > $HOME/.cursor/mcp.json
 
         if [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
           echo "::debug::MCP configuration:"
@@ -532,47 +646,39 @@ runs:
       run: |
         echo "::group::Configuring MCP server for Copilot"
 
+        # Build args array from SKYRAMP_MCP_ARGS env var
+        IFS=' ' read -ra ARGS_ARRAY <<< "$SKYRAMP_MCP_ARGS"
+        ARGS_JSON=$(printf '%s\n' "${ARGS_ARRAY[@]}" | jq -R . | jq -s .)
+
         # Create MCP config in home directory
         mkdir -p $HOME/.copilot
 
-        cat << EOF > $HOME/.copilot/mcp-config.json
-        {
-          "mcpServers": {
-            "skyramp-mcp": {
-              "type": "local",
-              "command": "npx",
-              "args": ["-y", "@skyramp/mcp@${{ inputs.skyramp_mcp_version }}"],
-              "tools": ["*"],
-              "env": {
-                "LICENSE_FILE": "${{ runner.temp }}/skyramp/skyramp_license.lic",
-                "CI": "true"
+        jq -n \
+          --arg cmd "$SKYRAMP_MCP_CMD" \
+          --argjson args "$ARGS_JSON" \
+          --arg license "${{ runner.temp }}/skyramp/skyramp_license.lic" \
+          '{
+            mcpServers: {
+              "skyramp-mcp": {
+                type: "local",
+                command: $cmd,
+                args: $args,
+                tools: ["*"],
+                env: {
+                  LICENSE_FILE: $license,
+                  CI: "true",
+                  SKYRAMP_FEATURE_TESTBOT: "1"
+                }
               }
             }
-          }
-        }
-        EOF
+          }' > $HOME/.copilot/mcp-config.json
 
         # Also create repository-level config for Copilot to discover
         mkdir -p .copilot
 
-        cat << EOF > .copilot/mcp-config.json
-        {
-          "mcpServers": {
-            "skyramp-mcp": {
-              "type": "local",
-              "command": "npx",
-              "args": ["-y", "@skyramp/mcp@${{ inputs.skyramp_mcp_version }}"],
-              "tools": ["*"],
-              "env": {
-                "LICENSE_FILE": "${{ runner.temp }}/skyramp/skyramp_license.lic",
-                "CI": "true"
-              }
-            }
-          }
-        }
-        EOF
+        cp $HOME/.copilot/mcp-config.json .copilot/mcp-config.json
 
-        if [ "${{ inputs.enable_debug }}" == "true" ]; then
+        if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
           echo "::debug::MCP configuration:"
           cat $HOME/.copilot/mcp-config.json
         fi
