@@ -231,6 +231,46 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
     echo "Tests Executed: ${{ steps.skyramp.outputs.tests_executed }}"
 ```
 
+## Triggering Other Workflows
+
+By default, commits made by GitHub Actions using `GITHUB_TOKEN` don't trigger other workflows (this is GitHub's built-in recursion prevention). If you want test-bot's commits to trigger your CI/CD pipelines, linters, or other workflows, you need to use a Personal Access Token (PAT).
+
+### Setup Steps
+
+1. **Create a fine-grained PAT** scoped to your repository with `Contents: Read and Write` permission at [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens). Set an expiration date and rotate regularly.
+2. **Add it as a secret** named `PAT_TOKEN` in your repository settings
+3. **Update your workflow** to use the PAT at checkout and add recursion prevention:
+
+```yaml
+jobs:
+  test-maintenance:
+    runs-on: ubuntu-latest
+    # Prevent infinite loops - on push events, skip if triggered by test-bot's own commits
+    # head_commit is only available on push events; pull_request events are handled by the action-level check
+    if: github.event_name != 'push' || github.event.head_commit.author.name != 'Skyramp Test Bot'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead of GITHUB_TOKEN
+
+      - uses: skyramp/test-bot@v1
+        with:
+          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+```
+
+See [examples/trigger-workflows.yml](examples/trigger-workflows.yml) for a complete example.
+
+### How It Works
+
+The recursion prevention has two layers:
+1. **Job-level condition**: On `push` events, skips the entire job if the commit was made by test-bot
+2. **Action-level detection**: The action detects self-triggers (using `git log` for `pull_request` events where `head_commit` is unavailable) and exits gracefully
+
+This ensures test-bot never runs on its own commits while allowing other workflows to run normally.
+
 ## How It Works
 
 1. **Change Detection** - Generates a git diff between the base branch and current PR

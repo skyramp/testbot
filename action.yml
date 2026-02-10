@@ -73,7 +73,6 @@ inputs:
     description: 'Path to Skyramp workspace config file'
     required: false
     default: '.skyramp.yml'
-
 outputs:
   test_summary:
     description: 'Full summary of test maintenance actions'
@@ -87,12 +86,57 @@ outputs:
   tests_executed:
     description: 'Number of tests executed'
     value: ${{ steps.parse-summary.outputs.executed }}
+  skipped_self_trigger:
+    description: 'Whether execution was skipped due to detecting own commit'
+    value: ${{ steps.self-trigger-check.outputs.skip }}
+  commit_sha:
+    description: 'SHA of the commit made by test-bot (empty if no commit)'
+    value: ${{ steps.auto-commit.outputs.commit_hash }}
 
 runs:
   using: "composite"
   steps:
+    - name: Check for Self-Trigger
+      id: self-trigger-check
+      shell: bash
+      run: |
+        echo "::group::Checking for self-triggered execution"
+
+        # Try github.event.head_commit first (works for push events)
+        COMMIT_AUTHOR="${{ github.event.head_commit.author.name }}"
+        COMMIT_EMAIL="${{ github.event.head_commit.author.email }}"
+
+        # Fallback to git log for pull_request events (head_commit is empty)
+        if [ -z "$COMMIT_AUTHOR" ]; then
+          echo "head_commit not available, using git log to get commit author"
+          COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an' 2>/dev/null || echo "")
+          COMMIT_EMAIL=$(git log -1 --pretty=format:'%ae' 2>/dev/null || echo "")
+        fi
+
+        # Define bot identity (single source of truth)
+        BOT_NAME="Skyramp Test Bot"
+        BOT_EMAIL="test-bot@skyramp.dev"
+        echo "BOT_NAME=$BOT_NAME" >> $GITHUB_ENV
+        echo "BOT_EMAIL=$BOT_EMAIL" >> $GITHUB_ENV
+
+        echo "Commit author: $COMMIT_AUTHOR"
+        echo "Commit email: $COMMIT_EMAIL"
+        echo "Expected name: $BOT_NAME"
+        echo "Expected email: $BOT_EMAIL"
+
+        if [ "$COMMIT_AUTHOR" == "$BOT_NAME" ] && [ "$COMMIT_EMAIL" == "$BOT_EMAIL" ]; then
+          echo "::notice::Detected self-triggered execution (commit by $BOT_NAME). Skipping to prevent recursion."
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "::notice::Not a self-triggered execution. Proceeding with test maintenance."
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+
+        echo "::endgroup::"
+
     - name: Validate Inputs and Detect Agent Type
       id: validate-inputs
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
@@ -122,13 +166,13 @@ runs:
         HAS_GITHUB_TOKEN=$( [ -n "${{ inputs.copilot_api_key }}" ] && echo "true" || echo "false" )
 
         # Determine agent_type from provided keys
-        if [ "$HAS_CURSOR_KEY" = "true" ] && [ "$HAS_GITHUB_TOKEN" = "true" ]; then
+        if [ "$HAS_CURSOR_KEY" == "true" ] && [ "$HAS_GITHUB_TOKEN" == "true" ]; then
           post_validation_error "Both cursor_api_key and copilot_api_key provided. Please provide only one."
           exit 1
-        elif [ "$HAS_CURSOR_KEY" = "true" ]; then
+        elif [ "$HAS_CURSOR_KEY" == "true" ]; then
           AGENT_TYPE="cursor"
           echo "::notice::Using Cursor CLI agent (cursor_api_key provided)"
-        elif [ "$HAS_GITHUB_TOKEN" = "true" ]; then
+        elif [ "$HAS_GITHUB_TOKEN" == "true" ]; then
           AGENT_TYPE="copilot"
           echo "::notice::Using GitHub Copilot CLI agent (copilot_api_key provided)"
         else
@@ -144,6 +188,7 @@ runs:
 
     - name: Load Workspace Configuration
       id: load-config
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
@@ -223,6 +268,7 @@ runs:
         echo "::endgroup::"
 
     - name: Setup Directories
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
         echo "::group::Setting up working directories"
@@ -231,6 +277,7 @@ runs:
         echo "::endgroup::"
 
     - name: Generate Git Diff
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
@@ -246,7 +293,7 @@ runs:
         DIFF_SIZE=$(wc -l < ${{ runner.temp }}/skyramp/git_diff)
         echo "Generated diff with $DIFF_SIZE lines"
 
-        if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
+        if [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
           echo "::debug::Git diff content:"
           cat ${{ runner.temp }}/skyramp/git_diff
         fi
@@ -254,6 +301,7 @@ runs:
         echo "::endgroup::"
 
     - name: Inject Skyramp License
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       env:
         LICENSE_FILE_CONTENT: ${{ inputs.skyramp_license_file }}
@@ -279,18 +327,20 @@ runs:
         echo "::endgroup::"
 
     - name: Setup Node.js
+      if: steps.self-trigger-check.outputs.skip != 'true'
       uses: actions/setup-node@v4
       with:
         node-version: ${{ steps.load-config.outputs.node_version }}
 
     - name: Install Skyramp MCP
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
         echo "::group::Installing Skyramp MCP"
 
         MCP_VERSION="${{ steps.load-config.outputs.skyramp_mcp_version }}"
-        if [ "$MCP_VERSION" = "latest" ]; then
+        if [ "$MCP_VERSION" == "latest" ]; then
           npm install @skyramp/mcp
         else
           npm install @skyramp/mcp@${MCP_VERSION}
@@ -300,6 +350,7 @@ runs:
         echo "::endgroup::"
 
     - name: Validate Skyramp License
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       env:
         LICENSE_FILE: ${{ runner.temp }}/skyramp/skyramp_license.lic
@@ -335,6 +386,7 @@ runs:
         echo "::endgroup::"
 
     - name: Pull Skyramp Executor
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
         echo "::group::Pulling Skyramp Executor Docker image"
@@ -362,7 +414,7 @@ runs:
         echo "::endgroup::"
 
     - name: Install Cursor CLI
-      if: env.AGENT_TYPE == 'cursor'
+      if: env.AGENT_TYPE == 'cursor' && steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
         echo "::group::Installing Cursor CLI"
@@ -399,7 +451,7 @@ runs:
         echo "::endgroup::"
 
     - name: Install GitHub Copilot CLI
-      if: env.AGENT_TYPE == 'copilot'
+      if: env.AGENT_TYPE == 'copilot' && steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
         echo "::group::Installing GitHub Copilot CLI"
@@ -441,7 +493,7 @@ runs:
         echo "::endgroup::"
 
     - name: Configure MCP Server for Cursor
-      if: env.AGENT_TYPE == 'cursor'
+      if: env.AGENT_TYPE == 'cursor' && steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
         echo "::group::Configuring MCP server for Cursor"
@@ -465,7 +517,7 @@ runs:
         }
         EOF
 
-        if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
+        if [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
           echo "::debug::MCP configuration:"
           cat $HOME/.cursor/mcp.json
         fi
@@ -474,7 +526,7 @@ runs:
         echo "::endgroup::"
 
     - name: Configure MCP Server for Copilot
-      if: env.AGENT_TYPE == 'copilot'
+      if: env.AGENT_TYPE == 'copilot' && steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
@@ -520,7 +572,7 @@ runs:
         }
         EOF
 
-        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+        if [ "${{ inputs.enable_debug }}" == "true" ]; then
           echo "::debug::MCP configuration:"
           cat $HOME/.copilot/mcp-config.json
         fi
@@ -529,7 +581,7 @@ runs:
         echo "::endgroup::"
 
     - name: Initialize Cursor Agent
-      if: env.AGENT_TYPE == 'cursor'
+      if: env.AGENT_TYPE == 'cursor' && steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       env:
         CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
@@ -543,7 +595,7 @@ runs:
         sleep 10
 
         # Verify MCP server is running
-        if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
+        if [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
           echo "::debug::Active MCP servers:"
           agent mcp list || echo "::warning::Could not list MCP servers"
         fi
@@ -552,7 +604,7 @@ runs:
         echo "::endgroup::"
 
     - name: Initialize GitHub Copilot CLI
-      if: env.AGENT_TYPE == 'copilot'
+      if: env.AGENT_TYPE == 'copilot' && steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.copilot_api_key }}
@@ -571,7 +623,7 @@ runs:
           echo "::warning::Could not verify Copilot CLI version"
         fi
 
-        if [ "${{ inputs.enable_debug }}" = "true" ]; then
+        if [ "${{ inputs.enable_debug }}" == "true" ]; then
           echo "::debug::Copilot CLI version:"
           copilot --version || echo "::warning::Could not get version"
         fi
@@ -579,12 +631,13 @@ runs:
         echo "::endgroup::"
 
     - name: Setup Agent Command
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
         echo "::group::Setting up agent command"
 
         # Set agent command based on agent_type
-        if [ "$AGENT_TYPE" = "cursor" ]; then
+        if [ "$AGENT_TYPE" == "cursor" ]; then
           # Cursor CLI: -f enables file operations without prompting
           echo "AGENT_CMD=agent -f -p" >> $GITHUB_ENV
           echo "::notice::Agent command set for Cursor"
@@ -597,12 +650,13 @@ runs:
         echo "::endgroup::"
 
     - name: Start Services
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       run: |
         echo "::group::Starting services"
 
-        if [ "${{ steps.load-config.outputs.skip_service_startup }}" = "true" ]; then
+        if [ "${{ steps.load-config.outputs.skip_service_startup }}" == "true" ]; then
           echo "::notice::Skipping service startup (skip_service_startup=true)"
           echo "::endgroup::"
           exit 0
@@ -624,6 +678,7 @@ runs:
 
     - name: Run Test Recommendation
       id: skyramp-test-recommendations
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       env:
         CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
@@ -656,6 +711,7 @@ runs:
 
     - name: Run Test Maintenance
       id: test-maintenance
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       env:
         CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
@@ -692,6 +748,7 @@ runs:
 
     - name: Read Summary
       id: read-summary
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
         echo "::group::Reading test summary"
@@ -702,7 +759,7 @@ runs:
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
+          if [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
             echo "::debug::Maintenance summary content:"
             echo "$SUMMARY"
           fi
@@ -715,6 +772,7 @@ runs:
 
     - name: Parse Summary Metrics
       id: parse-summary
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
         echo "::group::Parsing summary metrics"
@@ -746,6 +804,7 @@ runs:
         echo "::endgroup::"
 
     - name: Combine Summaries
+      if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
         echo "::group::Combining test summaries"
@@ -767,7 +826,7 @@ runs:
 
         if [ -f "$COMBINED_FILE" ]; then
           echo "::notice::Combined summary created successfully"
-          if [ "${{ steps.load-config.outputs.enable_debug }}" = "true" ]; then
+          if [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
             echo "::debug::Combined summary content:"
             cat "$COMBINED_FILE"
           fi
@@ -778,15 +837,29 @@ runs:
         echo "::endgroup::"
 
     - name: Post PR Comment
-      if: steps.load-config.outputs.post_pr_comment == 'true' && github.event.pull_request.number
+      if: steps.load-config.outputs.post_pr_comment == 'true' && github.event.pull_request.number && steps.self-trigger-check.outputs.skip != 'true'
       uses: peter-evans/create-or-update-comment@v4
       with:
         issue-number: ${{ github.event.pull_request.number }}
         body-path: ${{ runner.temp }}/skyramp/combined-result.txt
 
+    - name: Configure Git Identity
+      if: steps.load-config.outputs.auto_commit == 'true' && steps.self-trigger-check.outputs.skip != 'true'
+      shell: bash
+      run: |
+        echo "::group::Configuring git identity"
+        git config user.name "${{ env.BOT_NAME }}"
+        git config user.email "${{ env.BOT_EMAIL }}"
+        echo "::notice::Git identity configured as ${{ env.BOT_NAME }} <${{ env.BOT_EMAIL }}>"
+        echo "::endgroup::"
+
     - name: Auto-commit Changes
-      if: steps.load-config.outputs.auto_commit == 'true'
+      id: auto-commit
+      if: steps.load-config.outputs.auto_commit == 'true' && steps.self-trigger-check.outputs.skip != 'true'
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
         commit_message: ${{ steps.load-config.outputs.commit_message }}
         file_pattern: ${{ steps.load-config.outputs.test_file_pattern }}
+        commit_user_name: ${{ env.BOT_NAME }}
+        commit_user_email: ${{ env.BOT_EMAIL }}
+        commit_author: ${{ env.BOT_NAME }} <${{ env.BOT_EMAIL }}>

@@ -641,6 +641,50 @@ All tests passed successfully.
     exit 1
 ```
 
+#### `skipped_self_trigger`
+
+**Type:** String (boolean)
+
+**Description:** Whether execution was skipped due to detecting test-bot's own commit
+
+**Example:** `"true"` or `"false"`
+
+**Usage:**
+```yaml
+- name: Check if skipped
+  run: |
+    if [ "${{ steps.skyramp.outputs.skipped_self_trigger }}" = "true" ]; then
+      echo "Execution was skipped (self-triggered commit detected)"
+    fi
+```
+
+**Notes:**
+- Returns `"true"` when the triggering commit was made by test-bot itself
+- Used to prevent infinite recursion when using PAT tokens
+- See [Triggering Other Workflows](../README.md#triggering-other-workflows) for setup
+
+#### `commit_sha`
+
+**Type:** String
+
+**Description:** SHA of the commit made by test-bot (empty if no commit was made)
+
+**Example:** `"abc123def456..."`
+
+**Usage:**
+```yaml
+- name: Log commit SHA
+  if: steps.skyramp.outputs.commit_sha != ''
+  run: |
+    echo "Test-bot committed changes: ${{ steps.skyramp.outputs.commit_sha }}"
+```
+
+**Notes:**
+- Empty string if no changes were committed (no test modifications)
+- Empty string if `auto_commit` is set to `false`
+- Empty string if execution was skipped due to self-trigger
+- Provided by the underlying `stefanzweifel/git-auto-commit-action`
+
 ### Output Patterns
 
 #### 1. Job Summary
