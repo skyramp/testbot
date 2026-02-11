@@ -31,6 +31,10 @@ inputs:
     description: 'Command to start services before test maintenance'
     required: false
     default: 'docker compose up -d'
+  auth_token_command:
+    description: 'Shell command to generate an authentication token. Runs after services start; stdout is captured and set as SKYRAMP_TEST_TOKEN for test execution.'
+    required: false
+    default: ''
 
   # Medium priority optional inputs
   skyramp_executor_version:
@@ -250,6 +254,7 @@ runs:
         COMMIT_MESSAGE=$(get_config "commit_message" "${{ inputs.commit_message }}")
         POST_PR_COMMENT=$(get_config "post_pr_comment" "${{ inputs.post_pr_comment }}")
         ENABLE_DEBUG=$(get_config "enable_debug" "${{ inputs.enable_debug }}")
+        AUTH_TOKEN_COMMAND=$(get_config "auth_token_command" "${{ inputs.auth_token_command }}")
 
         # Output all resolved values
         echo "test_directory=$TEST_DIRECTORY" >> $GITHUB_OUTPUT
@@ -265,6 +270,7 @@ runs:
         echo "commit_message=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
         echo "post_pr_comment=$POST_PR_COMMENT" >> $GITHUB_OUTPUT
         echo "enable_debug=$ENABLE_DEBUG" >> $GITHUB_OUTPUT
+        echo "auth_token_command=$AUTH_TOKEN_COMMAND" >> $GITHUB_OUTPUT
 
         # Log resolved configuration
         echo "Resolved configuration:"
@@ -281,6 +287,7 @@ runs:
         echo "  - commit_message: $COMMIT_MESSAGE"
         echo "  - post_pr_comment: $POST_PR_COMMENT"
         echo "  - enable_debug: $ENABLE_DEBUG"
+        echo "  - auth_token_command: [REDACTED]"
 
         echo "::endgroup::"
 
@@ -788,6 +795,36 @@ runs:
 
         echo "::endgroup::"
 
+    - name: Generate Auth Token
+      id: generate-auth-token
+      if: steps.load-config.outputs.auth_token_command != '' && steps.self-trigger-check.outputs.skip != 'true'
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        echo "::group::Generating authentication token"
+
+        AUTH_CMD="${{ steps.load-config.outputs.auth_token_command }}"
+        echo "Running auth token command..."
+
+        AUTH_TOKEN=$(bash -c "$AUTH_CMD")
+        if [ $? -ne 0 ]; then
+          echo "::error::Auth token command failed"
+          exit 1
+        fi
+
+        if [ -z "$AUTH_TOKEN" ]; then
+          echo "::warning::Auth token command produced empty output"
+        fi
+
+        # Mask token in all subsequent log output
+        echo "::add-mask::$AUTH_TOKEN"
+
+        # Set for subsequent steps
+        echo "SKYRAMP_TEST_TOKEN=$AUTH_TOKEN" >> $GITHUB_ENV
+
+        echo "::notice::Authentication token generated successfully"
+        echo "::endgroup::"
+
     - name: Run Test Recommendation
       id: skyramp-test-recommendations
       if: steps.self-trigger-check.outputs.skip != 'true'
@@ -807,8 +844,13 @@ runs:
         <test_directory>${{ steps.load-config.outputs.test_directory }}</test_directory>
         <recommendation_summary_output_file>${{ runner.temp }}/skyramp/recommendation-result.txt</recommendation_summary_output_file>
         <maintenance_summary_output_file>${{ runner.temp }}/skyramp/result.txt</maintenance_summary_output_file>
+        <auth_token>${SKYRAMP_TEST_TOKEN}</auth_token>
 
-        Use the skyramp_testbot prompt and follow the returned instructions."
+        Use the skyramp_testbot prompt and follow the returned instructions.
+
+        AUTHENTICATION:
+        When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${SKYRAMP_TEST_TOKEN}
+        If the token is empty, pass an empty string for the token parameter."
 
         AGENT_LOG="${{ runner.temp }}/skyramp/recommendation-agent-log.ndjson"
         if [ "$AGENT_TYPE" == "cursor" ] && [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
@@ -859,8 +901,13 @@ runs:
         <test_directory>${TEST_DIR}</test_directory>
         <recommendation_summary_output_file>${{ runner.temp }}/skyramp/recommendation-result.txt</recommendation_summary_output_file>
         <maintenance_summary_output_file>${{ runner.temp }}/skyramp/result.txt</maintenance_summary_output_file>
+        <auth_token>${SKYRAMP_TEST_TOKEN}</auth_token>
 
-        Use the skyramp_testbot prompt and follow the returned instructions."
+        Use the skyramp_testbot prompt and follow the returned instructions.
+
+        AUTHENTICATION:
+        When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${SKYRAMP_TEST_TOKEN}
+        If the token is empty, pass an empty string for the token parameter."
 
         AGENT_LOG="${{ runner.temp }}/skyramp/maintenance-agent-log.ndjson"
         if [ "$AGENT_TYPE" == "cursor" ] && [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then

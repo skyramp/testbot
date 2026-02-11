@@ -108,6 +108,7 @@ Before using this action, ensure you have:
 | `test_directory` | Directory containing Skyramp tests | `tests` |
 | `test_file_pattern` | Pattern for test files to commit | `tests/**/*` |
 | `service_startup_command` | Command to start services before test maintenance | `docker compose up -d` |
+| `auth_token_command` | Shell command to generate an authentication token (stdout is captured) | `''` |
 
 ### Optional - Medium Priority
 
@@ -133,6 +134,7 @@ You can configure Test Bot at the project level by creating a `.skyramp.yml` fil
 test_directory: "tests"
 test_file_pattern: "tests/**/*"
 service_startup_command: "docker compose up -d"
+auth_token_command: ""
 skyramp_executor_version: "v1.3.3"
 skyramp_mcp_version: "latest"
 node_version: "lts/*"
@@ -214,6 +216,46 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
     test_directory: 'api/tests'
     test_file_pattern: 'api/tests/**/*'
 ```
+
+### Authentication
+
+If your API requires authentication, there are two ways to provide a token for test execution.
+
+#### Static Token
+
+If your token is fixed (e.g. a test API key), set `SKYRAMP_TEST_TOKEN` as a workflow environment variable:
+
+```yaml
+env:
+  SKYRAMP_TEST_TOKEN: ${{ secrets.SKYRAMP_TEST_TOKEN }}
+
+jobs:
+  test-maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: skyramp/test-bot@v1
+        with:
+          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+```
+
+#### Dynamic Token
+
+If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `auth_token_command` input. The command runs after services start, and its stdout is captured as the token:
+
+```yaml
+- uses: skyramp/test-bot@v1
+  with:
+    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+    auth_token_command: 'curl -s https://my-api.com/auth/token'
+```
+
+The token is automatically masked in GitHub Actions logs via `::add-mask::`. If the command fails, the action stops before running any tests.
 
 ### Using Outputs
 
