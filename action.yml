@@ -743,10 +743,16 @@ runs:
         echo "::group::Setting up agent command"
 
         # Set agent command based on agent_type
+        ENABLE_DEBUG="${{ steps.load-config.outputs.enable_debug }}"
         if [ "$AGENT_TYPE" == "cursor" ]; then
           # Cursor CLI: -f enables file operations without prompting
-          echo "AGENT_CMD=agent -f -p" >> $GITHUB_ENV
-          echo "::notice::Agent command set for Cursor"
+          CURSOR_CMD="agent -f -p --model auto"
+          if [ "$ENABLE_DEBUG" == "true" ]; then
+            # --output-format stream-json outputs NDJSON events (reasoning, tool calls, results) for log capture
+            CURSOR_CMD="$CURSOR_CMD --output-format stream-json"
+          fi
+          echo "AGENT_CMD=$CURSOR_CMD" >> $GITHUB_ENV
+          echo "::notice::Agent command set for Cursor (debug=$ENABLE_DEBUG)"
         else
           # Copilot CLI: --allow-all-tools (required for non-interactive) --allow-all-paths (for file writes)
           echo "AGENT_CMD=copilot --additional-mcp-config @$HOME/.copilot/mcp-config.json --allow-all-tools --allow-all-paths -p" >> $GITHUB_ENV
@@ -804,13 +810,31 @@ runs:
 
         Use the skyramp_testbot prompt and follow the returned instructions."
 
-        if $AGENT_CMD "$PROMPT"; then
-          echo "::notice::Test recommendations completed successfully"
+        AGENT_LOG="${{ runner.temp }}/skyramp/recommendation-agent-log.ndjson"
+        if [ "$AGENT_TYPE" == "cursor" ] && [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
+          # Debug mode: redirect cursor stream-json output to file (uploaded as artifact)
+          mkdir -p "${{ runner.temp }}/skyramp"
+          if $AGENT_CMD "$PROMPT" > "$AGENT_LOG" 2>&1; then
+            echo "::notice::Test recommendations completed successfully"
+          else
+            EXIT_CODE=$?
+            echo "::error::Test recommendations failed with exit code $EXIT_CODE"
+            echo "Agent logs saved to $AGENT_LOG"
+            exit $EXIT_CODE
+          fi
+          # Log the model auto-selected by Cursor
+          MODEL=$(grep -m1 -oP '"model"\s*:\s*"\K[^"]+' "$AGENT_LOG" 2>/dev/null || true)
+          if [ -n "$MODEL" ]; then
+            echo "::notice::Cursor auto-selected model: $MODEL"
+          fi
         else
-          EXIT_CODE=$?
-          echo "::error::Test recommendations failed with exit code $EXIT_CODE"
-          echo "Check the agent logs for details"
-          exit $EXIT_CODE
+          if $AGENT_CMD "$PROMPT"; then
+            echo "::notice::Test recommendations completed successfully"
+          else
+            EXIT_CODE=$?
+            echo "::error::Test recommendations failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
         fi
 
         echo "::endgroup::"
@@ -838,13 +862,31 @@ runs:
 
         Use the skyramp_testbot prompt and follow the returned instructions."
 
-        if $AGENT_CMD "$PROMPT"; then
-          echo "::notice::Test maintenance completed successfully"
+        AGENT_LOG="${{ runner.temp }}/skyramp/maintenance-agent-log.ndjson"
+        if [ "$AGENT_TYPE" == "cursor" ] && [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
+          # Debug mode: redirect cursor stream-json output to file (uploaded as artifact)
+          mkdir -p "${{ runner.temp }}/skyramp"
+          if $AGENT_CMD "$PROMPT" > "$AGENT_LOG" 2>&1; then
+            echo "::notice::Test maintenance completed successfully"
+          else
+            EXIT_CODE=$?
+            echo "::error::Test maintenance failed with exit code $EXIT_CODE"
+            echo "Agent logs saved to $AGENT_LOG"
+            exit $EXIT_CODE
+          fi
+          # Log the model auto-selected by Cursor
+          MODEL=$(grep -m1 -oP '"model"\s*:\s*"\K[^"]+' "$AGENT_LOG" 2>/dev/null || true)
+          if [ -n "$MODEL" ]; then
+            echo "::notice::Cursor auto-selected model: $MODEL"
+          fi
         else
-          EXIT_CODE=$?
-          echo "::error::Test maintenance failed with exit code $EXIT_CODE"
-          echo "Check the agent logs for details"
-          exit $EXIT_CODE
+          if $AGENT_CMD "$PROMPT"; then
+            echo "::notice::Test maintenance completed successfully"
+          else
+            EXIT_CODE=$?
+            echo "::error::Test maintenance failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
         fi
 
         # Clean up temporary file
@@ -941,6 +983,17 @@ runs:
         fi
 
         echo "::endgroup::"
+
+    - name: Upload Agent Logs
+      if: always() && steps.load-config.outputs.enable_debug == 'true' && steps.self-trigger-check.outputs.skip != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: skyramp-agent-logs
+        path: |
+          ${{ runner.temp }}/skyramp/recommendation-agent-log.ndjson
+          ${{ runner.temp }}/skyramp/maintenance-agent-log.ndjson
+        if-no-files-found: ignore
+        retention-days: 1
 
     - name: Post PR Comment
       if: steps.load-config.outputs.post_pr_comment == 'true' && github.event.pull_request.number && steps.self-trigger-check.outputs.skip != 'true'
