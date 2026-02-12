@@ -123,9 +123,18 @@ runs:
 
         # Fallback to git log for pull_request events (head_commit is empty)
         if [ -z "$COMMIT_AUTHOR" ]; then
-          echo "head_commit not available, using git log to get commit author"
-          COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an' 2>/dev/null || echo "")
-          COMMIT_EMAIL=$(git log -1 --pretty=format:'%ae' 2>/dev/null || echo "")
+          # For pull_request events, HEAD is a merge commit created by GitHub,
+          # so git log -1 returns the wrong author. Use the actual PR head SHA instead.
+          PR_HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          if [ -n "$PR_HEAD_SHA" ]; then
+            echo "Using pull_request head SHA: $PR_HEAD_SHA"
+            COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an' "$PR_HEAD_SHA" 2>/dev/null || echo "")
+            COMMIT_EMAIL=$(git log -1 --pretty=format:'%ae' "$PR_HEAD_SHA" 2>/dev/null || echo "")
+          else
+            echo "head_commit not available, using git log to get commit author"
+            COMMIT_AUTHOR=$(git log -1 --pretty=format:'%an' 2>/dev/null || echo "")
+            COMMIT_EMAIL=$(git log -1 --pretty=format:'%ae' 2>/dev/null || echo "")
+          fi
         fi
 
         # Define bot identity (single source of truth)
