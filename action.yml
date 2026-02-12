@@ -356,6 +356,82 @@ runs:
         echo "::group::Setting up working directories"
         mkdir -p ${{ runner.temp }}/skyramp
         echo "Created temporary directory at ${{ runner.temp }}/skyramp"
+
+        # Create progress comment helper script
+        cat > ${{ runner.temp }}/skyramp/update-progress.sh << 'PROGRESS_SCRIPT_EOF'
+        _skyramp_logo='<img src="https://avatars.githubusercontent.com/u/93742274?s=200&v=4" alt="Skyramp" width="24" />'
+        _spinner_gif='<img src="https://raw.githubusercontent.com/letsramp/test-bot/main/assets/progress-spinner.gif" alt="In progress" width="16" />'
+
+        generate_progress_body() {
+          local step_number="$1"
+          local report_content="${2:-}"
+
+          local check1="[ ]" check2="[ ]" check3="[ ]"
+          [ "$step_number" -ge 1 ] && check1="[x]"
+          [ "$step_number" -ge 2 ] && check2="[x]"
+          [ "$step_number" -ge 3 ] && check3="[x]"
+
+          local spinner=""
+          if [ "$step_number" -lt 3 ]; then
+            spinner=" ${_spinner_gif}"
+          fi
+
+          local body
+          body=$(printf '#### %s Skyramp Testbot%s\nReviewing the Pull Request for test recommendations.\n\n- %s Gathering PR context\n- %s Analyzing branch changes\n- %s Finalizing test recommendations' \
+            "$_skyramp_logo" "$spinner" "$check1" "$check2" "$check3")
+
+          if [ -n "$report_content" ]; then
+            body=$(printf '%s\n\n---\n\n%s' "$body" "$report_content")
+          fi
+
+          printf '%s' "$body"
+        }
+
+        update_progress_comment() {
+          local step_number="$1"
+          if [ -z "$PROGRESS_COMMENT_ID" ]; then
+            echo "::notice::No progress comment ID, skipping update"
+            return 0
+          fi
+
+          local body
+          body=$(generate_progress_body "$step_number")
+
+          jq -n --arg body "$body" '{"body":$body}' | \
+            gh api \
+              --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${PROGRESS_COMMENT_ID}" \
+              --input - || true
+        }
+
+        append_report_to_progress() {
+          local report_file="$1"
+          if [ -z "$PROGRESS_COMMENT_ID" ]; then
+            echo "::notice::No progress comment ID, skipping append"
+            return 1
+          fi
+
+          local report_content=""
+          if [ -f "$report_file" ]; then
+            report_content=$(cat "$report_file")
+          fi
+
+          local body
+          body=$(generate_progress_body 3 "$report_content")
+
+          jq -n --arg body "$body" '{"body":$body}' | \
+            gh api \
+              --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/issues/comments/${PROGRESS_COMMENT_ID}" \
+              --input -
+          local gh_status=$?
+          if [ "$gh_status" -ne 0 ]; then
+            echo "::warning::Failed to append report to progress comment (gh api exit code $gh_status)"
+            return 1
+          fi
+        }
+        PROGRESS_SCRIPT_EOF
+
         echo "::endgroup::"
 
     - name: Generate Git Diff
@@ -378,6 +454,33 @@ runs:
         if [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
           echo "::debug::Git diff content:"
           cat ${{ runner.temp }}/skyramp/git_diff
+        fi
+
+        echo "::endgroup::"
+
+    - name: Post Initial Progress Comment
+      if: steps.load-config.outputs.post_pr_comment == 'true' && github.event.pull_request.number && steps.self-trigger-check.outputs.skip != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        echo "::group::Posting initial progress comment"
+
+        source ${{ runner.temp }}/skyramp/update-progress.sh
+        BODY=$(generate_progress_body 1)
+
+        COMMENT_ID=$(jq -n --arg body "$BODY" '{"body":$body}' | \
+          gh api \
+            --method POST \
+            "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --input - \
+            --jq '.id') || true
+
+        if [ -n "$COMMENT_ID" ]; then
+          echo "PROGRESS_COMMENT_ID=$COMMENT_ID" >> $GITHUB_ENV
+          echo "::notice::Progress comment created (ID: $COMMENT_ID)"
+        else
+          echo "::warning::Failed to create progress comment, will fall back to standalone comment"
         fi
 
         echo "::endgroup::"
@@ -902,6 +1005,17 @@ runs:
         echo "::notice::Authentication token generated successfully"
         echo "::endgroup::"
 
+    - name: Update Progress - Analyzing Changes
+      if: env.PROGRESS_COMMENT_ID != '' && steps.self-trigger-check.outputs.skip != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        echo "::group::Updating progress comment - analyzing changes"
+        source ${{ runner.temp }}/skyramp/update-progress.sh
+        update_progress_comment 2
+        echo "::endgroup::"
+
     - name: Run Test Recommendation
       id: skyramp-test-recommendations
       if: steps.self-trigger-check.outputs.skip != 'true'
@@ -1125,10 +1239,30 @@ runs:
 
     - name: Post PR Comment
       if: steps.load-config.outputs.post_pr_comment == 'true' && github.event.pull_request.number && steps.self-trigger-check.outputs.skip != 'true'
-      uses: peter-evans/create-or-update-comment@v4
-      with:
-        issue-number: ${{ github.event.pull_request.number }}
-        body-path: ${{ runner.temp }}/skyramp/combined-result.txt
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        echo "::group::Posting final PR comment"
+
+        REPORT_FILE="${{ runner.temp }}/skyramp/combined-result.txt"
+
+        source ${{ runner.temp }}/skyramp/update-progress.sh
+        if append_report_to_progress "$REPORT_FILE"; then
+          echo "::notice::Progress comment updated with final report"
+        else
+          # Fallback: create a standalone comment if progress comment doesn't exist
+          echo "::notice::Creating standalone PR comment (no progress comment to update)"
+          if [ -f "$REPORT_FILE" ]; then
+            gh pr comment "${{ github.event.pull_request.number }}" \
+              --repo "${{ github.repository }}" \
+              --body-file "$REPORT_FILE" || true
+          else
+            echo "::warning::No report file found to post"
+          fi
+        fi
+
+        echo "::endgroup::"
 
     - name: Configure Git Identity
       if: steps.load-config.outputs.auto_commit == 'true' && steps.self-trigger-check.outputs.skip != 'true'
