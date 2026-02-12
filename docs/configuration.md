@@ -86,6 +86,14 @@ commit_message: "Skyramp Testbot: test maintenance suggestions"
 # Default: true
 post_pr_comment: true
 
+# Maximum number of retries for transient agent CLI errors
+# Default: 3
+testbot_max_retries: 3
+
+# Delay in seconds between agent retry attempts
+# Default: 10
+testbot_retry_delay: 10
+
 # Enable debug logging
 # Default: false
 enable_debug: false
@@ -507,6 +515,42 @@ with:
 - Only works on pull_request events
 - Uses `peter-evans/create-or-update-comment@v4`
 - Comments are updated, not duplicated
+
+#### `testbot_max_retries`
+
+**Description:** Maximum number of retries for transient agent CLI errors (e.g., Cursor "Connection stalled")
+
+**Type:** String (numeric)
+
+**Default:** `3`
+
+**Example:**
+```yaml
+with:
+  testbot_max_retries: 5
+```
+
+**Notes:**
+- Only transient errors (e.g., "Connection stalled") trigger retries; other failures fail immediately
+- Set to `1` to disable retries
+
+#### `testbot_retry_delay`
+
+**Description:** Delay in seconds between agent retry attempts
+
+**Type:** String (numeric)
+
+**Default:** `10`
+
+**Example:**
+```yaml
+with:
+  testbot_retry_delay: 30
+```
+
+**Notes:**
+- Increase for environments with intermittent connectivity issues
+- The total worst-case delay is `testbot_max_retries * testbot_retry_delay` seconds
 
 #### `enable_debug`
 
@@ -994,6 +1038,8 @@ jobs:
           auto_commit: true
           commit_message: 'test: automated test maintenance [skip ci]'
           post_pr_comment: true
+          testbot_max_retries: 3
+          testbot_retry_delay: 10
           enable_debug: false
 
       - name: Job summary

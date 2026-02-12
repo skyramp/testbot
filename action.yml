@@ -80,6 +80,14 @@ inputs:
     description: 'Post summary as PR comment'
     required: false
     default: 'true'
+  testbot_max_retries:
+    description: 'Maximum number of retries for transient agent CLI errors (e.g., Cursor "Connection stalled")'
+    required: false
+    default: '3'
+  testbot_retry_delay:
+    description: 'Delay in seconds between agent retry attempts'
+    required: false
+    default: '10'
   enable_debug:
     description: 'Enable debug logging'
     required: false
@@ -264,6 +272,8 @@ runs:
         POST_PR_COMMENT=$(get_config "post_pr_comment" "${{ inputs.post_pr_comment }}")
         ENABLE_DEBUG=$(get_config "enable_debug" "${{ inputs.enable_debug }}")
         AUTH_TOKEN_COMMAND=$(get_config "auth_token_command" "${{ inputs.auth_token_command }}")
+        TESTBOT_MAX_RETRIES=$(get_config "testbot_max_retries" "${{ inputs.testbot_max_retries }}")
+        TESTBOT_RETRY_DELAY=$(get_config "testbot_retry_delay" "${{ inputs.testbot_retry_delay }}")
 
         # Output all resolved values
         echo "test_directory=$TEST_DIRECTORY" >> $GITHUB_OUTPUT
@@ -280,6 +290,8 @@ runs:
         echo "post_pr_comment=$POST_PR_COMMENT" >> $GITHUB_OUTPUT
         echo "enable_debug=$ENABLE_DEBUG" >> $GITHUB_OUTPUT
         echo "auth_token_command=$AUTH_TOKEN_COMMAND" >> $GITHUB_OUTPUT
+        echo "testbot_max_retries=$TESTBOT_MAX_RETRIES" >> $GITHUB_OUTPUT
+        echo "testbot_retry_delay=$TESTBOT_RETRY_DELAY" >> $GITHUB_OUTPUT
 
         # Log resolved configuration
         echo "Resolved configuration:"
@@ -296,6 +308,8 @@ runs:
         echo "  - commit_message: $COMMIT_MESSAGE"
         echo "  - post_pr_comment: $POST_PR_COMMENT"
         echo "  - enable_debug: $ENABLE_DEBUG"
+        echo "  - testbot_max_retries: $TESTBOT_MAX_RETRIES"
+        echo "  - testbot_retry_delay: $TESTBOT_RETRY_DELAY"
         echo "  - auth_token_command: [REDACTED]"
 
         echo "::endgroup::"
@@ -775,6 +789,60 @@ runs:
           echo "::notice::Agent command set for Copilot"
         fi
 
+        # Export retry settings so the sourced helper script can read them
+        echo "SKYRAMP_AGENT_MAX_RETRIES=${{ steps.load-config.outputs.testbot_max_retries }}" >> $GITHUB_ENV
+        echo "SKYRAMP_AGENT_RETRY_DELAY=${{ steps.load-config.outputs.testbot_retry_delay }}" >> $GITHUB_ENV
+
+        # Create retry helper for transient agent CLI errors (e.g., Cursor "Connection stalled")
+        cat > ${{ runner.temp }}/skyramp/run-agent-with-retry.sh << 'RETRY_SCRIPT_EOF'
+        # Run the agent command with automatic retries on transient errors.
+        # Parameters:
+        #   prompt   - The agent prompt/command to execute.
+        #   log_file - Optional path to redirect output; if empty, output is written to stdout.
+        run_agent_with_retry() {
+          local prompt="$1"
+          local log_file="${2:-}"
+          local max_retries="${SKYRAMP_AGENT_MAX_RETRIES:-3}"
+          local retry_delay="${SKYRAMP_AGENT_RETRY_DELAY:-10}"
+          local cmd_exit=0
+
+          for attempt in $(seq 1 $max_retries); do
+            cmd_exit=0
+            local tmp_output
+            tmp_output=$(mktemp)
+
+            if [ -n "$log_file" ]; then
+              $AGENT_CMD "$prompt" > "$log_file" 2>&1 || cmd_exit=$?
+              cp "$log_file" "$tmp_output" 2>/dev/null || true
+            else
+              set -o pipefail
+              $AGENT_CMD "$prompt" 2>&1 | tee "$tmp_output"
+              cmd_exit=${PIPESTATUS[0]}
+              set +o pipefail || true
+            fi
+
+            if [ $cmd_exit -eq 0 ]; then
+              rm -f "$tmp_output"
+              return 0
+            fi
+
+            # Check for retryable transient errors
+            if grep -q "Connection stalled" "$tmp_output" 2>/dev/null; then
+              if [ $attempt -lt $max_retries ]; then
+                echo "::warning::Agent connection stalled (attempt $attempt/$max_retries), retrying in ${retry_delay}s..."
+                rm -f "$tmp_output"
+                sleep $retry_delay
+                continue
+              fi
+              echo "::error::Agent connection stalled after $max_retries attempts"
+            fi
+
+            rm -f "$tmp_output"
+            return $cmd_exit
+          done
+        }
+        RETRY_SCRIPT_EOF
+
         echo "::endgroup::"
 
     - name: Start Services
@@ -861,11 +929,13 @@ runs:
         When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${SKYRAMP_TEST_TOKEN}
         If the token is empty, pass an empty string for the token parameter."
 
+        source ${{ runner.temp }}/skyramp/run-agent-with-retry.sh
+
         AGENT_LOG="${{ runner.temp }}/skyramp/recommendation-agent-log.ndjson"
         if [ "$AGENT_TYPE" == "cursor" ] && [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
           # Debug mode: redirect cursor stream-json output to file (uploaded as artifact)
           mkdir -p "${{ runner.temp }}/skyramp"
-          if $AGENT_CMD "$PROMPT" > "$AGENT_LOG" 2>&1; then
+          if run_agent_with_retry "$PROMPT" "$AGENT_LOG"; then
             echo "::notice::Test recommendations completed successfully"
           else
             EXIT_CODE=$?
@@ -879,7 +949,7 @@ runs:
             echo "::notice::Cursor auto-selected model: $MODEL"
           fi
         else
-          if $AGENT_CMD "$PROMPT"; then
+          if run_agent_with_retry "$PROMPT"; then
             echo "::notice::Test recommendations completed successfully"
           else
             EXIT_CODE=$?
@@ -918,11 +988,13 @@ runs:
         When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${SKYRAMP_TEST_TOKEN}
         If the token is empty, pass an empty string for the token parameter."
 
+        source ${{ runner.temp }}/skyramp/run-agent-with-retry.sh
+
         AGENT_LOG="${{ runner.temp }}/skyramp/maintenance-agent-log.ndjson"
         if [ "$AGENT_TYPE" == "cursor" ] && [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
           # Debug mode: redirect cursor stream-json output to file (uploaded as artifact)
           mkdir -p "${{ runner.temp }}/skyramp"
-          if $AGENT_CMD "$PROMPT" > "$AGENT_LOG" 2>&1; then
+          if run_agent_with_retry "$PROMPT" "$AGENT_LOG"; then
             echo "::notice::Test maintenance completed successfully"
           else
             EXIT_CODE=$?
@@ -936,7 +1008,7 @@ runs:
             echo "::notice::Cursor auto-selected model: $MODEL"
           fi
         else
-          if $AGENT_CMD "$PROMPT"; then
+          if run_agent_with_retry "$PROMPT"; then
             echo "::notice::Test maintenance completed successfully"
           else
             EXIT_CODE=$?

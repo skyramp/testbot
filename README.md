@@ -122,6 +122,8 @@ Before using this action, ensure you have:
 | `auto_commit` | Automatically commit test changes | `true` |
 | `commit_message` | Commit message for test changes | `Skyramp Testbot: test maintenance suggestions` |
 | `post_pr_comment` | Post summary as PR comment | `true` |
+| `testbot_max_retries` | Maximum number of retries for transient agent CLI errors | `3` |
+| `testbot_retry_delay` | Delay in seconds between agent retry attempts | `10` |
 | `enable_debug` | Enable debug logging | `false` |
 | `config_file` | Path to Skyramp workspace config file | `.skyramp.yml` |
 
@@ -143,6 +145,8 @@ working_directory: "."
 auto_commit: true
 commit_message: "Skyramp Testbot: test maintenance suggestions"
 post_pr_comment: true
+testbot_max_retries: 3
+testbot_retry_delay: 10
 enable_debug: false
 ```
 
