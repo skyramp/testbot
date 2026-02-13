@@ -359,7 +359,7 @@ runs:
 
         # Create progress comment helper script
         cat > ${{ runner.temp }}/skyramp/update-progress.sh << 'PROGRESS_SCRIPT_EOF'
-        _skyramp_logo='<img src="https://avatars.githubusercontent.com/u/93742274?s=200&v=4" alt="Skyramp" width="24" />'
+        _skyramp_logo='<img src="https://avatars.githubusercontent.com/u/93742274?s=200&v=4" alt="Skyramp" width="28" />'
         _spinner_gif='<img src="https://raw.githubusercontent.com/letsramp/test-bot/main/assets/progress-spinner.gif" alt="In progress" width="16" />'
 
         generate_progress_body() {
@@ -377,7 +377,7 @@ runs:
           fi
 
           local body
-          body=$(printf '#### %s Skyramp Testbot%s\nReviewing the Pull Request for test recommendations.\n\n- %s Gathering PR context\n- %s Analyzing branch changes\n- %s Finalizing test recommendations' \
+          body=$(printf '### %s Skyramp Testbot%s\nReviewing the Pull Request for test recommendations.\n\n- %s Gathering PR context\n- %s Analyzing branch changes\n- %s Finalizing test recommendations' \
             "$_skyramp_logo" "$spinner" "$check1" "$check2" "$check3")
 
           if [ -n "$report_content" ]; then
@@ -900,11 +900,13 @@ runs:
         cat > ${{ runner.temp }}/skyramp/run-agent-with-retry.sh << 'RETRY_SCRIPT_EOF'
         # Run the agent command with automatic retries on transient errors.
         # Parameters:
-        #   prompt   - The agent prompt/command to execute.
-        #   log_file - Optional path to redirect output; if empty, output is written to stdout.
+        #   prompt      - The agent prompt/command to execute.
+        #   log_file    - Optional path to redirect output; if empty, output is written to stdout.
+        #   stdout_file - Optional path to save a copy of agent stdout on success.
         run_agent_with_retry() {
           local prompt="$1"
           local log_file="${2:-}"
+          local stdout_file="${3:-}"
           local max_retries="${SKYRAMP_AGENT_MAX_RETRIES:-3}"
           local retry_delay="${SKYRAMP_AGENT_RETRY_DELAY:-10}"
           local cmd_exit=0
@@ -925,6 +927,10 @@ runs:
             fi
 
             if [ $cmd_exit -eq 0 ]; then
+              # Save stdout capture if requested
+              if [ -n "$stdout_file" ]; then
+                cp "$tmp_output" "$stdout_file" 2>/dev/null || true
+              fi
               rm -f "$tmp_output"
               return 0
             fi
@@ -1016,8 +1022,8 @@ runs:
         update_progress_comment 2
         echo "::endgroup::"
 
-    - name: Run Test Recommendation
-      id: skyramp-test-recommendations
+    - name: Run Skyramp Testbot
+      id: skyramp-testbot
       if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       env:
@@ -1027,14 +1033,16 @@ runs:
         PR_BODY: ${{ github.event.pull_request.body }}
       working-directory: ${{ inputs.working_directory }}
       run: |
-        echo "::group::Running test recommendations"
+        echo "::group::Running Skyramp Testbot"
+
+        # Copy git diff to working directory for consistent access
+        cp ${{ runner.temp }}/skyramp/git_diff ./.skyramp_git_diff
 
         PROMPT="<title>$PR_TITLE</title>
         <description>$PR_BODY</description>
         <diff_file>.skyramp_git_diff</diff_file>
         <test_directory>${{ steps.load-config.outputs.test_directory }}</test_directory>
-        <recommendation_summary_output_file>${{ runner.temp }}/skyramp/recommendation-result.txt</recommendation_summary_output_file>
-        <maintenance_summary_output_file>${{ runner.temp }}/skyramp/result.txt</maintenance_summary_output_file>
+        <summary_output_file>${{ runner.temp }}/skyramp/testbot-result.txt</summary_output_file>
         <auth_token>${SKYRAMP_TEST_TOKEN}</auth_token>
 
         Use the skyramp_testbot prompt and follow the returned instructions.
@@ -1045,15 +1053,16 @@ runs:
 
         source ${{ runner.temp }}/skyramp/run-agent-with-retry.sh
 
-        AGENT_LOG="${{ runner.temp }}/skyramp/recommendation-agent-log.ndjson"
+        AGENT_LOG="${{ runner.temp }}/skyramp/agent-log.ndjson"
+        AGENT_STDOUT="${{ runner.temp }}/skyramp/agent-stdout.txt"
         if [ "$AGENT_TYPE" == "cursor" ] && [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
           # Debug mode: redirect cursor stream-json output to file (uploaded as artifact)
           mkdir -p "${{ runner.temp }}/skyramp"
           if run_agent_with_retry "$PROMPT" "$AGENT_LOG"; then
-            echo "::notice::Test recommendations completed successfully"
+            echo "::notice::Skyramp Testbot completed successfully"
           else
             EXIT_CODE=$?
-            echo "::error::Test recommendations failed with exit code $EXIT_CODE"
+            echo "::error::Skyramp Testbot failed with exit code $EXIT_CODE"
             echo "Agent logs saved to $AGENT_LOG"
             exit $EXIT_CODE
           fi
@@ -1063,70 +1072,11 @@ runs:
             echo "::notice::Cursor auto-selected model: $MODEL"
           fi
         else
-          if run_agent_with_retry "$PROMPT"; then
-            echo "::notice::Test recommendations completed successfully"
+          if run_agent_with_retry "$PROMPT" "" "$AGENT_STDOUT"; then
+            echo "::notice::Skyramp Testbot completed successfully"
           else
             EXIT_CODE=$?
-            echo "::error::Test recommendations failed with exit code $EXIT_CODE"
-            exit $EXIT_CODE
-          fi
-        fi
-
-        echo "::endgroup::"
-
-    - name: Run Test Maintenance
-      id: test-maintenance
-      if: steps.self-trigger-check.outputs.skip != 'true'
-      shell: bash
-      env:
-        CURSOR_API_KEY: ${{ inputs.cursor_api_key }}
-        GH_TOKEN: ${{ inputs.copilot_api_key }}
-      working-directory: ${{ inputs.working_directory }}
-      run: |
-        echo "::group::Running test maintenance"
-
-        TEST_DIR="${{ steps.load-config.outputs.test_directory }}"
-
-        # Copy git diff to working directory for consistent access
-        cp ${{ runner.temp }}/skyramp/git_diff ./.skyramp_git_diff
-
-        PROMPT="<diff_file>.skyramp_git_diff</diff_file>
-        <test_directory>${TEST_DIR}</test_directory>
-        <recommendation_summary_output_file>${{ runner.temp }}/skyramp/recommendation-result.txt</recommendation_summary_output_file>
-        <maintenance_summary_output_file>${{ runner.temp }}/skyramp/result.txt</maintenance_summary_output_file>
-        <auth_token>${SKYRAMP_TEST_TOKEN}</auth_token>
-
-        Use the skyramp_testbot prompt and follow the returned instructions.
-
-        AUTHENTICATION:
-        When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${SKYRAMP_TEST_TOKEN}
-        If the token is empty, pass an empty string for the token parameter."
-
-        source ${{ runner.temp }}/skyramp/run-agent-with-retry.sh
-
-        AGENT_LOG="${{ runner.temp }}/skyramp/maintenance-agent-log.ndjson"
-        if [ "$AGENT_TYPE" == "cursor" ] && [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
-          # Debug mode: redirect cursor stream-json output to file (uploaded as artifact)
-          mkdir -p "${{ runner.temp }}/skyramp"
-          if run_agent_with_retry "$PROMPT" "$AGENT_LOG"; then
-            echo "::notice::Test maintenance completed successfully"
-          else
-            EXIT_CODE=$?
-            echo "::error::Test maintenance failed with exit code $EXIT_CODE"
-            echo "Agent logs saved to $AGENT_LOG"
-            exit $EXIT_CODE
-          fi
-          # Log the model auto-selected by Cursor
-          MODEL=$(grep -m1 -oP '"model"\s*:\s*"\K[^"]+' "$AGENT_LOG" 2>/dev/null || true)
-          if [ -n "$MODEL" ]; then
-            echo "::notice::Cursor auto-selected model: $MODEL"
-          fi
-        else
-          if run_agent_with_retry "$PROMPT"; then
-            echo "::notice::Test maintenance completed successfully"
-          else
-            EXIT_CODE=$?
-            echo "::error::Test maintenance failed with exit code $EXIT_CODE"
+            echo "::error::Skyramp Testbot failed with exit code $EXIT_CODE"
             exit $EXIT_CODE
           fi
         fi
@@ -1143,18 +1093,24 @@ runs:
       run: |
         echo "::group::Reading test summary"
 
-        if [ -f "${{ runner.temp }}/skyramp/result.txt" ]; then
-          SUMMARY=$(cat ${{ runner.temp }}/skyramp/result.txt)
+        SUMMARY_FILE="${{ runner.temp }}/skyramp/testbot-result.txt"
+        # Fallback to agent stdout if summary file wasn't written
+        if [ ! -f "$SUMMARY_FILE" ] && [ -f "${{ runner.temp }}/skyramp/agent-stdout.txt" ]; then
+          SUMMARY_FILE="${{ runner.temp }}/skyramp/agent-stdout.txt"
+        fi
+
+        if [ -f "$SUMMARY_FILE" ]; then
+          SUMMARY=$(cat "$SUMMARY_FILE")
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
           if [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
-            echo "::debug::Maintenance summary content:"
+            echo "::debug::Summary content:"
             echo "$SUMMARY"
           fi
         else
-          echo "::warning::No maintenance summary file generated"
+          echo "::warning::No summary file generated"
           echo "summary=No summary available" >> $GITHUB_OUTPUT
         fi
 
@@ -1167,8 +1123,8 @@ runs:
       run: |
         echo "::group::Parsing summary metrics"
 
-        if [ -f "${{ runner.temp }}/skyramp/result.txt" ]; then
-          SUMMARY=$(cat ${{ runner.temp }}/skyramp/result.txt)
+        if [ -f "${{ runner.temp }}/skyramp/testbot-result.txt" ]; then
+          SUMMARY=$(cat ${{ runner.temp }}/skyramp/testbot-result.txt)
 
           # Parse metrics from summary - use head -1 to ensure single value output
           MODIFIED=$(echo "$SUMMARY" | grep -ioE "modified[^0-9]*[0-9]+" | grep -oE "[0-9]+" | head -1 || echo "0")
@@ -1193,35 +1149,29 @@ runs:
 
         echo "::endgroup::"
 
-    - name: Combine Summaries
+    - name: Prepare Report
       if: steps.self-trigger-check.outputs.skip != 'true'
       shell: bash
       run: |
-        echo "::group::Combining test summaries"
+        echo "::group::Preparing testbot report"
 
-        COMBINED_FILE="${{ runner.temp }}/skyramp/combined-result.txt"
+        REPORT_SRC="${{ runner.temp }}/skyramp/testbot-result.txt"
 
-        # Start with recommendations if available
-        if [ -f "${{ runner.temp }}/skyramp/recommendation-result.txt" ]; then
-          cat "${{ runner.temp }}/skyramp/recommendation-result.txt" >> "$COMBINED_FILE"
-          echo "" >> "$COMBINED_FILE"
-          echo "---" >> "$COMBINED_FILE"
-          echo "" >> "$COMBINED_FILE"
+        # Fallback: if agent didn't write to expected file, use captured stdout
+        if [ ! -f "$REPORT_SRC" ] && [ -f "${{ runner.temp }}/skyramp/agent-stdout.txt" ]; then
+          echo "::notice::Using agent stdout as fallback (agent did not write to summary file)"
+          REPORT_SRC="${{ runner.temp }}/skyramp/agent-stdout.txt"
         fi
 
-        # Append maintenance summary if available
-        if [ -f "${{ runner.temp }}/skyramp/result.txt" ]; then
-          cat "${{ runner.temp }}/skyramp/result.txt" >> "$COMBINED_FILE"
-        fi
-
-        if [ -f "$COMBINED_FILE" ]; then
-          echo "::notice::Combined summary created successfully"
+        if [ -f "$REPORT_SRC" ]; then
+          cp "$REPORT_SRC" "${{ runner.temp }}/skyramp/combined-result.txt"
+          echo "::notice::Testbot report ready"
           if [ "${{ steps.load-config.outputs.enable_debug }}" == "true" ]; then
-            echo "::debug::Combined summary content:"
-            cat "$COMBINED_FILE"
+            echo "::debug::Report content:"
+            cat "${{ runner.temp }}/skyramp/combined-result.txt"
           fi
         else
-          echo "::warning::No summary files found to combine"
+          echo "::warning::No testbot report found"
         fi
 
         echo "::endgroup::"
@@ -1232,8 +1182,7 @@ runs:
       with:
         name: skyramp-agent-logs
         path: |
-          ${{ runner.temp }}/skyramp/recommendation-agent-log.ndjson
-          ${{ runner.temp }}/skyramp/maintenance-agent-log.ndjson
+          ${{ runner.temp }}/skyramp/agent-log.ndjson
         if-no-files-found: ignore
         retention-days: 1
 
