@@ -1,0 +1,30 @@
+{
+  "name": "skyramp-test-bot",
+  "version": "0.1.0",
+  "description": "Github Action for using Skyramp's Testbot for AI-Powered Deterministic Testing",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/letsramp/test-bot"
+  },
+  "author": "Skyramp Inc",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/artifact": "^2.1.0",
+    "@actions/core": "^1.10.1",
+    "@actions/exec": "^1.1.1",
+    "@actions/github": "^6.0.1",
+    "@actions/io": "^1.1.3",
+    "yaml": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@vercel/ncc": "^0.38.0",
+    "typescript": "^5.8.0"
+  }
+}

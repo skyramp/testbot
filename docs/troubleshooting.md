@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-This guide covers common issues and their solutions when using Skyramp Test Bot.
+This guide covers common issues and their solutions when using Skyramp Testbot.
 
 ## Table of Contents
 

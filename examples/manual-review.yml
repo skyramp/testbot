@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Skyramp Test Bot (No Auto-commit)
+      - name: Run Skyramp Testbot (No Auto-commit)
         id: skyramp
         uses: skyramp/test-bot@v1
         with:

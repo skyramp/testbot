@@ -1,8 +1,8 @@
-# Skyramp Test Bot
+# Skyramp Testbot
 
-> Automated test maintenance for your REST APIs using Skyramp's AI-powered TestBot
+> Automated test maintenance for your REST APIs using Skyramp's AI-powered Testbot
 
-[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Skyramp%20Test%20Bot-blue?logo=github)](https://github.com/marketplace/actions/skyramp-test-bot)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Skyramp%20Testbot-blue?logo=github)](https://github.com/marketplace/actions/skyramp-test-bot)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 ## Features
@@ -25,7 +25,7 @@
     Cursor version
 
     ```yaml
-    name: Skyramp TestBot
+    name: Skyramp Testbot
     on: [pull_request]
 
     jobs:
@@ -48,7 +48,7 @@
     GitHub Copilot version
 
     ```yaml
-    name: Skyramp TestBot
+    name: Skyramp Testbot
     on: [pull_request]
 
     jobs:
@@ -106,7 +106,6 @@ Before using this action, ensure you have:
 | Input | Description | Default |
 |-------|-------------|---------|
 | `test_directory` | Directory containing Skyramp tests | `tests` |
-| `test_file_pattern` | Pattern for test files to commit | `tests/**/*` |
 | `service_startup_command` | Command to start services before test maintenance | `docker compose up -d` |
 | `auth_token_command` | Shell command to generate an authentication token (stdout is captured) | `''` |
 
@@ -129,12 +128,11 @@ Before using this action, ensure you have:
 
 ## Workspace Configuration (.skyramp.yml)
 
-You can configure Test Bot at the project level by creating a `.skyramp.yml` file in your repository root. Values in this file take precedence over workflow defaults.
+You can configure Testbot at the project level by creating a `.skyramp.yml` file in your repository root. Values in this file take precedence over workflow defaults.
 
 ```yaml
 # .skyramp.yml
 test_directory: "tests"
-test_file_pattern: "tests/**/*"
 service_startup_command: "docker compose up -d"
 auth_token_command: ""
 skyramp_executor_version: "v1.3.3"
@@ -218,7 +216,6 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
     test_directory: 'api/tests'
-    test_file_pattern: 'api/tests/**/*'
 ```
 
 ### Authentication
@@ -279,7 +276,7 @@ The token is automatically masked in GitHub Actions logs via `::add-mask::`. If 
 
 ## Triggering Other Workflows
 
-By default, commits made by GitHub Actions using `GITHUB_TOKEN` don't trigger other workflows (this is GitHub's built-in recursion prevention). If you want test-bot's commits to trigger your CI/CD pipelines, linters, or other workflows, you need to use a Personal Access Token (PAT).
+By default, commits made by GitHub Actions using `GITHUB_TOKEN` don't trigger other workflows (this is GitHub's built-in recursion prevention). If you want Testbot's commits to trigger your CI/CD pipelines, linters, or other workflows, you need to use a Personal Access Token (PAT).
 
 ### Setup Steps
 
@@ -291,9 +288,9 @@ By default, commits made by GitHub Actions using `GITHUB_TOKEN` don't trigger ot
 jobs:
   test-maintenance:
     runs-on: ubuntu-latest
-    # Prevent infinite loops - on push events, skip if triggered by test-bot's own commits
+    # Prevent infinite loops - on push events, skip if triggered by Testbot's own commits
     # head_commit is only available on push events; pull_request events are handled by the action-level check
-    if: github.event_name != 'push' || github.event.head_commit.author.name != 'Skyramp Test Bot'
+    if: github.event_name != 'push' || github.event.head_commit.author.name != 'Skyramp Testbot'
 
     steps:
       - uses: actions/checkout@v4
@@ -312,10 +309,10 @@ See [examples/trigger-workflows.yml](examples/trigger-workflows.yml) for a compl
 ### How It Works
 
 The recursion prevention has two layers:
-1. **Job-level condition**: On `push` events, skips the entire job if the commit was made by test-bot
+1. **Job-level condition**: On `push` events, skips the entire job if the commit was made by Testbot
 2. **Action-level detection**: The action detects self-triggers (using `git log` for `pull_request` events where `head_commit` is unavailable) and exits gracefully
 
-This ensures test-bot never runs on its own commits while allowing other workflows to run normally.
+This ensures Testbot never runs on its own commits while allowing other workflows to run normally.
 
 ## How It Works
 

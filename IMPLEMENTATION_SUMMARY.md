@@ -1,6 +1,6 @@
-# Implementation Summary: Skyramp Test Bot
+# Implementation Summary: Skyramp Testbot
 
-This document summarizes the implementation of the Skyramp Test Bot GitHub Action, based on the approved plan.
+This document summarizes the implementation of the Skyramp Testbot GitHub Action, based on the approved plan.
 
 ## ✅ Implementation Status
 
@@ -147,9 +147,8 @@ This document summarizes the implementation of the Skyramp Test Bot GitHub Actio
 - `skyramp_license_file` - Skyramp license content
 - `cursor_api_key` - Cursor API key
 
-### Optional - High Priority (3)
+### Optional - High Priority (2)
 - `test_directory` (default: `tests`)
-- `test_file_pattern` (default: `tests/**/*`)
 - `service_startup_command` (default: `docker compose up -d`)
 
 ### Optional - Medium Priority (9)
@@ -230,7 +229,7 @@ git clone https://github.com/skyramp/test-bot.git
 cd test-bot
 cp -r /Users/archit/Projects/letsramp/test-bot/* .
 git add .
-git commit -m "Initial commit: Skyramp Test Bot v1.0.0"
+git commit -m "Initial commit: Skyramp Testbot v1.0.0"
 git push origin main
 ```
 
@@ -261,7 +260,7 @@ git push origin v1.0 v1 --force
 4. Fill in listing details:
    - **Primary Category**: Continuous Integration
    - **Logo**: Upload Skyramp logo (purple zap icon)
-   - **Listing Name**: Skyramp Test Bot
+   - **Listing Name**: Skyramp Testbot
    - **Description**: Use README summary
    - **Screenshots**: Add workflow run screenshots
 5. Submit for review

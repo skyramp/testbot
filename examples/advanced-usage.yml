@@ -16,14 +16,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Skyramp Test Bot
+      - name: Run Skyramp Testbot
         id: skyramp
         uses: skyramp/test-bot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
           test_directory: 'api/tests'
-          test_file_pattern: 'api/tests/**/*.yml'
           service_startup_command: 'npm run start:services'
           skyramp_executor_version: 'v1.3.3'
           node_version: '20.x'
@@ -32,7 +31,7 @@ jobs:
 
       - name: Report Results
         run: |
-          echo "## Skyramp Test Bot Results" >> $GITHUB_STEP_SUMMARY
+          echo "## Skyramp Testbot Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- Tests Modified: ${{ steps.skyramp.outputs.tests_modified }}" >> $GITHUB_STEP_SUMMARY
           echo "- Tests Created: ${{ steps.skyramp.outputs.tests_created }}" >> $GITHUB_STEP_SUMMARY

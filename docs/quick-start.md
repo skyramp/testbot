@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get Skyramp Test Bot running in your repository in under 5 minutes.
+Get Skyramp Testbot running in your repository in under 5 minutes.
 
 ## Prerequisites
 
@@ -57,7 +57,7 @@ jobs:
 
 ```bash
 git add .github/workflows/skyramp-test-bot.yml
-git commit -m "Add Skyramp Test Bot workflow"
+git commit -m "Add Skyramp Testbot workflow"
 git push origin main
 ```
 
@@ -115,7 +115,6 @@ If your tests are not in the `tests/` directory:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
     test_directory: 'api/tests'
-    test_file_pattern: 'api/tests/**/*'
 ```
 
 ### Custom Service Startup

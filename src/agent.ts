@@ -1,0 +1,202 @@
+import * as core from '@actions/core'
+import * as fs from 'fs'
+import type { AgentCommand, AgentType, ResolvedConfig } from './types'
+import { exec, sleep, withRetry } from './utils'
+
+/**
+ * Install the appropriate agent CLI (Cursor or Copilot).
+ */
+export async function installAgentCli(agentType: AgentType): Promise<void> {
+  core.startGroup(`Installing ${agentType === 'cursor' ? 'Cursor' : 'GitHub Copilot'} CLI`)
+
+  if (agentType === 'cursor') {
+    // Check if already installed
+    try {
+      const { stdout } = await exec('agent', ['--version'], { silent: true, ignoreReturnCode: true })
+      core.notice(`Cursor CLI already installed (version: ${stdout.trim()})`)
+      core.endGroup()
+      return
+    } catch {
+      // Not installed, continue
+    }
+
+    await withRetry(
+      async () => {
+        await exec('bash', ['-c', 'curl https://cursor.com/install -fsS | bash'])
+        core.notice('Cursor CLI installed successfully')
+        core.addPath(`${process.env.HOME}/.local/bin`)
+      },
+      { retries: 3, delay: 5, label: 'Cursor CLI install' },
+    )
+  } else {
+    // Copilot
+    try {
+      const { stdout } = await exec('copilot', ['--version'], { silent: true, ignoreReturnCode: true })
+      core.notice(`GitHub Copilot CLI already installed (version: ${stdout.trim()})`)
+      core.endGroup()
+      return
+    } catch {
+      // Not installed, continue
+    }
+
+    await withRetry(
+      async () => {
+        await exec('npm', ['install', '-g', '@github/copilot'])
+        core.notice('GitHub Copilot CLI installed successfully')
+      },
+      { retries: 3, delay: 5, label: 'GitHub Copilot CLI install' },
+    )
+  }
+
+  core.endGroup()
+}
+
+/**
+ * Initialize the agent (enable MCP server, wait for startup).
+ */
+export async function initializeAgent(agentType: AgentType, enableDebug: boolean): Promise<void> {
+  core.startGroup(`Initializing ${agentType === 'cursor' ? 'Cursor' : 'GitHub Copilot'} agent`)
+
+  if (agentType === 'cursor') {
+    await exec('agent', ['mcp', 'enable', 'skyramp-mcp'])
+    await sleep(10)
+
+    if (enableDebug) {
+      try {
+        await exec('agent', ['mcp', 'list'])
+      } catch {
+        core.warning('Could not list MCP servers')
+      }
+    }
+  } else {
+    await sleep(5)
+    try {
+      await exec('copilot', ['--version'])
+      core.notice('GitHub Copilot CLI initialized successfully')
+    } catch {
+      core.warning('Could not verify Copilot CLI version')
+    }
+  }
+
+  core.endGroup()
+}
+
+/**
+ * Build the agent command (binary + args) for execution.
+ */
+export function buildAgentCommand(agentType: AgentType, enableDebug: boolean): AgentCommand {
+  if (agentType === 'cursor') {
+    const args = ['-f', '-p', '--model', 'auto']
+    if (enableDebug) {
+      args.push('--output-format', 'stream-json')
+    }
+    return { command: 'agent', args }
+  }
+
+  return {
+    command: 'copilot',
+    args: [
+      '--additional-mcp-config',
+      `@${process.env.HOME}/.copilot/mcp-config.json`,
+      '--allow-all-tools',
+      '--allow-all-paths',
+      '-p',
+    ],
+  }
+}
+
+/**
+ * Build the prompt string sent to the agent CLI.
+ */
+export function buildPrompt(opts: {
+  prTitle: string
+  prBody: string
+  testDirectory: string
+  summaryPath: string
+  authToken: string
+}): string {
+  return `<title>${opts.prTitle}</title>
+<description>${opts.prBody}</description>
+<diff_file>.skyramp_git_diff</diff_file>
+<test_directory>${opts.testDirectory}</test_directory>
+<summary_output_file>${opts.summaryPath}</summary_output_file>
+<auth_token>${opts.authToken}</auth_token>
+
+Use the skyramp_testbot prompt and follow the returned instructions.
+
+AUTHENTICATION:
+When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${opts.authToken}
+If the token is empty, pass an empty string for the token parameter.`
+}
+
+interface RunAgentResult {
+  success: boolean
+  exitCode: number
+}
+
+/**
+ * Run the agent with automatic retries on transient errors (e.g., "Connection stalled").
+ */
+export async function runAgentWithRetry(
+  agentCmd: AgentCommand,
+  prompt: string,
+  config: ResolvedConfig,
+  opts: {
+    logFile?: string
+    stdoutFile?: string
+  } = {}
+): Promise<RunAgentResult> {
+  const maxRetries = config.testbotMaxRetries
+  const retryDelay = config.testbotRetryDelay
+  const timeoutMs = config.testbotTimeout * 60_000
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    let stdout = ''
+    let stderr = ''
+    let exitCode: number
+
+    try {
+      const args = [...agentCmd.args, prompt]
+      const result = await exec(agentCmd.command, args, {
+        ignoreReturnCode: true,
+        silent: !!opts.logFile,
+        input: Buffer.from(''),
+        timeout: timeoutMs,
+      })
+      exitCode = result.exitCode
+      stdout = result.stdout
+      stderr = result.stderr
+
+      // Write log file if requested (debug artifact)
+      if (opts.logFile) {
+        fs.writeFileSync(opts.logFile, stdout + stderr)
+      }
+
+      if (exitCode === 0) {
+        // Save stdout capture if requested (report fallback)
+        if (opts.stdoutFile) {
+          fs.writeFileSync(opts.stdoutFile, stdout)
+        }
+        return { success: true, exitCode: 0 }
+      }
+    } catch (err) {
+      exitCode = 1
+      stderr = String(err)
+    }
+
+    // Check for retryable transient errors
+    const combined = stdout + stderr
+    if (combined.includes('Connection stalled') || combined.includes('timed out')) {
+      if (attempt < maxRetries) {
+        core.warning(`Agent error (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}s...`)
+        await sleep(retryDelay)
+        continue
+      }
+      core.error(`Agent failed after ${maxRetries} attempts`)
+    }
+
+    return { success: false, exitCode }
+  }
+
+  return { success: false, exitCode: 1 }
+}

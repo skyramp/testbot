@@ -3,8 +3,10 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
 yarn.lock
+
+# Compiled output (auto-built by CI)
+dist/
 
 # Environment
 .env

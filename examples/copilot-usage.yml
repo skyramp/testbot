@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Skyramp Test Bot with GitHub Copilot
+      - name: Run Skyramp Testbot with GitHub Copilot
         uses: skyramp/test-bot@v1
         with:
           # Required inputs
@@ -27,7 +27,6 @@ jobs:
 
           # Test configuration
           test_directory: tests
-          test_file_pattern: tests/**/*
 
           # Service configuration
           service_startup_command: docker compose up -d

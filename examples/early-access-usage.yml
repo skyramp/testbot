@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0  # Full history needed for git diff
 
-      - name: Run Skyramp Test Bot (early access)
+      - name: Run Skyramp Testbot (early access)
         uses: skyramp/test-bot@archit/early-access
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}

@@ -37,13 +37,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Skyramp Test Bot for User Service
+      - name: Run Skyramp Testbot for User Service
         uses: skyramp/test-bot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
           test_directory: 'services/user-service/tests'
-          test_file_pattern: 'services/user-service/tests/**/*'
           working_directory: 'services/user-service'
           service_startup_command: 'docker compose -f services/user-service/docker-compose.yml up -d'
           commit_message: 'test(user-service): update tests via Skyramp bot'
@@ -61,13 +60,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Skyramp Test Bot for Order Service
+      - name: Run Skyramp Testbot for Order Service
         uses: skyramp/test-bot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
           test_directory: 'services/order-service/tests'
-          test_file_pattern: 'services/order-service/tests/**/*'
           working_directory: 'services/order-service'
           service_startup_command: 'docker compose -f services/order-service/docker-compose.yml up -d'
           commit_message: 'test(order-service): update tests via Skyramp bot'
@@ -85,13 +83,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Skyramp Test Bot for Payment Service
+      - name: Run Skyramp Testbot for Payment Service
         uses: skyramp/test-bot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
           test_directory: 'services/payment-service/tests'
-          test_file_pattern: 'services/payment-service/tests/**/*'
           working_directory: 'services/payment-service'
           service_startup_command: 'docker compose -f services/payment-service/docker-compose.yml up -d'
           commit_message: 'test(payment-service): update tests via Skyramp bot'

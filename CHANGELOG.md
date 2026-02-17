@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-01-29
 
 ### Added
-- Initial release of Skyramp Test Bot
+- Initial release of Skyramp Testbot
 - AI-powered test maintenance using Cursor CLI
 - Automatic test generation for code changes
 - Smart change detection via git diff analysis
@@ -42,7 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Optional Inputs:**
   - `test_directory` (default: `tests`)
-  - `test_file_pattern` (default: `tests/**/*`)
   - `service_startup_command` (default: `docker compose up -d`)
   - `skyramp_executor_version` (default: `v1.3.3`)
   - `skyramp_mcp_version` (default: `latest`)

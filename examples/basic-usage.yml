@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0  # Full history needed for git diff
 
-      - name: Run Skyramp Test Bot
+      - name: Run Skyramp Testbot
         uses: skyramp/test-bot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}

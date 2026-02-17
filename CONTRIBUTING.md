@@ -1,6 +1,6 @@
-# Contributing to Skyramp Test Bot
+# Contributing to Skyramp Testbot
 
-Thank you for your interest in contributing to Skyramp Test Bot! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Skyramp Testbot! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -225,4 +225,4 @@ By contributing, you agree that your contributions will be licensed under the Ap
 
 ---
 
-Thank you for contributing to Skyramp Test Bot!
+Thank you for contributing to Skyramp Testbot!
