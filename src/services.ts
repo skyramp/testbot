@@ -22,8 +22,35 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
     core.warning('Service startup command failed, but continuing...')
   }
 
-  // Give services time to initialize
-  await sleep(5)
+  // Wait for services to be ready
+  if (config.healthCheckCommand) {
+    core.info(`Running health check: ${config.healthCheckCommand}`)
+    const startTime = Date.now()
+    const timeoutMs = config.healthCheckTimeout * 1000
+    const pollInterval = 2
+    let attempt = 0
+
+    while (Date.now() - startTime < timeoutMs) {
+      attempt++
+      const { exitCode } = await exec('bash', ['-c', config.healthCheckCommand], {
+        cwd: workingDir,
+        ignoreReturnCode: true,
+      })
+      if (exitCode === 0) {
+        core.notice(`Health check passed on attempt ${attempt}`)
+        core.endGroup()
+        return
+      }
+      const elapsed = Math.round((Date.now() - startTime) / 1000)
+      core.info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.healthCheckTimeout}s), retrying in ${pollInterval}s...`)
+      await sleep(pollInterval)
+    }
+
+    core.warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`)
+  } else {
+    await sleep(5)
+  }
+
   core.endGroup()
 }
 

@@ -16,6 +16,8 @@ export interface ActionInputs {
   skyrampMcpGithubRef: string
   nodeVersion: string
   skipServiceStartup: boolean
+  healthCheckCommand: string
+  healthCheckTimeout: number
   workingDirectory: string
   autoCommit: boolean
   commitMessage: string
@@ -39,6 +41,8 @@ export interface ResolvedConfig {
   skyrampMcpGithubRef: string
   nodeVersion: string
   skipServiceStartup: boolean
+  healthCheckCommand: string
+  healthCheckTimeout: number
   autoCommit: boolean
   commitMessage: string
   postPrComment: boolean

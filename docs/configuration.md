@@ -66,6 +66,15 @@ node_version: "lts/*"
 # Default: false
 skip_service_startup: false
 
+# Shell command to verify services are ready (retried until success or timeout)
+# If empty, a fixed 5s delay is used after service startup
+# Default: ""
+health_check_command: "curl -sf http://localhost:8000/health"
+
+# Maximum seconds to wait for health check command to succeed
+# Default: 30
+health_check_timeout: 30
+
 # Working directory for the action
 # Default: "."
 working_directory: "."
@@ -286,8 +295,57 @@ with:
 **Notes:**
 - Command runs in `working_directory`
 - Failure is logged as warning but doesn't fail action
-- 5 second wait after startup for initialization
 - Use `skip_service_startup: true` if not needed
+- See `health_check_command` for controlling readiness polling after startup
+
+#### `health_check_command`
+
+**Description:** Shell command to verify services are ready after startup. When set, it is retried every 2 seconds until it succeeds (exit code 0) or `health_check_timeout` is reached. If empty, a fixed 5-second delay is used instead.
+
+**Type:** String
+
+**Default:** `""` (empty — uses fixed 5s delay)
+
+**Examples:**
+
+1. **HTTP health endpoint:**
+   ```yaml
+   health_check_command: 'curl -sf http://localhost:8000/health'
+   ```
+
+2. **TCP port check:**
+   ```yaml
+   health_check_command: 'nc -z localhost 5432'
+   ```
+
+3. **Docker container health:**
+   ```yaml
+   health_check_command: 'docker compose exec -T api curl -sf http://localhost:8000/health'
+   ```
+
+**Notes:**
+- Runs via `bash -c`, so pipes and operators work
+- Each attempt is logged for visibility
+- On timeout, a warning is logged but the action continues (non-fatal)
+
+#### `health_check_timeout`
+
+**Description:** Maximum seconds to wait for `health_check_command` to succeed
+
+**Type:** String (numeric)
+
+**Default:** `30`
+
+**Example:**
+```yaml
+with:
+  health_check_timeout: 60
+```
+
+**Notes:**
+- Only relevant when `health_check_command` is set
+- The command is polled every 2 seconds until success or this timeout
+- If the timeout is reached, a warning is emitted and execution continues
 
 ### Optional Inputs - Medium Priority
 

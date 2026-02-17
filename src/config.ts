@@ -30,6 +30,8 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
     skyrampMcpGithubRef: getString(fileConfig, 'skyramp_mcp_github_ref', inputs.skyrampMcpGithubRef),
     nodeVersion: getString(fileConfig, 'node_version', inputs.nodeVersion),
     skipServiceStartup: getBoolean(fileConfig, 'skip_service_startup', inputs.skipServiceStartup),
+    healthCheckCommand: getString(fileConfig, 'health_check_command', inputs.healthCheckCommand),
+    healthCheckTimeout: getNumber(fileConfig, 'health_check_timeout', inputs.healthCheckTimeout),
     autoCommit: getBoolean(fileConfig, 'auto_commit', inputs.autoCommit),
     commitMessage: getString(fileConfig, 'commit_message', inputs.commitMessage),
     postPrComment: getBoolean(fileConfig, 'post_pr_comment', inputs.postPrComment),
