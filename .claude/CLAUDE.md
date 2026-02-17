@@ -6,7 +6,7 @@ Skyramp Testbot is a reusable GitHub Action (Node.js/TypeScript) that uses an AI
 
 ## Key Commands
 
-- `npm run build` — compile TypeScript to `dist/index.js` via `@vercel/ncc`
+- `npm run build` — bundle TypeScript to `dist/index.js` via `esbuild`
 - `npm run typecheck` — run `tsc --noEmit` for type checking
 - Test by pushing to a branch referenced by a calling workflow (e.g., api-insight's `.github/workflows/`)
 
@@ -40,7 +40,7 @@ assets/
 
 ### Action Type
 
-This is a `runs.using: node24` action. The `action.yml` is a thin declarative wrapper — all logic lives in TypeScript, compiled to `dist/index.js` via ncc. The `dist/` directory is in `.gitignore` and auto-built by `.github/workflows/build.yml` on every push.
+This is a `runs.using: node24` action. The `action.yml` is a thin declarative wrapper — all logic lives in TypeScript, bundled to `dist/index.js` via esbuild. The `dist/` directory is in `.gitignore` and auto-built by `.github/workflows/build.yml` on every push.
 
 ### Execution Flow (src/main.ts)
 
