@@ -100990,6 +100990,7 @@ function getInputs() {
       }
       return raw;
     })(),
+    healthCheckDiagnosticsCommand: getInput("health_check_diagnostics_command"),
     workingDirectory: getInput("working_directory"),
     autoCommit: getBooleanInput("auto_commit"),
     commitMessage: getInput("commit_message"),
@@ -101043,6 +101044,7 @@ async function loadConfig(inputs) {
     skipServiceStartup: getBoolean(fileConfig, "skip_service_startup", inputs.skipServiceStartup),
     healthCheckCommand: getString(fileConfig, "health_check_command", inputs.healthCheckCommand),
     healthCheckTimeout: getNumber(fileConfig, "health_check_timeout", inputs.healthCheckTimeout),
+    healthCheckDiagnosticsCommand: getString(fileConfig, "health_check_diagnostics_command", inputs.healthCheckDiagnosticsCommand),
     autoCommit: getBoolean(fileConfig, "auto_commit", inputs.autoCommit),
     commitMessage: getString(fileConfig, "commit_message", inputs.commitMessage),
     postPrComment: getBoolean(fileConfig, "post_pr_comment", inputs.postPrComment),
@@ -101584,25 +101586,13 @@ async function startServices(config, workingDir) {
   }
   warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`);
   try {
-    info("--- Docker diagnostics ---");
-    await exec2("docker", ["ps", "-a", "--format", "table {{.Names}}	{{.Status}}	{{.Ports}}"], {
+    info("--- Diagnostics ---");
+    await exec2("bash", ["-c", config.healthCheckDiagnosticsCommand], {
       cwd: workingDir,
       ignoreReturnCode: true
     });
-    const { stdout: containers } = await exec2("docker", ["ps", "-a", "--format", "{{.Names}}"], {
-      cwd: workingDir,
-      silent: true,
-      ignoreReturnCode: true
-    });
-    for (const name of containers.trim().split("\n").filter(Boolean)) {
-      info(`--- docker logs ${name} (last 30 lines) ---`);
-      await exec2("docker", ["logs", "--tail", "30", name], {
-        cwd: workingDir,
-        ignoreReturnCode: true
-      });
-    }
   } catch {
-    info("Could not retrieve docker diagnostics");
+    info("Could not retrieve diagnostics");
   }
   endGroup();
 }
