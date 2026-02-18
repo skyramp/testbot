@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Skyramp Testbot with GitHub Copilot
-        uses: skyramp/test-bot@v1
+        uses: skyramp/testbot@v1
         with:
           # Required inputs
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}

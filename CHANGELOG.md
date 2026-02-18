@@ -104,9 +104,9 @@ This project maintains three types of tags for each release:
 
 Users can choose their stability level:
 ```yaml
-uses: skyramp/test-bot@v1       # Latest (recommended for development)
-uses: skyramp/test-bot@v1.0     # Latest patch only
-uses: skyramp/test-bot@v1.0.0   # Pinned (recommended for production)
+uses: skyramp/testbot@v1       # Latest (recommended for development)
+uses: skyramp/testbot@v1.0     # Latest patch only
+uses: skyramp/testbot@v1.0.0   # Pinned (recommended for production)
 ```
 
 ## Release Process
@@ -126,10 +126,10 @@ uses: skyramp/test-bot@v1.0.0   # Pinned (recommended for production)
 ## Support
 
 For questions, issues, or contributions:
-- **Issues**: https://github.com/skyramp/test-bot/issues
-- **Discussions**: https://github.com/skyramp/test-bot/discussions
+- **Issues**: https://github.com/skyramp/testbot/issues
+- **Discussions**: https://github.com/skyramp/testbot/discussions
 - **Email**: support@skyramp.com
 
-[Unreleased]: https://github.com/skyramp/test-bot/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/skyramp/test-bot/releases/tag/v1.0.0
+[Unreleased]: https://github.com/skyramp/testbot/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/skyramp/testbot/releases/tag/v1.0.0
 [0.1.0]: https://github.com/skyramp/api-insight/tree/kslee/demo3/.github/actions/skyramp

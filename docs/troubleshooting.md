@@ -86,7 +86,7 @@ Skyramp MCP returns license validation error
 
 2. **Use explicit path:**
    ```yaml
-   - uses: skyramp/test-bot@v1
+   - uses: skyramp/testbot@v1
      with:
        service_startup_command: 'docker compose -f ./docker-compose.yml up -d'
    ```
@@ -112,14 +112,14 @@ Service startup command returns non-zero exit code
 
 2. **Add error handling:**
    ```yaml
-   - uses: skyramp/test-bot@v1
+   - uses: skyramp/testbot@v1
      with:
        service_startup_command: 'npm run start:services || echo "Services failed but continuing"'
    ```
 
 3. **Skip service startup if not needed:**
    ```yaml
-   - uses: skyramp/test-bot@v1
+   - uses: skyramp/testbot@v1
      with:
        skip_service_startup: true
    ```
@@ -281,7 +281,7 @@ Error: Resource not accessible by integration
 To get detailed logs for troubleshooting:
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     enable_debug: true
 ```
@@ -307,7 +307,7 @@ This provides runner-level debugging information.
 
 If you've tried these solutions and still have issues:
 
-1. **Check existing issues:** [GitHub Issues](https://github.com/skyramp/test-bot/issues)
+1. **Check existing issues:** [GitHub Issues](https://github.com/skyramp/testbot/issues)
 2. **Enable debug mode** and include logs in your issue report
 3. **Provide minimal reproduction** if possible
 4. **Contact support:** support@skyramp.com

@@ -18,7 +18,7 @@ jobs:
 
       - name: Run Skyramp Testbot (No Auto-commit)
         id: skyramp
-        uses: skyramp/test-bot@v1
+        uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}

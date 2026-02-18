@@ -2,7 +2,7 @@
 
 > Automated test maintenance for your REST APIs using Skyramp's AI-powered Testbot
 
-[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Skyramp%20Testbot-blue?logo=github)](https://github.com/marketplace/actions/skyramp-test-bot)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Skyramp%20Testbot-blue?logo=github)](https://github.com/marketplace/actions/skyramp-testbot)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 ## Features
@@ -39,7 +39,7 @@
             with:
               fetch-depth: 0
 
-          - uses: skyramp/test-bot@v0.2
+          - uses: skyramp/testbot@v0.2
             with:
               skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
               cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -62,7 +62,7 @@
             with:
               fetch-depth: 0
 
-          - uses: skyramp/test-bot@v0.2
+          - uses: skyramp/testbot@v0.2
             with:
               skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
               copilot_api_key: ${{ secrets.COPILOT_API_KEY }}
@@ -173,7 +173,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 ### Basic Usage with Cursor (Default)
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -182,7 +182,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 ### Using GitHub Copilot CLI
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     copilot_api_key: ${{ secrets.COPILOT_PAT }}
@@ -191,7 +191,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -201,7 +201,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -211,7 +211,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 ### Custom Test Directory Location
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -238,7 +238,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/test-bot@v1
+      - uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -249,7 +249,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `auth_token_command` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -261,7 +261,7 @@ The token is automatically masked in GitHub Actions logs via `::add-mask::`. If 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   id: skyramp
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
@@ -298,7 +298,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead of GITHUB_TOKEN
 
-      - uses: skyramp/test-bot@v1
+      - uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -375,7 +375,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/skyramp/test-bot/issues)
+- **Issues**: [GitHub Issues](https://github.com/skyramp/testbot/issues)
 - **Documentation**: [docs/](docs/)
 - **Website**: [skyramp.dev](https://skyramp.dev)
 

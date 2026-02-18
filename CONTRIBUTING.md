@@ -12,7 +12,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 Before creating a bug report:
 - Check the [troubleshooting guide](docs/troubleshooting.md)
-- Search [existing issues](https://github.com/skyramp/test-bot/issues)
+- Search [existing issues](https://github.com/skyramp/testbot/issues)
 - Try with `enable_debug: true` to gather more information
 
 When reporting a bug, include:
@@ -34,7 +34,7 @@ Enhancement suggestions are welcome! Please:
 
 1. **Fork the repository**
    ```bash
-   gh repo fork skyramp/test-bot
+   gh repo fork skyramp/testbot
    ```
 
 2. **Create a feature branch**
@@ -48,7 +48,7 @@ Enhancement suggestions are welcome! Please:
    - Update documentation
 
 4. **Test your changes**
-   - Test locally with `.github/actions/test-bot`
+   - Test locally with `.github/actions/testbot`
    - Verify with multiple scenarios
    - Ensure no breaking changes
 
@@ -89,7 +89,7 @@ Enhancement suggestions are welcome! Please:
 2. **Copy action to test repository:**
    ```bash
    mkdir -p .github/actions
-   cp -r /path/to/test-bot .github/actions/test-bot
+   cp -r /path/to/testbot .github/actions/testbot
    ```
 
 3. **Create test workflow:**
@@ -102,7 +102,7 @@ Enhancement suggestions are welcome! Please:
        runs-on: ubuntu-latest
        steps:
          - uses: actions/checkout@v4
-         - uses: ./.github/actions/test-bot
+         - uses: ./.github/actions/testbot
            with:
              skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
              cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -215,8 +215,8 @@ Maintainers follow this process for releases:
 ## Questions?
 
 - Check [documentation](docs/)
-- Search [existing issues](https://github.com/skyramp/test-bot/issues)
-- Ask in [discussions](https://github.com/skyramp/test-bot/discussions)
+- Search [existing issues](https://github.com/skyramp/testbot/issues)
+- Ask in [discussions](https://github.com/skyramp/testbot/discussions)
 - Email support@skyramp.com
 
 ## License

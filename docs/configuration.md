@@ -29,7 +29,7 @@ When `.skyramp.yml` exists and contains a value, it always takes precedence over
 By default, the action looks for `.skyramp.yml` in the repository root. You can customize this path using the `config_file` input:
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -425,7 +425,7 @@ with:
 
 **Alternative Workflow:**
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     auto_commit: false
 
@@ -562,7 +562,7 @@ with:
 All outputs are available via step outputs:
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   id: skyramp  # Required for accessing outputs
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
@@ -663,7 +663,7 @@ All tests passed successfully.
 
 **Type:** String (boolean)
 
-**Description:** Whether execution was skipped due to detecting test-bot's own commit
+**Description:** Whether execution was skipped due to detecting testbot's own commit
 
 **Example:** `"true"` or `"false"`
 
@@ -677,7 +677,7 @@ All tests passed successfully.
 ```
 
 **Notes:**
-- Returns `"true"` when the triggering commit was made by test-bot itself
+- Returns `"true"` when the triggering commit was made by testbot itself
 - Used to prevent infinite recursion when using PAT tokens
 - See [Triggering Other Workflows](../README.md#triggering-other-workflows) for setup
 
@@ -685,7 +685,7 @@ All tests passed successfully.
 
 **Type:** String
 
-**Description:** SHA of the commit made by test-bot (empty if no commit was made)
+**Description:** SHA of the commit made by testbot (empty if no commit was made)
 
 **Example:** `"abc123def456..."`
 
@@ -766,7 +766,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/test-bot@v1
+      - uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -784,7 +784,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.base_ref == 'develop'
     steps:
-      - uses: skyramp/test-bot@v1
+      - uses: skyramp/testbot@v1
         with:
           auto_commit: true
 
@@ -793,7 +793,7 @@ jobs:
     if: github.base_ref == 'main'
     environment: production  # Requires approval
     steps:
-      - uses: skyramp/test-bot@v1
+      - uses: skyramp/testbot@v1
         with:
           auto_commit: true
 ```
@@ -811,7 +811,7 @@ Speed up workflows by caching Node modules:
     restore-keys: |
       ${{ runner.os }}-node-
 
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -841,7 +841,7 @@ jobs:
     if: needs.detect-changes.outputs.api_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: skyramp/test-bot@v1
+      - uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -852,7 +852,7 @@ jobs:
 ### Development Environment
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE_DEV }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -864,7 +864,7 @@ jobs:
 ### Staging Environment
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE_STAGING }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -875,7 +875,7 @@ jobs:
 ### Production Environment
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE_PROD }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -892,7 +892,7 @@ jobs:
 For production, pin action and dependency versions:
 
 ```yaml
-- uses: skyramp/test-bot@v1.0.0  # Exact version
+- uses: skyramp/testbot@v1.0.0  # Exact version
   with:
     skyramp_executor_version: 'v1.3.3'
     skyramp_mcp_version: '1.0.0'
@@ -925,7 +925,7 @@ permissions:
 Add fallback steps for critical workflows:
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   id: skyramp
   continue-on-error: true
 
@@ -987,7 +987,7 @@ jobs:
 
       - name: Run Skyramp Testbot
         id: skyramp
-        uses: skyramp/test-bot@v1
+        uses: skyramp/testbot@v1
         with:
           # Required
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}

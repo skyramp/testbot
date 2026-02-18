@@ -1,4 +1,4 @@
-# Claude Code Configuration — test-bot
+# Claude Code Configuration — Testbot
 
 ## Project Overview
 

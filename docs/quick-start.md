@@ -28,7 +28,7 @@ Before you begin, ensure you have:
 
 ## Step 2: Create Workflow File
 
-Create `.github/workflows/skyramp-test-bot.yml` in your repository:
+Create `.github/workflows/skyramp-testbot.yml` in your repository:
 
 ```yaml
 name: Skyramp Test Automation
@@ -47,7 +47,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/test-bot@v1
+      - uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -56,7 +56,7 @@ jobs:
 ## Step 3: Commit and Push
 
 ```bash
-git add .github/workflows/skyramp-test-bot.yml
+git add .github/workflows/skyramp-testbot.yml
 git commit -m "Add Skyramp Testbot workflow"
 git push origin main
 ```
@@ -110,7 +110,7 @@ The bot will:
 If your tests are not in the `tests/` directory:
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -122,7 +122,7 @@ If your tests are not in the `tests/` directory:
 If you don't use `docker compose up -d`:
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -134,7 +134,7 @@ If you don't use `docker compose up -d`:
 If you want to review changes before committing:
 
 ```yaml
-- uses: skyramp/test-bot@v1
+- uses: skyramp/testbot@v1
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -177,7 +177,7 @@ This is normal if:
 
 ## Getting Help
 
-- **Issues**: [GitHub Issues](https://github.com/skyramp/test-bot/issues)
+- **Issues**: [GitHub Issues](https://github.com/skyramp/testbot/issues)
 - **Documentation**: [Full docs](configuration.md)
 - **Support**: support@skyramp.com
 

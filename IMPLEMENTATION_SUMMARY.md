@@ -192,7 +192,7 @@ This document summarizes the implementation of the Skyramp Testbot GitHub Action
 
 ### Local Testing Approach
 1. Create test repository with sample API
-2. Copy action to `.github/actions/test-bot`
+2. Copy action to `.github/actions/testbot`
 3. Create test workflow referencing local action
 4. Test with multiple scenarios
 
@@ -221,13 +221,13 @@ This document summarizes the implementation of the Skyramp Testbot GitHub Action
 ### 1. Repository Creation
 ```bash
 # Create repository (requires org permissions)
-gh repo create skyramp/test-bot --private \
+gh repo create skyramp/testbot --private \
   --description "A bot for automatic test maintenance for your REST APIs using Skyramp"
 
 # Clone and push initial code
-git clone https://github.com/skyramp/test-bot.git
-cd test-bot
-cp -r /Users/archit/Projects/letsramp/test-bot/* .
+git clone https://github.com/skyramp/testbot.git
+cd testbot
+cp -r /Users/archit/Projects/letsramp/testbot/* .
 git add .
 git commit -m "Initial commit: Skyramp Testbot v1.0.0"
 git push origin main
@@ -248,7 +248,7 @@ git push origin v1.0 v1 --force
 ### 3. Testing
 1. Create test repository
 2. Add secrets (SKYRAMP_LICENSE, CURSOR_API_KEY)
-3. Create workflow using `skyramp/test-bot@v1`
+3. Create workflow using `skyramp/testbot@v1`
 4. Open PR with code changes
 5. Verify action runs successfully
 6. Review committed changes and PR comment

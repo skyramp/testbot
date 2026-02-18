@@ -1,6 +1,6 @@
 # Example: Trigger Other Workflows on Test-Bot Commits
 #
-# This example shows how to configure test-bot so its commits trigger
+# This example shows how to configure testbot so its commits trigger
 # other GitHub workflows (e.g., CI/CD pipelines, linters, etc.)
 #
 # Key components:
@@ -24,7 +24,7 @@ on:
 jobs:
   test-maintenance:
     runs-on: ubuntu-latest
-    # IMPORTANT: On push events, skip if triggered by test-bot's own commits (prevents infinite loops)
+    # IMPORTANT: On push events, skip if triggered by testbot's own commits (prevents infinite loops)
     # Note: head_commit is only available on push events; pull_request events are handled by the action-level check
     if: github.event_name != 'push' || github.event.head_commit.author.name != 'Skyramp Testbot'
     permissions:
@@ -53,12 +53,12 @@ jobs:
 
       - name: Run Skyramp Testbot
         id: skyramp
-        uses: skyramp/test-bot@v1
+        uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
 
-          # Commits are authored as 'Skyramp Testbot <test-bot@skyramp.dev>'
+          # Commits are authored as 'Skyramp Testbot <testbot@skyramp.dev>'
           # which matches the job-level 'if' condition above
 
           # Optional: Customize other settings

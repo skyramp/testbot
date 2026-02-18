@@ -19,7 +19,7 @@ function resolveSummarySource(paths: Paths): string | null {
  * Try to parse the raw summary as a TestbotReport JSON object.
  * Returns null if the content is not valid JSON or doesn't have the expected shape.
  */
-function tryParseReport(raw: string): TestbotReport | null {
+export function tryParseReport(raw: string): TestbotReport | null {
   try {
     // Strip markdown code fences if the agent wrapped the JSON in them
     const cleaned = raw.replace(/^```(?:json)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim()
@@ -36,7 +36,7 @@ function tryParseReport(raw: string): TestbotReport | null {
 /**
  * Render a TestbotReport into the standard markdown format.
  */
-function renderReport(report: TestbotReport): string {
+export function renderReport(report: TestbotReport): string {
   const lines: string[] = []
 
   // Business Case Analysis (always present)

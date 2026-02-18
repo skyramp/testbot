@@ -52,20 +52,20 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
   return config
 }
 
-function getString(config: Record<string, unknown>, key: string, fallback: string): string {
+export function getString(config: Record<string, unknown>, key: string, fallback: string): string {
   const val = config[key]
   if (val != null && val !== '' && typeof val === 'string') return val
   return fallback
 }
 
-function getBoolean(config: Record<string, unknown>, key: string, fallback: boolean): boolean {
+export function getBoolean(config: Record<string, unknown>, key: string, fallback: boolean): boolean {
   const val = config[key]
   if (typeof val === 'boolean') return val
   if (typeof val === 'string') return val === 'true'
   return fallback
 }
 
-function getNumber(config: Record<string, unknown>, key: string, fallback: number): number {
+export function getNumber(config: Record<string, unknown>, key: string, fallback: number): number {
   const val = config[key]
   if (typeof val === 'number') return val
   if (typeof val === 'string') {

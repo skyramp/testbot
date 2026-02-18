@@ -101187,7 +101187,7 @@ init_core();
 init_github();
 var fs4 = __toESM(require("fs"));
 var SKYRAMP_LOGO = '<img src="https://avatars.githubusercontent.com/u/93742274?s=200&v=4" alt="Skyramp" width="28" />';
-var SPINNER_GIF = '<img src="https://raw.githubusercontent.com/letsramp/test-bot/main/assets/progress-spinner.gif" alt="In progress" width="16" />';
+var SPINNER_GIF = '<img src="https://raw.githubusercontent.com/letsramp/testbot/main/assets/progress-spinner.gif" alt="In progress" width="16" />';
 var _githubToken = "";
 function setGitHubToken(token) {
   _githubToken = token;

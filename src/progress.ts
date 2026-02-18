@@ -3,7 +3,7 @@ import * as github from '@actions/github'
 import * as fs from 'fs'
 
 const SKYRAMP_LOGO = '<img src="https://avatars.githubusercontent.com/u/93742274?s=200&v=4" alt="Skyramp" width="28" />'
-const SPINNER_GIF = '<img src="https://raw.githubusercontent.com/letsramp/test-bot/main/assets/progress-spinner.gif" alt="In progress" width="16" />'
+const SPINNER_GIF = '<img src="https://raw.githubusercontent.com/letsramp/testbot/main/assets/progress-spinner.gif" alt="In progress" width="16" />'
 
 let _githubToken = ''
 
@@ -12,7 +12,7 @@ export function setGitHubToken(token: string): void {
   _githubToken = token
 }
 
-function generateProgressBody(step: number, reportContent?: string): string {
+export function generateProgressBody(step: number, reportContent?: string): string {
   const check1 = step >= 1 ? '[x]' : '[ ]'
   const check2 = step >= 2 ? '[x]' : '[ ]'
   const check3 = step >= 3 ? '[x]' : '[ ]'

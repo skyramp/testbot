@@ -115,7 +115,7 @@ outputs:
   skipped_self_trigger:
     description: 'Whether execution was skipped due to detecting own commit'
   commit_sha:
-    description: 'SHA of the commit made by test-bot (empty if no commit)'
+    description: 'SHA of the commit made by testbot (empty if no commit)'
 
 runs:
   using: 'node24'

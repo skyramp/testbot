@@ -38,7 +38,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Skyramp Testbot for User Service
-        uses: skyramp/test-bot@v1
+        uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -61,7 +61,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Skyramp Testbot for Order Service
-        uses: skyramp/test-bot@v1
+        uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -84,7 +84,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Skyramp Testbot for Payment Service
-        uses: skyramp/test-bot@v1
+        uses: skyramp/testbot@v1
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}

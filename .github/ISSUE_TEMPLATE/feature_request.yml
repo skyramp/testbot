@@ -42,7 +42,7 @@ body:
       description: How would you use this feature?
       render: yaml
       placeholder: |
-        - uses: skyramp/test-bot@v1
+        - uses: skyramp/testbot@v1
           with:
             new_feature: 'value'
     validations:
