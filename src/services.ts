@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
 import type { ResolvedConfig } from './types'
-import { exec, sleep } from './utils'
+import { exec, sleep, secondsToMilliseconds } from './utils'
 
 /**
  * Start user-defined services (e.g., docker compose up).
@@ -26,7 +26,7 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
   if (config.healthCheckCommand) {
     core.info(`Running health check: ${config.healthCheckCommand}`)
     const startTime = Date.now()
-    const timeoutMs = config.healthCheckTimeout * 1000
+    const timeoutMs = secondsToMilliseconds(config.healthCheckTimeout)
     const pollInterval = 2
     let attempt = 0
 

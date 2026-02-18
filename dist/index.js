@@ -100981,6 +100981,15 @@ function getInputs() {
     skyrampMcpGithubRef: getInput("skyramp_mcp_github_ref"),
     nodeVersion: getInput("node_version"),
     skipServiceStartup: getBooleanInput("skip_service_startup"),
+    healthCheckCommand: getInput("health_check_command"),
+    healthCheckTimeout: (() => {
+      const raw = parseInt(getInput("health_check_timeout"), 10) || 30;
+      if (raw < 1) {
+        warning(`health_check_timeout must be at least 1 second, got ${raw}. Using 1s.`);
+        return 1;
+      }
+      return raw;
+    })(),
     workingDirectory: getInput("working_directory"),
     autoCommit: getBooleanInput("auto_commit"),
     commitMessage: getInput("commit_message"),
@@ -101032,6 +101041,8 @@ async function loadConfig(inputs) {
     skyrampMcpGithubRef: getString(fileConfig, "skyramp_mcp_github_ref", inputs.skyrampMcpGithubRef),
     nodeVersion: getString(fileConfig, "node_version", inputs.nodeVersion),
     skipServiceStartup: getBoolean(fileConfig, "skip_service_startup", inputs.skipServiceStartup),
+    healthCheckCommand: getString(fileConfig, "health_check_command", inputs.healthCheckCommand),
+    healthCheckTimeout: getNumber(fileConfig, "health_check_timeout", inputs.healthCheckTimeout),
     autoCommit: getBoolean(fileConfig, "auto_commit", inputs.autoCommit),
     commitMessage: getString(fileConfig, "commit_message", inputs.commitMessage),
     postPrComment: getBoolean(fileConfig, "post_pr_comment", inputs.postPrComment),
@@ -101551,7 +101562,52 @@ async function startServices(config, workingDir) {
   } catch {
     warning("Service startup command failed, but continuing...");
   }
-  await sleep(5);
+  if (config.healthCheckCommand) {
+    info(`Running health check: ${config.healthCheckCommand}`);
+    const startTime = Date.now();
+    const timeoutMs = secondsToMilliseconds(config.healthCheckTimeout);
+    const pollInterval = 2;
+    let attempt = 0;
+    while (Date.now() - startTime < timeoutMs) {
+      attempt++;
+      const { exitCode } = await exec2("bash", ["-c", config.healthCheckCommand], {
+        cwd: workingDir,
+        ignoreReturnCode: true
+      });
+      if (exitCode === 0) {
+        notice(`Health check passed on attempt ${attempt}`);
+        endGroup();
+        return;
+      }
+      const elapsed = Math.round((Date.now() - startTime) / 1e3);
+      info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.healthCheckTimeout}s), retrying in ${pollInterval}s...`);
+      await sleep(pollInterval);
+    }
+    warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`);
+    try {
+      info("--- Docker diagnostics ---");
+      await exec2("docker", ["ps", "-a", "--format", "table {{.Names}}	{{.Status}}	{{.Ports}}"], {
+        cwd: workingDir,
+        ignoreReturnCode: true
+      });
+      const { stdout: containers } = await exec2("docker", ["ps", "-a", "--format", "{{.Names}}"], {
+        cwd: workingDir,
+        silent: true,
+        ignoreReturnCode: true
+      });
+      for (const name of containers.trim().split("\n").filter(Boolean)) {
+        info(`--- docker logs ${name} (last 30 lines) ---`);
+        await exec2("docker", ["logs", "--tail", "30", name], {
+          cwd: workingDir,
+          ignoreReturnCode: true
+        });
+      }
+    } catch {
+      info("Could not retrieve docker diagnostics");
+    }
+  } else {
+    await sleep(5);
+  }
   endGroup();
 }
 async function generateAuthToken(config, workingDir) {
