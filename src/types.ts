@@ -18,6 +18,7 @@ export interface ActionInputs {
   skipServiceStartup: boolean
   healthCheckCommand: string
   healthCheckTimeout: number
+  healthCheckDiagnosticsCommand: string
   workingDirectory: string
   autoCommit: boolean
   commitMessage: string
@@ -43,6 +44,7 @@ export interface ResolvedConfig {
   skipServiceStartup: boolean
   healthCheckCommand: string
   healthCheckTimeout: number
+  healthCheckDiagnosticsCommand: string
   autoCommit: boolean
   commitMessage: string
   postPrComment: boolean

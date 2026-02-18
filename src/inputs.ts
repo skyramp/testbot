@@ -25,6 +25,7 @@ export function getInputs(): ActionInputs {
       }
       return raw
     })(),
+    healthCheckDiagnosticsCommand: core.getInput('health_check_diagnostics_command'),
     workingDirectory: core.getInput('working_directory'),
     autoCommit: core.getBooleanInput('auto_commit'),
     commitMessage: core.getInput('commit_message'),

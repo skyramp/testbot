@@ -74,6 +74,10 @@ health_check_command: "curl -sf http://localhost:8000/health"
 # Default: 30
 health_check_timeout: 30
 
+# Shell command to collect diagnostics on health check timeout
+# Default: docker container status and logs
+# health_check_diagnostics_command: "kubectl get pods && kubectl logs -l app=myservice --tail=30"
+
 # Working directory for the action
 # Default: "."
 working_directory: "."
@@ -345,6 +349,36 @@ with:
 - Only relevant when `health_check_command` is set
 - The command is polled every 2 seconds until success or this timeout
 - If the timeout is reached, a warning is emitted and execution continues
+
+#### `health_check_diagnostics_command`
+
+**Description:** Shell command to collect diagnostics when a health check times out. Runs via `bash -c` in the working directory. Override to use non-Docker diagnostics (e.g., `journalctl`, `kubectl logs`, or custom scripts).
+
+**Type:** String
+
+**Default:** Docker container status and logs (last 30 lines per container)
+
+**Examples:**
+
+1. **Kubernetes pods:**
+   ```yaml
+   health_check_diagnostics_command: 'kubectl get pods -o wide && kubectl logs -l app=myservice --tail=30'
+   ```
+
+2. **Systemd journal:**
+   ```yaml
+   health_check_diagnostics_command: 'journalctl -u myservice --no-pager -n 50'
+   ```
+
+3. **Custom script:**
+   ```yaml
+   health_check_diagnostics_command: './scripts/collect-diagnostics.sh'
+   ```
+
+**Notes:**
+- Only runs when `health_check_command` is set and times out
+- Failure of the diagnostics command is non-fatal (caught and logged)
+- Runs via `bash -c`, so pipes and operators work
 
 ### Optional Inputs - Medium Priority
 

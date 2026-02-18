@@ -47,27 +47,15 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
 
   core.warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`)
 
-  // Dump docker diagnostics to help debug service startup issues
+  // Run diagnostics command to help debug service startup issues
   try {
-    core.info('--- Docker diagnostics ---')
-    await exec('docker', ['ps', '-a', '--format', 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'], {
+    core.info('--- Diagnostics ---')
+    await exec('bash', ['-c', config.healthCheckDiagnosticsCommand], {
       cwd: workingDir,
       ignoreReturnCode: true,
     })
-    const { stdout: containers } = await exec('docker', ['ps', '-a', '--format', '{{.Names}}'], {
-      cwd: workingDir,
-      silent: true,
-      ignoreReturnCode: true,
-    })
-    for (const name of containers.trim().split('\n').filter(Boolean)) {
-      core.info(`--- docker logs ${name} (last 30 lines) ---`)
-      await exec('docker', ['logs', '--tail', '30', name], {
-        cwd: workingDir,
-        ignoreReturnCode: true,
-      })
-    }
   } catch {
-    core.info('Could not retrieve docker diagnostics')
+    core.info('Could not retrieve diagnostics')
   }
 
   core.endGroup()

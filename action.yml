@@ -74,6 +74,10 @@ inputs:
     description: 'Maximum seconds to wait for health check command to succeed'
     required: false
     default: '30'
+  health_check_diagnostics_command:
+    description: 'Shell command to collect diagnostics on health check timeout. Runs when health_check_command times out.'
+    required: false
+    default: "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' && docker ps -a --format '{{.Names}}' | while read name; do [ -n \"$name\" ] && echo \"--- logs $name (last 30) ---\" && docker logs --tail 30 \"$name\"; done"
   working_directory:
     description: 'Working directory for the action'
     required: false

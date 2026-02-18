@@ -20,6 +20,7 @@ function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
     skipServiceStartup: false,
     healthCheckCommand: '',
     healthCheckTimeout: 30,
+    healthCheckDiagnosticsCommand: '',
     workingDirectory: '.',
     autoCommit: false,
     commitMessage: '',

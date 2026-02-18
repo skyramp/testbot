@@ -32,6 +32,7 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
     skipServiceStartup: getBoolean(fileConfig, 'skip_service_startup', inputs.skipServiceStartup),
     healthCheckCommand: getString(fileConfig, 'health_check_command', inputs.healthCheckCommand),
     healthCheckTimeout: getNumber(fileConfig, 'health_check_timeout', inputs.healthCheckTimeout),
+    healthCheckDiagnosticsCommand: getString(fileConfig, 'health_check_diagnostics_command', inputs.healthCheckDiagnosticsCommand),
     autoCommit: getBoolean(fileConfig, 'auto_commit', inputs.autoCommit),
     commitMessage: getString(fileConfig, 'commit_message', inputs.commitMessage),
     postPrComment: getBoolean(fileConfig, 'post_pr_comment', inputs.postPrComment),
