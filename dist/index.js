@@ -101562,51 +101562,47 @@ async function startServices(config, workingDir) {
   } catch {
     warning("Service startup command failed, but continuing...");
   }
-  if (config.healthCheckCommand) {
-    info(`Running health check: ${config.healthCheckCommand}`);
-    const startTime = Date.now();
-    const timeoutMs = secondsToMilliseconds(config.healthCheckTimeout);
-    const pollInterval = 2;
-    let attempt = 0;
-    while (Date.now() - startTime < timeoutMs) {
-      attempt++;
-      const { exitCode } = await exec2("bash", ["-c", config.healthCheckCommand], {
-        cwd: workingDir,
-        ignoreReturnCode: true
-      });
-      if (exitCode === 0) {
-        notice(`Health check passed on attempt ${attempt}`);
-        endGroup();
-        return;
-      }
-      const elapsed = Math.round((Date.now() - startTime) / 1e3);
-      info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.healthCheckTimeout}s), retrying in ${pollInterval}s...`);
-      await sleep(pollInterval);
+  info(`Running health check: ${config.healthCheckCommand}`);
+  const startTime = Date.now();
+  const timeoutMs = secondsToMilliseconds(config.healthCheckTimeout);
+  const pollInterval = 2;
+  let attempt = 0;
+  while (Date.now() - startTime < timeoutMs) {
+    attempt++;
+    const { exitCode } = await exec2("bash", ["-c", config.healthCheckCommand], {
+      cwd: workingDir,
+      ignoreReturnCode: true
+    });
+    if (exitCode === 0) {
+      notice(`Health check passed on attempt ${attempt}`);
+      endGroup();
+      return;
     }
-    warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`);
-    try {
-      info("--- Docker diagnostics ---");
-      await exec2("docker", ["ps", "-a", "--format", "table {{.Names}}	{{.Status}}	{{.Ports}}"], {
+    const elapsed = Math.round((Date.now() - startTime) / 1e3);
+    info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.healthCheckTimeout}s), retrying in ${pollInterval}s...`);
+    await sleep(pollInterval);
+  }
+  warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`);
+  try {
+    info("--- Docker diagnostics ---");
+    await exec2("docker", ["ps", "-a", "--format", "table {{.Names}}	{{.Status}}	{{.Ports}}"], {
+      cwd: workingDir,
+      ignoreReturnCode: true
+    });
+    const { stdout: containers } = await exec2("docker", ["ps", "-a", "--format", "{{.Names}}"], {
+      cwd: workingDir,
+      silent: true,
+      ignoreReturnCode: true
+    });
+    for (const name of containers.trim().split("\n").filter(Boolean)) {
+      info(`--- docker logs ${name} (last 30 lines) ---`);
+      await exec2("docker", ["logs", "--tail", "30", name], {
         cwd: workingDir,
         ignoreReturnCode: true
       });
-      const { stdout: containers } = await exec2("docker", ["ps", "-a", "--format", "{{.Names}}"], {
-        cwd: workingDir,
-        silent: true,
-        ignoreReturnCode: true
-      });
-      for (const name of containers.trim().split("\n").filter(Boolean)) {
-        info(`--- docker logs ${name} (last 30 lines) ---`);
-        await exec2("docker", ["logs", "--tail", "30", name], {
-          cwd: workingDir,
-          ignoreReturnCode: true
-        });
-      }
-    } catch {
-      info("Could not retrieve docker diagnostics");
     }
-  } else {
-    await sleep(5);
+  } catch {
+    info("Could not retrieve docker diagnostics");
   }
   endGroup();
 }
