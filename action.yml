@@ -67,9 +67,9 @@ inputs:
     required: false
     default: 'false'
   health_check_command:
-    description: 'Shell command to verify services are ready (retried until success or timeout). If empty, a fixed 5s delay is used.'
+    description: 'Shell command to verify services are ready (retried until success or timeout)'
     required: false
-    default: ''
+    default: 'sleep 5'
   health_check_timeout:
     description: 'Maximum seconds to wait for health check command to succeed'
     required: false

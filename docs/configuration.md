@@ -67,8 +67,7 @@ node_version: "lts/*"
 skip_service_startup: false
 
 # Shell command to verify services are ready (retried until success or timeout)
-# If empty, a fixed 5s delay is used after service startup
-# Default: ""
+# Default: "sleep 5"
 health_check_command: "curl -sf http://localhost:8000/health"
 
 # Maximum seconds to wait for health check command to succeed
@@ -300,11 +299,11 @@ with:
 
 #### `health_check_command`
 
-**Description:** Shell command to verify services are ready after startup. When set, it is retried every 2 seconds until it succeeds (exit code 0) or `health_check_timeout` is reached. If empty, a fixed 5-second delay is used instead.
+**Description:** Shell command to verify services are ready after startup. Retried every 2 seconds until it succeeds (exit code 0) or `health_check_timeout` is reached.
 
 **Type:** String
 
-**Default:** `""` (empty — uses fixed 5s delay)
+**Default:** `"sleep 5"`
 
 **Examples:**
 
