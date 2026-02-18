@@ -20,6 +20,7 @@ export function getInputs(): ActionInputs {
     autoCommit: core.getBooleanInput('auto_commit'),
     commitMessage: core.getInput('commit_message'),
     postPrComment: core.getBooleanInput('post_pr_comment'),
+    testExecutionTimeout: parseInt(core.getInput('test_execution_timeout'), 10) || 300,
     testbotMaxRetries: parseInt(core.getInput('testbot_max_retries'), 10) || 3,
     testbotRetryDelay: parseInt(core.getInput('testbot_retry_delay'), 10) || 10,
     testbotTimeout: parseInt(core.getInput('testbot_timeout'), 10) || 10,

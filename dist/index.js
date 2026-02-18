@@ -100985,6 +100985,7 @@ function getInputs() {
     autoCommit: getBooleanInput("auto_commit"),
     commitMessage: getInput("commit_message"),
     postPrComment: getBooleanInput("post_pr_comment"),
+    testExecutionTimeout: parseInt(getInput("test_execution_timeout"), 10) || 300,
     testbotMaxRetries: parseInt(getInput("testbot_max_retries"), 10) || 3,
     testbotRetryDelay: parseInt(getInput("testbot_retry_delay"), 10) || 10,
     testbotTimeout: parseInt(getInput("testbot_timeout"), 10) || 10,
@@ -101034,6 +101035,7 @@ async function loadConfig(inputs) {
     autoCommit: getBoolean(fileConfig, "auto_commit", inputs.autoCommit),
     commitMessage: getString(fileConfig, "commit_message", inputs.commitMessage),
     postPrComment: getBoolean(fileConfig, "post_pr_comment", inputs.postPrComment),
+    testExecutionTimeout: getNumber(fileConfig, "test_execution_timeout", inputs.testExecutionTimeout),
     testbotMaxRetries: getNumber(fileConfig, "testbot_max_retries", inputs.testbotMaxRetries),
     testbotRetryDelay: getNumber(fileConfig, "testbot_retry_delay", inputs.testbotRetryDelay),
     testbotTimeout: getNumber(fileConfig, "testbot_timeout", inputs.testbotTimeout),
@@ -101144,6 +101146,10 @@ function setDebugEnabled(enabled2) {
 }
 function debug2(msg) {
   if (_debugEnabled) info(`[debug] ${msg}`);
+}
+var S_TO_MS = 1e3;
+function secondsToMilliseconds(seconds) {
+  return seconds * S_TO_MS;
 }
 
 // src/self-trigger.ts
@@ -101340,7 +101346,7 @@ async function installMcp(config, inputs, workingDir) {
   endGroup();
   return { command, args, licensePath: "" };
 }
-async function configureMcp(agentType, mcpCommand, mcpArgs, licensePath) {
+async function configureMcp(agentType, mcpCommand, mcpArgs, licensePath, testExecutionTimeout) {
   startGroup(`Configuring MCP server for ${agentType}`);
   const argsArray = mcpArgs.split(" ");
   const env = {
@@ -101356,7 +101362,8 @@ async function configureMcp(agentType, mcpCommand, mcpArgs, licensePath) {
         "skyramp-mcp": {
           command: mcpCommand,
           args: argsArray,
-          env
+          env,
+          timeout: secondsToMilliseconds(testExecutionTimeout)
         }
       }
     };
@@ -101371,7 +101378,8 @@ async function configureMcp(agentType, mcpCommand, mcpArgs, licensePath) {
           command: mcpCommand,
           args: argsArray,
           tools: ["*"],
-          env
+          env,
+          timeout: secondsToMilliseconds(testExecutionTimeout)
         }
       }
     };
@@ -101864,7 +101872,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     exportVariable("GH_TOKEN", inputs.copilotApiKey);
   }
   await installAgentCli(agentType);
-  await configureMcp(agentType, mcp.command, mcp.args, mcp.licensePath);
+  await configureMcp(agentType, mcp.command, mcp.args, mcp.licensePath, config.testExecutionTimeout);
   await initializeAgent(agentType, config.enableDebug);
   const agentCmd = buildAgentCommand(agentType, config.enableDebug);
   await startServices(config, workingDir);

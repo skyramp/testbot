@@ -90,6 +90,10 @@ inputs:
     description: 'Delay in seconds between agent retry attempts'
     required: false
     default: '10'
+  test_execution_timeout:
+    description: 'Timeout in seconds for individual MCP tool calls (e.g., test execution). Increase if tests take longer than 5 minutes.'
+    required: false
+    default: '300'
   testbot_timeout:
     description: 'Timeout in minutes for the agent execution (safety net; does not kill the child process)'
     required: false

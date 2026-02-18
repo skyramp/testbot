@@ -108,3 +108,10 @@ export function setDebugEnabled(enabled: boolean): void {
 export function debug(msg: string): void {
   if (_debugEnabled) core.info(`[debug] ${msg}`)
 }
+
+// seconds to milliseconds
+const S_TO_MS = 1000;
+
+export function secondsToMilliseconds(seconds: number): number {
+  return seconds * S_TO_MS;
+}

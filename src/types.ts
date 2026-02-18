@@ -20,6 +20,7 @@ export interface ActionInputs {
   autoCommit: boolean
   commitMessage: string
   postPrComment: boolean
+  testExecutionTimeout: number
   testbotMaxRetries: number
   testbotRetryDelay: number
   testbotTimeout: number
@@ -41,6 +42,7 @@ export interface ResolvedConfig {
   autoCommit: boolean
   commitMessage: string
   postPrComment: boolean
+  testExecutionTimeout: number
   testbotMaxRetries: number
   testbotRetryDelay: number
   testbotTimeout: number

@@ -1,6 +1,6 @@
 import './mocks/core'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { withRetry } from '../utils'
+import { withRetry, secondsToMilliseconds } from '../utils'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -9,6 +9,14 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
 })
+
+describe('secondsToMilliseconds', async () => {
+  it('converts correctly', async () => {
+    expect(secondsToMilliseconds(1)).toBe(1000);
+    expect(secondsToMilliseconds(123)).toBe(123000);
+  })
+});
+
 
 describe('withRetry', () => {
   it('succeeds on first try', async () => {

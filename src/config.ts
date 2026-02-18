@@ -33,6 +33,7 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
     autoCommit: getBoolean(fileConfig, 'auto_commit', inputs.autoCommit),
     commitMessage: getString(fileConfig, 'commit_message', inputs.commitMessage),
     postPrComment: getBoolean(fileConfig, 'post_pr_comment', inputs.postPrComment),
+    testExecutionTimeout: getNumber(fileConfig, 'test_execution_timeout', inputs.testExecutionTimeout),
     testbotMaxRetries: getNumber(fileConfig, 'testbot_max_retries', inputs.testbotMaxRetries),
     testbotRetryDelay: getNumber(fileConfig, 'testbot_retry_delay', inputs.testbotRetryDelay),
     testbotTimeout: getNumber(fileConfig, 'testbot_timeout', inputs.testbotTimeout),

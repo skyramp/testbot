@@ -2,7 +2,8 @@ import * as core from '@actions/core'
 import * as fs from 'fs'
 import * as path from 'path'
 import type { ActionInputs, AgentType, McpPaths, ResolvedConfig } from './types'
-import { exec, debug } from './utils'
+import { exec, debug, secondsToMilliseconds } from './utils'
+
 
 /**
  * Install the Skyramp MCP server (from npm or github source).
@@ -90,6 +91,7 @@ export async function configureMcp(
   mcpCommand: string,
   mcpArgs: string,
   licensePath: string,
+  testExecutionTimeout: number,
 ): Promise<void> {
   core.startGroup(`Configuring MCP server for ${agentType}`)
 
@@ -110,6 +112,7 @@ export async function configureMcp(
           command: mcpCommand,
           args: argsArray,
           env,
+          timeout: secondsToMilliseconds(testExecutionTimeout),
         },
       },
     }
@@ -127,6 +130,7 @@ export async function configureMcp(
           args: argsArray,
           tools: ['*'],
           env,
+          timeout: secondsToMilliseconds(testExecutionTimeout),
         },
       },
     }

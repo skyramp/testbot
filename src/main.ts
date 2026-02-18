@@ -169,7 +169,7 @@ async function run(): Promise<void> {
   }
 
   await installAgentCli(agentType)
-  await configureMcp(agentType, mcp.command, mcp.args, mcp.licensePath)
+  await configureMcp(agentType, mcp.command, mcp.args, mcp.licensePath, config.testExecutionTimeout)
   await initializeAgent(agentType, config.enableDebug)
   const agentCmd = buildAgentCommand(agentType, config.enableDebug)
 
