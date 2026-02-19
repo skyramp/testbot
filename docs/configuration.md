@@ -1027,14 +1027,26 @@ Add fallback steps for critical workflows:
     # Send notification, create issue, etc.
 ```
 
-### 5. Performance Optimization
+### 5. Concurrency Control
+
+Cancel in-flight runs when new commits are pushed to the same PR branch. This prevents race conditions where multiple testbot runs try to commit to the same branch simultaneously:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
+```
+
+This ensures only the latest run proceeds, avoiding stale-branch conflicts and wasted compute.
+
+### 6. Performance Optimization
 
 - Use `skip_service_startup: true` if services already running
 - Pin `skyramp_mcp_version` to avoid npm registry lookups
 - Cache Docker images if using self-hosted runners
 - Limit diff size for faster agent processing
 
-### 6. Testing Configuration Changes
+### 7. Testing Configuration Changes
 
 Before rolling out configuration changes:
 
@@ -1054,6 +1066,10 @@ on:
     paths:
       - 'src/api/**'
       - 'tests/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref }}
+  cancel-in-progress: true
 
 jobs:
   test-maintenance:
