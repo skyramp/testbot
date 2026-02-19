@@ -16,6 +16,16 @@ export function getInputs(): ActionInputs {
     skyrampMcpGithubRef: core.getInput('skyramp_mcp_github_ref'),
     nodeVersion: core.getInput('node_version'),
     skipServiceStartup: core.getBooleanInput('skip_service_startup'),
+    healthCheckCommand: core.getInput('health_check_command'),
+    healthCheckTimeout: (() => {
+      const raw = parseInt(core.getInput('health_check_timeout'), 10) || 30
+      if (raw < 1) {
+        core.warning(`health_check_timeout must be at least 1 second, got ${raw}. Using 1s.`)
+        return 1
+      }
+      return raw
+    })(),
+    healthCheckDiagnosticsCommand: core.getInput('health_check_diagnostics_command'),
     workingDirectory: core.getInput('working_directory'),
     autoCommit: core.getBooleanInput('auto_commit'),
     commitMessage: core.getInput('commit_message'),
