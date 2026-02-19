@@ -1,74 +1,165 @@
 import './mocks/core'
-import { describe, it, expect } from 'vitest'
-import { getString, getBoolean, getNumber } from '../config'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { ActionInputs } from '../types'
+import type { WorkspaceConfig } from '@skyramp/skyramp/src/workspace'
 
-describe('getString', () => {
-  it('returns config value when present', () => {
-    expect(getString({ key: 'hello' }, 'key', 'fallback')).toBe('hello')
+const { mockExists, mockRead, mockGetConfigPath } = vi.hoisted(() => ({
+  mockExists: vi.fn<() => Promise<boolean>>(),
+  mockRead: vi.fn<() => Promise<WorkspaceConfig>>(),
+  mockGetConfigPath: vi.fn<() => string>().mockReturnValue('/mock/.skyramp/workspace.yml'),
+}))
+
+vi.mock('@skyramp/skyramp/src/workspace', () => ({
+  WorkspaceConfigManager: class {
+    exists = mockExists
+    read = mockRead
+    getConfigPath = mockGetConfigPath
+  },
+}))
+
+import { loadConfig } from '../config'
+
+function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
+  return {
+    skyrampLicenseFile: 'license',
+    cursorApiKey: 'key',
+    copilotApiKey: '',
+    testDirectory: 'tests',
+    serviceStartupCommand: 'docker compose up -d',
+    authTokenCommand: '',
+    skyrampExecutorVersion: 'v1.3.3',
+    skyrampMcpVersion: 'latest',
+    skyrampMcpSource: 'npm',
+    skyrampMcpGithubToken: '',
+    skyrampMcpGithubRef: 'main',
+    nodeVersion: 'lts/*',
+    skipServiceStartup: false,
+    healthCheckCommand: '',
+    healthCheckTimeout: 30,
+    healthCheckDiagnosticsCommand: '',
+    workingDirectory: '.',
+    autoCommit: true,
+    commitMessage: 'test commit',
+    postPrComment: true,
+    testExecutionTimeout: 300,
+    testbotMaxRetries: 3,
+    testbotRetryDelay: 10,
+    testbotTimeout: 10,
+    enableDebug: false,
+    ...overrides,
+  }
+}
+
+describe('loadConfig', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetConfigPath.mockReturnValue('/mock/.skyramp/workspace.yml')
   })
 
-  it('returns fallback when key is missing', () => {
-    expect(getString({}, 'key', 'fallback')).toBe('fallback')
+  it('returns input defaults when no workspace.yml exists', async () => {
+    mockExists.mockResolvedValue(false)
+
+    const config = await loadConfig(makeInputs())
+
+    expect(config.testDirectory).toBe('tests')
+    expect(config.serviceStartupCommand).toBe('docker compose up -d')
+    expect(config.skyrampExecutorVersion).toBe('v1.3.3')
+    expect(config.skyrampMcpVersion).toBe('latest')
+    expect(config.services).toEqual([])
   })
 
-  it('returns fallback when value is null', () => {
-    expect(getString({ key: null }, 'key', 'fallback')).toBe('fallback')
+  it('extracts all services from workspace.yml', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      metadata: {
+        schemaVersion: 'v1',
+        executorVersion: 'v2.0.0',
+        mcpVersion: '0.1.0',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      services: [{
+        serviceName: 'api',
+        outputDir: 'tests/python',
+        language: 'python',
+        framework: 'pytest',
+        api: { baseUrl: 'http://localhost:8000' },
+        runtimeDetails: { serverStartCommand: 'docker compose up -d api', runtime: 'docker' },
+      }],
+    })
+
+    const config = await loadConfig(makeInputs())
+
+    // First service used for operational defaults
+    expect(config.testDirectory).toBe('tests/python')
+    expect(config.serviceStartupCommand).toBe('docker compose up -d api')
+    expect(config.skyrampExecutorVersion).toBe('v2.0.0')
+    expect(config.skyrampMcpVersion).toBe('0.1.0')
+    // All services collected
+    expect(config.services).toEqual([{
+      serviceName: 'api',
+      language: 'python',
+      framework: 'pytest',
+      baseUrl: 'http://localhost:8000',
+      outputDir: 'tests/python',
+    }])
   })
 
-  it('returns fallback when value is empty string', () => {
-    expect(getString({ key: '' }, 'key', 'fallback')).toBe('fallback')
+  it('collects multiple services', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [
+        { serviceName: 'frontend', outputDir: 'tests/js' },
+        { serviceName: 'backend', outputDir: 'tests/python', language: 'python' },
+      ],
+    })
+
+    const config = await loadConfig(makeInputs())
+
+    expect(config.services).toHaveLength(2)
+    expect(config.services[0].serviceName).toBe('frontend')
+    expect(config.services[1].serviceName).toBe('backend')
+    expect(config.services[1].language).toBe('python')
+    // First service used for testDirectory
+    expect(config.testDirectory).toBe('tests/js')
   })
 
-  it('returns fallback when value is a number (not a string)', () => {
-    expect(getString({ key: 42 }, 'key', 'fallback')).toBe('fallback')
-  })
-})
+  it('warns and uses defaults on read error', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockRejectedValue(new Error('YAML parse error'))
 
-describe('getBoolean', () => {
-  it('returns true for boolean true', () => {
-    expect(getBoolean({ key: true }, 'key', false)).toBe(true)
-  })
+    const config = await loadConfig(makeInputs())
 
-  it('returns false for boolean false', () => {
-    expect(getBoolean({ key: false }, 'key', true)).toBe(false)
+    expect(config.testDirectory).toBe('tests')
+    expect(config.services).toEqual([])
   })
 
-  it('returns true for string "true"', () => {
-    expect(getBoolean({ key: 'true' }, 'key', false)).toBe(true)
+  it('uses input defaults for fields not present in workspace service', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{ serviceName: 'minimal', outputDir: '' }],
+    })
+
+    const config = await loadConfig(makeInputs({ testDirectory: 'custom-tests' }))
+
+    expect(config.testDirectory).toBe('custom-tests')
+    expect(config.serviceStartupCommand).toBe('docker compose up -d')
   })
 
-  it('returns false for string "false"', () => {
-    expect(getBoolean({ key: 'false' }, 'key', true)).toBe(false)
-  })
+  it('testbot-specific fields always come from inputs', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{ serviceName: 'api', outputDir: '' }],
+    })
 
-  it('returns false for capitalized "True" (case-sensitive comparison)', () => {
-    // The implementation uses strict === 'true', so "True" falls through to fallback
-    expect(getBoolean({ key: 'True' }, 'key', false)).toBe(false)
-  })
+    const config = await loadConfig(makeInputs({
+      autoCommit: false,
+      testbotTimeout: 20,
+      enableDebug: true,
+    }))
 
-  it('returns fallback when key is missing', () => {
-    expect(getBoolean({}, 'key', true)).toBe(true)
-  })
-})
-
-describe('getNumber', () => {
-  it('returns number value directly', () => {
-    expect(getNumber({ key: 42 }, 'key', 0)).toBe(42)
-  })
-
-  it('parses string number', () => {
-    expect(getNumber({ key: '99' }, 'key', 0)).toBe(99)
-  })
-
-  it('returns fallback for NaN string', () => {
-    expect(getNumber({ key: 'abc' }, 'key', 7)).toBe(7)
-  })
-
-  it('returns fallback when key is missing', () => {
-    expect(getNumber({}, 'key', 5)).toBe(5)
-  })
-
-  it('returns fallback for null value', () => {
-    expect(getNumber({ key: null }, 'key', 10)).toBe(10)
+    expect(config.autoCommit).toBe(false)
+    expect(config.testbotTimeout).toBe(20)
+    expect(config.enableDebug).toBe(true)
   })
 })

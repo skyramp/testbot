@@ -28,10 +28,18 @@ export interface ActionInputs {
   testbotRetryDelay: number
   testbotTimeout: number
   enableDebug: boolean
-  configFile: string
 }
 
-/** Configuration resolved from .skyramp.yml overrides merged with action inputs. */
+/** Workspace-derived service information passed to the agent prompt. */
+export interface WorkspaceServiceInfo {
+  serviceName: string
+  language?: string
+  framework?: string
+  baseUrl?: string
+  outputDir?: string
+}
+
+/** Configuration resolved from .skyramp/workspace.yml merged with action inputs. */
 export interface ResolvedConfig {
   testDirectory: string
   serviceStartupCommand: string
@@ -53,6 +61,7 @@ export interface ResolvedConfig {
   testbotRetryDelay: number
   testbotTimeout: number
   enableDebug: boolean
+  services: WorkspaceServiceInfo[]
 }
 
 export interface AgentCommand {

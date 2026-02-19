@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
 import * as fs from 'fs'
-import type { AgentCommand, AgentType, ResolvedConfig } from './types'
+import type { AgentCommand, AgentType, ResolvedConfig, WorkspaceServiceInfo } from './types'
 import { exec, sleep, withRetry } from './utils'
 
 /**
@@ -114,19 +114,37 @@ export function buildPrompt(opts: {
   testDirectory: string
   summaryPath: string
   authToken: string
+  services?: WorkspaceServiceInfo[]
 }): string {
+  const serviceContext = opts.services?.length
+    ? buildServiceContext(opts.services)
+    : ''
+
   return `<title>${opts.prTitle}</title>
 <description>${opts.prBody}</description>
 <diff_file>.skyramp_git_diff</diff_file>
 <test_directory>${opts.testDirectory}</test_directory>
 <summary_output_file>${opts.summaryPath}</summary_output_file>
 <auth_token>${opts.authToken}</auth_token>
-
+${serviceContext}
 Use the skyramp_testbot prompt and follow the returned instructions.
 
 AUTHENTICATION:
 When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${opts.authToken}
 If the token is empty, pass an empty string for the token parameter.`
+}
+
+function buildServiceContext(services: WorkspaceServiceInfo[]): string {
+  const blocks = services.map(svc => {
+    const parts: string[] = [`<service name="${svc.serviceName}">`]
+    if (svc.language) parts.push(`  <language>${svc.language}</language>`)
+    if (svc.framework) parts.push(`  <framework>${svc.framework}</framework>`)
+    if (svc.baseUrl) parts.push(`  <base_url>${svc.baseUrl}</base_url>`)
+    if (svc.outputDir) parts.push(`  <output_dir>${svc.outputDir}</output_dir>`)
+    parts.push('</service>')
+    return parts.join('\n')
+  })
+  return `<services>\n${blocks.join('\n')}\n</services>`
 }
 
 interface RunAgentResult {

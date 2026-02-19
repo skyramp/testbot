@@ -45,6 +45,76 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('<auth_token></auth_token>')
     expect(prompt).toContain('If the token is empty, pass an empty string')
   })
+
+  it('includes service context for all services', () => {
+    const prompt = buildPrompt({
+      prTitle: 'Test',
+      prBody: '',
+      testDirectory: 'tests',
+      summaryPath: '/tmp/summary.json',
+      authToken: '',
+      services: [
+        {
+          serviceName: 'api',
+          language: 'python',
+          framework: 'pytest',
+          baseUrl: 'http://localhost:8000',
+          outputDir: 'tests/python',
+        },
+        {
+          serviceName: 'frontend',
+          language: 'typescript',
+          framework: 'playwright',
+          baseUrl: 'http://localhost:3000',
+          outputDir: 'tests/e2e',
+        },
+      ],
+    })
+
+    expect(prompt).toContain('<services>')
+    expect(prompt).toContain('<service name="api">')
+    expect(prompt).toContain('  <language>python</language>')
+    expect(prompt).toContain('  <framework>pytest</framework>')
+    expect(prompt).toContain('  <base_url>http://localhost:8000</base_url>')
+    expect(prompt).toContain('  <output_dir>tests/python</output_dir>')
+    expect(prompt).toContain('<service name="frontend">')
+    expect(prompt).toContain('  <language>typescript</language>')
+    expect(prompt).toContain('</services>')
+  })
+
+  it('omits service context when no services', () => {
+    const prompt = buildPrompt({
+      prTitle: 'Test',
+      prBody: '',
+      testDirectory: 'tests',
+      summaryPath: '/tmp/summary.json',
+      authToken: '',
+      services: [],
+    })
+
+    expect(prompt).not.toContain('<services>')
+    expect(prompt).not.toContain('<service')
+  })
+
+  it('only includes non-empty service fields', () => {
+    const prompt = buildPrompt({
+      prTitle: 'Test',
+      prBody: '',
+      testDirectory: 'tests',
+      summaryPath: '/tmp/summary.json',
+      authToken: '',
+      services: [{
+        serviceName: 'minimal',
+        language: 'python',
+      }],
+    })
+
+    expect(prompt).toContain('<service name="minimal">')
+    expect(prompt).toContain('  <language>python</language>')
+    expect(prompt).not.toContain('<framework>')
+    expect(prompt).not.toContain('<base_url>')
+    expect(prompt).not.toContain('<output_dir>')
+  })
 })
 
 describe('buildAgentCommand', () => {

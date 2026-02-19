@@ -4,169 +4,82 @@ This guide provides detailed information about configuring Skyramp Testbot for y
 
 ## Table of Contents
 
-- [Workspace Configuration (.skyramp.yml)](#workspace-configuration-skyrampyml)
+- [Workspace Configuration (.skyramp/workspace.yml)](#workspace-configuration-skyrampworkspaceyml)
 - [Input Reference](#input-reference)
 - [Output Usage](#output-usage)
 - [Advanced Patterns](#advanced-patterns)
 - [Environment-Specific Setup](#environment-specific-setup)
 - [Best Practices](#best-practices)
 
-## Workspace Configuration (.skyramp.yml)
+## Workspace Configuration (.skyramp/workspace.yml)
 
-Skyramp Testbot supports project-level configuration through a `.skyramp.yml` file in your repository root. This allows you to define settings that apply to all workflow runs without modifying the workflow file itself.
+Skyramp Testbot reads project-level configuration from `.skyramp/workspace.yml` — the standard Skyramp workspace config file. This file is created and maintained by the Skyramp MCP server's `skyramp_initialize_workspace` tool and validated using Zod schemas from `@skyramp/skyramp`.
 
 ### Configuration Precedence
 
 The configuration system follows this precedence order (highest to lowest):
 
-1. **.skyramp.yml values** - Project-level configuration (source of truth)
-2. **GitHub Action inputs** - Values from workflow files or defaults
+1. **`.skyramp/workspace.yml` values** — Service-level configuration (test directory, startup command, versions)
+2. **GitHub Action inputs** — Testbot-specific settings and fallback defaults
 
-When `.skyramp.yml` exists and contains a value, it always takes precedence over workflow inputs or defaults. This treats `.skyramp.yml` as the authoritative project configuration.
+When `.skyramp/workspace.yml` exists, service-level fields (like `outputDir`, `serverStartCommand`, and metadata versions) take precedence over action inputs. Testbot-specific settings (timeouts, debug, auto-commit, retries, etc.) always come from action inputs.
 
 ### File Location
 
-By default, the action looks for `.skyramp.yml` in the repository root. You can customize this path using the `config_file` input:
+The action looks for `.skyramp/workspace.yml` relative to the `working_directory` input (default: repository root). This file is typically created by running `skyramp_initialize_workspace` from the Skyramp MCP server.
+
+### Workspace File Structure
 
 ```yaml
-- uses: skyramp/testbot@v1
-  with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    config_file: 'config/skyramp-settings.yml'
+# .skyramp/workspace.yml
+workspace:
+  repoName: "my-api"
+  repoUrl: "https://github.com/org/my-api"
+
+metadata:
+  schemaVersion: "v1"
+  mcpVersion: "0.0.55"
+  executorVersion: "v1.3.3"
+  createdAt: "2026-01-15T10:00:00Z"
+  updatedAt: "2026-02-18T14:30:00Z"
+
+services:
+  - serviceName: "api"
+    language: "python"
+    framework: "pytest"
+    outputDir: "tests/python"
+    api:
+      baseUrl: "http://localhost:8000"
+      authType: "bearer"
+      schemaPath: "openapi.json"
+    runtimeDetails:
+      serverStartCommand: "docker compose up -d"
+      runtime: "docker"
 ```
 
-### Complete .skyramp.yml Reference
+### Field Mapping
 
-```yaml
-# .skyramp.yml - Skyramp Testbot workspace configuration
-# All fields are optional. Only include fields you want to override.
+| Workspace field | Testbot config field | Notes |
+|---|---|---|
+| `services[i].outputDir` | `testDirectory` | Overrides `test_directory` input |
+| `services[i].runtimeDetails.serverStartCommand` | `serviceStartupCommand` | Overrides `service_startup_command` input |
+| `services[i].language` | (passed to agent prompt) | Helps LLM generate appropriate tests |
+| `services[i].framework` | (passed to agent prompt) | Helps LLM use correct test framework |
+| `services[i].api.baseUrl` | (passed to agent prompt) | Helps LLM target correct URL |
+| `metadata.executorVersion` | `skyrampExecutorVersion` | Overrides `skyramp_executor_version` input |
+| `metadata.mcpVersion` | `skyrampMcpVersion` | Overrides `skyramp_mcp_version` input |
 
-# Directory containing Skyramp tests
-# Default: "tests"
-test_directory: "tests"
+### Multi-Service Workspaces
 
-# Command to start services before test maintenance
-# Default: "docker compose up -d"
-service_startup_command: "docker compose up -d"
+All services defined in `.skyramp/workspace.yml` are passed to the agent prompt. The LLM receives each service's language, framework, base URL, and output directory, allowing it to generate and maintain tests for all services in a single run.
 
-# Skyramp Executor Docker image version
-# Default: "v1.3.3"
-skyramp_executor_version: "v1.3.3"
-
-# Skyramp MCP npm package version
-# Default: "latest"
-skyramp_mcp_version: "latest"
-
-# Node.js version to use
-# Default: "lts/*"
-node_version: "lts/*"
-
-# Skip running service startup command
-# Default: false
-skip_service_startup: false
-
-# Shell command to verify services are ready (retried until success or timeout)
-# Default: "sleep 5"
-health_check_command: "curl -sf http://localhost:8000/health"
-
-# Maximum seconds to wait for health check command to succeed
-# Default: 30
-health_check_timeout: 30
-
-# Shell command to collect diagnostics on health check timeout
-# Default: docker container status and logs
-# health_check_diagnostics_command: "kubectl get pods && kubectl logs -l app=myservice --tail=30"
-
-# Working directory for the action
-# Default: "."
-working_directory: "."
-
-# Automatically commit test changes
-# Default: true
-auto_commit: true
-
-# Commit message for test changes
-# Default: "Skyramp Testbot: test maintenance suggestions"
-commit_message: "Skyramp Testbot: test maintenance suggestions"
-
-# Post summary as PR comment
-# Default: true
-post_pr_comment: true
-
-# Maximum number of retries for transient agent CLI errors
-# Default: 3
-testbot_max_retries: 3
-
-# Delay in seconds between agent retry attempts
-# Default: 10
-testbot_retry_delay: 10
-
-# Enable debug logging
-# Default: false
-enable_debug: false
-```
-
-### Excluded Settings
-
-The following settings cannot be configured in `.skyramp.yml` for security reasons and must always be provided via GitHub Secrets:
-
-- `skyramp_license_file` - Must be stored in GitHub Secrets
-- `cursor_api_key` - Must be stored in GitHub Secrets
-
-### Example Configurations
-
-#### Minimal Override
-
-Only override specific values:
-
-```yaml
-# .skyramp.yml
-test_directory: "api_tests"
-auto_commit: false
-```
-
-#### Monorepo Configuration
-
-Configure for a service in a monorepo:
-
-```yaml
-# .skyramp.yml
-working_directory: "services/user-api"
-test_directory: "tests"
-service_startup_command: "docker compose -f docker-compose.user-api.yml up -d"
-```
-
-#### Production-Ready Configuration
-
-Pin versions and disable auto-commit for manual review:
-
-```yaml
-# .skyramp.yml
-skyramp_executor_version: "v1.3.3"
-skyramp_mcp_version: "1.2.0"
-node_version: "20.x"
-auto_commit: false
-post_pr_comment: true
-enable_debug: false
-```
-
-#### Development/Debugging Configuration
-
-Enable verbose logging for troubleshooting:
-
-```yaml
-# .skyramp.yml
-enable_debug: true
-auto_commit: false
-```
+The first service's `outputDir` and `runtimeDetails.serverStartCommand` are used as operational defaults (for `testDirectory` and `serviceStartupCommand`). During auto-commit, files are staged from each service's `outputDir`.
 
 ### Validation and Error Handling
 
-- If `.skyramp.yml` doesn't exist, the action proceeds with workflow/default values
-- If `.skyramp.yml` exists but is malformed, a warning is logged and defaults are used
-- Missing keys are ignored (defaults apply)
-- The action gracefully handles partial configurations
+- If `.skyramp/workspace.yml` doesn't exist, the action proceeds with action input defaults
+- If the file exists but fails Zod validation, a warning is logged and input defaults are used
+- The action gracefully handles partial configurations (missing optional fields use input defaults)
 
 ## Input Reference
 

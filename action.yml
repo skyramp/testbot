@@ -114,11 +114,6 @@ inputs:
     description: 'Enable debug logging'
     required: false
     default: 'false'
-  config_file:
-    description: 'Path to Skyramp workspace config file'
-    required: false
-    default: '.skyramp.yml'
-
 outputs:
   test_summary:
     description: 'Full summary of test maintenance actions'

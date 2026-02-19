@@ -35,7 +35,6 @@ export function getInputs(): ActionInputs {
     testbotRetryDelay: parseInt(core.getInput('testbot_retry_delay'), 10) || 10,
     testbotTimeout: parseInt(core.getInput('testbot_timeout'), 10) || 10,
     enableDebug: core.getBooleanInput('enable_debug'),
-    configFile: core.getInput('config_file'),
   }
 }
 

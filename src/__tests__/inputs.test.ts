@@ -30,7 +30,6 @@ function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
     testbotRetryDelay: 10,
     testbotTimeout: 10,
     enableDebug: false,
-    configFile: '.skyramp.yml',
     ...overrides,
   }
 }

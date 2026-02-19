@@ -48,13 +48,22 @@ export async function configureGitIdentity(botName: string, botEmail: string): P
 export async function autoCommit(config: ResolvedConfig): Promise<string> {
   core.startGroup('Auto-committing test changes')
 
-  // Stage all files under the test directory
-  const { exitCode: addExitCode } = await exec(
-    'git', ['add', '--', config.testDirectory],
-    { ignoreReturnCode: true }
-  )
-  if (addExitCode !== 0) {
-    core.warning('git add returned non-zero, there may be no matching files')
+  // Collect all directories to stage: per-service outputDirs + fallback testDirectory
+  const dirs = new Set<string>()
+  for (const svc of config.services) {
+    if (svc.outputDir) dirs.add(svc.outputDir)
+  }
+  if (dirs.size === 0) dirs.add(config.testDirectory)
+
+  // Stage files from each directory
+  for (const dir of dirs) {
+    const { exitCode: addExitCode } = await exec(
+      'git', ['add', '--', dir],
+      { ignoreReturnCode: true }
+    )
+    if (addExitCode !== 0) {
+      core.warning(`git add returned non-zero for '${dir}', there may be no matching files`)
+    }
   }
 
   // Check if there are staged changes

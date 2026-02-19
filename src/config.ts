@@ -1,52 +1,98 @@
 import * as core from '@actions/core'
-import * as fs from 'fs'
 import * as path from 'path'
-import { parse as parseYaml } from 'yaml'
-import type { ActionInputs, ResolvedConfig } from './types'
+import {
+  WorkspaceConfigManager,
+  type WorkspaceConfig,
+} from '@skyramp/skyramp/src/workspace'
+import type { ActionInputs, ResolvedConfig, WorkspaceServiceInfo } from './types'
 
 /**
- * Load workspace configuration from .skyramp.yml, with action inputs as defaults.
- * Config file values take precedence over action inputs.
+ * Load configuration from .skyramp/workspace.yml,
+ * with action inputs as fallback defaults.
  */
 export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> {
-  const configPath = path.resolve(inputs.workingDirectory, inputs.configFile)
-  let fileConfig: Record<string, unknown> = {}
+  const workingDir = path.resolve(inputs.workingDirectory)
+  const manager = new WorkspaceConfigManager(workingDir)
 
-  if (fs.existsSync(configPath)) {
-    core.info(`Found ${inputs.configFile}, loading configuration...`)
-    const content = fs.readFileSync(configPath, 'utf-8')
-    fileConfig = parseYaml(content) ?? {}
+  const services: WorkspaceServiceInfo[] = []
+  let serviceStartupCommand = inputs.serviceStartupCommand
+  let testDirectory = inputs.testDirectory
+  let executorVersion = inputs.skyrampExecutorVersion
+  let mcpVersion = inputs.skyrampMcpVersion
+
+  if (await manager.exists()) {
+    core.info(`Found ${manager.getConfigPath()}, loading workspace configuration...`)
+    try {
+      const wsConfig: WorkspaceConfig = await manager.read()
+
+      // Extract metadata versions (workspace takes precedence over inputs)
+      if (wsConfig.metadata) {
+        if (wsConfig.metadata.executorVersion) {
+          executorVersion = wsConfig.metadata.executorVersion
+        }
+        if (wsConfig.metadata.mcpVersion) {
+          mcpVersion = wsConfig.metadata.mcpVersion
+        }
+      }
+
+      // Collect all services
+      for (const svc of wsConfig.services ?? []) {
+        services.push({
+          serviceName: svc.serviceName,
+          language: svc.language,
+          framework: svc.framework,
+          baseUrl: svc.api?.baseUrl,
+          outputDir: svc.outputDir,
+        })
+      }
+
+      // Use first service for operational defaults
+      const first = (wsConfig.services ?? [])[0]
+      if (first) {
+        if (first.outputDir) {
+          testDirectory = first.outputDir
+        }
+        if (first.runtimeDetails?.serverStartCommand) {
+          serviceStartupCommand = first.runtimeDetails.serverStartCommand
+        }
+      }
+    } catch (err) {
+      core.warning(`Failed to read workspace.yml: ${(err as Error).message}`)
+    }
   } else {
-    core.notice(`No ${inputs.configFile} found, using workflow/default values`)
+    core.notice('No .skyramp/workspace.yml found, using action input defaults')
   }
 
   const config: ResolvedConfig = {
-    testDirectory: getString(fileConfig, 'test_directory', inputs.testDirectory),
-    serviceStartupCommand: getString(fileConfig, 'service_startup_command', inputs.serviceStartupCommand),
-    authTokenCommand: getString(fileConfig, 'auth_token_command', inputs.authTokenCommand),
-    skyrampExecutorVersion: getString(fileConfig, 'skyramp_executor_version', inputs.skyrampExecutorVersion),
-    skyrampMcpVersion: getString(fileConfig, 'skyramp_mcp_version', inputs.skyrampMcpVersion),
-    skyrampMcpSource: getString(fileConfig, 'skyramp_mcp_source', inputs.skyrampMcpSource) as ResolvedConfig['skyrampMcpSource'],
-    skyrampMcpGithubRef: getString(fileConfig, 'skyramp_mcp_github_ref', inputs.skyrampMcpGithubRef),
-    nodeVersion: getString(fileConfig, 'node_version', inputs.nodeVersion),
-    skipServiceStartup: getBoolean(fileConfig, 'skip_service_startup', inputs.skipServiceStartup),
-    healthCheckCommand: getString(fileConfig, 'health_check_command', inputs.healthCheckCommand),
-    healthCheckTimeout: getNumber(fileConfig, 'health_check_timeout', inputs.healthCheckTimeout),
-    healthCheckDiagnosticsCommand: getString(fileConfig, 'health_check_diagnostics_command', inputs.healthCheckDiagnosticsCommand),
-    autoCommit: getBoolean(fileConfig, 'auto_commit', inputs.autoCommit),
-    commitMessage: getString(fileConfig, 'commit_message', inputs.commitMessage),
-    postPrComment: getBoolean(fileConfig, 'post_pr_comment', inputs.postPrComment),
-    testExecutionTimeout: getNumber(fileConfig, 'test_execution_timeout', inputs.testExecutionTimeout),
-    testbotMaxRetries: getNumber(fileConfig, 'testbot_max_retries', inputs.testbotMaxRetries),
-    testbotRetryDelay: getNumber(fileConfig, 'testbot_retry_delay', inputs.testbotRetryDelay),
-    testbotTimeout: getNumber(fileConfig, 'testbot_timeout', inputs.testbotTimeout),
-    enableDebug: getBoolean(fileConfig, 'enable_debug', inputs.enableDebug),
+    testDirectory,
+    serviceStartupCommand,
+    authTokenCommand: inputs.authTokenCommand,
+    skyrampExecutorVersion: executorVersion,
+    skyrampMcpVersion: mcpVersion,
+    skyrampMcpSource: inputs.skyrampMcpSource,
+    skyrampMcpGithubRef: inputs.skyrampMcpGithubRef,
+    nodeVersion: inputs.nodeVersion,
+    skipServiceStartup: inputs.skipServiceStartup,
+    healthCheckCommand: inputs.healthCheckCommand,
+    healthCheckTimeout: inputs.healthCheckTimeout,
+    healthCheckDiagnosticsCommand: inputs.healthCheckDiagnosticsCommand,
+    autoCommit: inputs.autoCommit,
+    commitMessage: inputs.commitMessage,
+    postPrComment: inputs.postPrComment,
+    testExecutionTimeout: inputs.testExecutionTimeout,
+    testbotMaxRetries: inputs.testbotMaxRetries,
+    testbotRetryDelay: inputs.testbotRetryDelay,
+    testbotTimeout: inputs.testbotTimeout,
+    enableDebug: inputs.enableDebug,
+    services,
   }
 
   core.startGroup('Resolved configuration')
   for (const [key, value] of Object.entries(config)) {
     if (key === 'authTokenCommand') {
       core.info(`  ${key}: [REDACTED]`)
+    } else if (key === 'services') {
+      core.info(`  ${key}: ${JSON.stringify(value)}`)
     } else {
       core.info(`  ${key}: ${value}`)
     }
@@ -54,27 +100,4 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
   core.endGroup()
 
   return config
-}
-
-export function getString(config: Record<string, unknown>, key: string, fallback: string): string {
-  const val = config[key]
-  if (val != null && val !== '' && typeof val === 'string') return val
-  return fallback
-}
-
-export function getBoolean(config: Record<string, unknown>, key: string, fallback: boolean): boolean {
-  const val = config[key]
-  if (typeof val === 'boolean') return val
-  if (typeof val === 'string') return val === 'true'
-  return fallback
-}
-
-export function getNumber(config: Record<string, unknown>, key: string, fallback: number): number {
-  const val = config[key]
-  if (typeof val === 'number') return val
-  if (typeof val === 'string') {
-    const parsed = parseInt(val, 10)
-    if (!isNaN(parsed)) return parsed
-  }
-  return fallback
 }

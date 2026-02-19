@@ -42,7 +42,7 @@ async function run(): Promise<void> {
     throw new Error('skyramp_license_file is required but not provided')
   }
 
-  // ── 3. Load config (.skyramp.yml merged with inputs) ────────────────
+  // ── 3. Load config (.skyramp/workspace.yml merged with inputs) ──────
   const config = await loadConfig(inputs)
   setDebugEnabled(config.enableDebug)
 
@@ -200,6 +200,7 @@ async function run(): Promise<void> {
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,
+      services: config.services,
     })
 
     const useDebugLog = agentType === 'cursor' && config.enableDebug
