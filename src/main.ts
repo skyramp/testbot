@@ -237,8 +237,22 @@ async function run(): Promise<void> {
   })
 
   // ── 15. Read summary & parse metrics ───────────────────────────────
-  const summary = readSummary(paths)
+  const { summary, commitMessage: reportCommitMessage } = readSummary(paths)
   parseMetrics(summary)
+
+  // Use agent-provided commit message if available (keeps user input as fallback)
+  if (reportCommitMessage) {
+    // Sanitize: collapse newlines/control chars to spaces, trim, enforce max length
+    let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, ' ').replace(/[^\x20-\x7E]/g, '').trim()
+    // Avoid double-prefixing if the agent already included the prefix
+    if (sanitized.toLowerCase().startsWith('skyramp testbot:')) {
+      sanitized = sanitized.slice('skyramp testbot:'.length).trim()
+    }
+    if (sanitized) {
+      config.commitMessage = `Skyramp Testbot: ${sanitized.slice(0, 72)}`
+      debug(`Using agent-provided commit message: ${config.commitMessage}`)
+    }
+  }
 
   debug(`Summary length: ${summary.length} chars`)
   debug(`Summary file exists: ${fs.existsSync(paths.summaryPath)}`)

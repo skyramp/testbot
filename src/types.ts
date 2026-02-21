@@ -87,6 +87,7 @@ export interface TestbotReport {
   testMaintenance: { description: string }[]
   testResults: { testType: string; endpoint: string; status: string; details: string }[]
   issuesFound: { description: string }[]
+  commitMessage?: string
 }
 
 export interface Paths {

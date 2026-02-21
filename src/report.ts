@@ -89,11 +89,12 @@ export function renderReport(report: TestbotReport): string {
  * the standard markdown format. Otherwise uses the raw content as-is.
  * Writes the final report to combinedResultPath for PR comment posting.
  */
-export function readSummary(paths: Paths): string {
+export function readSummary(paths: Paths): { summary: string; commitMessage?: string } {
   core.startGroup('Reading test summary')
 
   const src = resolveSummarySource(paths)
   let summary: string
+  let commitMessage: string | undefined
 
   if (src) {
     const raw = fs.readFileSync(src, 'utf-8')
@@ -101,6 +102,7 @@ export function readSummary(paths: Paths): string {
     if (report) {
       core.notice('Testbot report parsed from JSON')
       summary = renderReport(report)
+      commitMessage = report.commitMessage
     } else {
       core.info('Summary is not JSON — using raw content')
       summary = raw
@@ -114,7 +116,7 @@ export function readSummary(paths: Paths): string {
 
   core.setOutput('test_summary', summary)
   core.endGroup()
-  return summary
+  return { summary, commitMessage }
 }
 
 /**

@@ -1,7 +1,10 @@
 import './mocks/core'
-import { describe, it, expect } from 'vitest'
-import { tryParseReport, renderReport, parseMetrics } from '../report'
-import type { TestbotReport } from '../types'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import * as fs from 'fs'
+import * as os from 'os'
+import * as path from 'path'
+import { tryParseReport, renderReport, readSummary, parseMetrics } from '../report'
+import type { Paths, TestbotReport } from '../types'
 
 const validReport: TestbotReport = {
   businessCaseAnalysis: 'Tests cover the checkout flow.',
@@ -102,6 +105,68 @@ describe('renderReport', () => {
     const md = renderReport(validReport)
     expect(md).toContain('| Test Type | Endpoint | Status | Details |')
     expect(md).toContain('|-----------|----------|--------|---------|')
+  })
+})
+
+describe('readSummary', () => {
+  let tmpDir: string
+  let paths: Paths
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'readSummary-test-'))
+    paths = {
+      tempDir: tmpDir,
+      licensePath: path.join(tmpDir, 'license'),
+      gitDiffPath: path.join(tmpDir, 'diff'),
+      summaryPath: path.join(tmpDir, 'summary.json'),
+      agentLogPath: path.join(tmpDir, 'agent-log.ndjson'),
+      agentStdoutPath: path.join(tmpDir, 'agent-stdout.txt'),
+      combinedResultPath: path.join(tmpDir, 'combined-result.txt'),
+    }
+  })
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('returns commitMessage from valid JSON report', () => {
+    const report = { ...validReport, commitMessage: 'add tests for /products endpoint' }
+    fs.writeFileSync(paths.summaryPath, JSON.stringify(report))
+
+    const result = readSummary(paths)
+    expect(result.commitMessage).toBe('add tests for /products endpoint')
+    expect(result.summary).toContain('Business Case Analysis')
+  })
+
+  it('returns undefined commitMessage for raw (non-JSON) summary', () => {
+    fs.writeFileSync(paths.summaryPath, '# Some markdown report\nAll tests passed.')
+
+    const result = readSummary(paths)
+    expect(result.commitMessage).toBeUndefined()
+    expect(result.summary).toContain('Some markdown report')
+  })
+
+  it('returns undefined commitMessage when report has no commitMessage field', () => {
+    fs.writeFileSync(paths.summaryPath, JSON.stringify(validReport))
+
+    const result = readSummary(paths)
+    expect(result.commitMessage).toBeUndefined()
+    expect(result.summary).toContain('Business Case Analysis')
+  })
+
+  it('returns default commitMessage from report', () => {
+    const report = { ...validReport, commitMessage: 'Added recommendations by Skyramp Testbot.' }
+    fs.writeFileSync(paths.summaryPath, JSON.stringify(report))
+
+    const result = readSummary(paths)
+    expect(result.commitMessage).toBe('Added recommendations by Skyramp Testbot.')
+    expect(result.summary).toContain('Business Case Analysis')
+  })
+
+  it('returns undefined commitMessage when no summary file exists', () => {
+    const result = readSummary(paths)
+    expect(result.commitMessage).toBeUndefined()
+    expect(result.summary).toBe('No summary available')
   })
 })
 

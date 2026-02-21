@@ -101828,12 +101828,14 @@ function readSummary(paths) {
   startGroup("Reading test summary");
   const src = resolveSummarySource(paths);
   let summary2;
+  let commitMessage;
   if (src) {
     const raw = fs7.readFileSync(src, "utf-8");
     const report = tryParseReport(raw);
     if (report) {
       notice("Testbot report parsed from JSON");
       summary2 = renderReport(report);
+      commitMessage = report.commitMessage;
     } else {
       info("Summary is not JSON \u2014 using raw content");
       summary2 = raw;
@@ -101846,7 +101848,7 @@ function readSummary(paths) {
   }
   setOutput("test_summary", summary2);
   endGroup();
-  return summary2;
+  return { summary: summary2, commitMessage };
 }
 function parseMetrics(summary2) {
   startGroup("Parsing summary metrics");
@@ -102043,8 +102045,18 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     }
     return agentResult;
   });
-  const summary2 = readSummary(paths);
+  const { summary: summary2, commitMessage: reportCommitMessage } = readSummary(paths);
   parseMetrics(summary2);
+  if (reportCommitMessage) {
+    let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").trim();
+    if (sanitized.toLowerCase().startsWith("skyramp testbot:")) {
+      sanitized = sanitized.slice("skyramp testbot:".length).trim();
+    }
+    if (sanitized) {
+      config.commitMessage = `Skyramp Testbot: ${sanitized.slice(0, 72)}`;
+      debug2(`Using agent-provided commit message: ${config.commitMessage}`);
+    }
+  }
   debug2(`Summary length: ${summary2.length} chars`);
   debug2(`Summary file exists: ${fs11.existsSync(paths.summaryPath)}`);
   debug2(`Agent log file exists: ${fs11.existsSync(paths.agentLogPath)}`);
