@@ -33,51 +33,83 @@ export function tryParseReport(raw: string): TestbotReport | null {
   }
 }
 
+interface RenderOptions {
+  commitMessage?: string
+  collapsed?: boolean
+}
+
 /**
  * Render a TestbotReport into the standard markdown format.
+ * When collapsed is true, each section is wrapped in a collapsible <details> block
+ * and an optional commitMessage is rendered as a non-collapsed summary at the top.
  */
-export function renderReport(report: TestbotReport): string {
+export function renderReport(report: TestbotReport, options: RenderOptions = {}): string {
+  const { commitMessage, collapsed = false } = options
   const lines: string[] = []
 
+  // Summary line (non-collapsed, shown at the top) — only when collapsed mode is on
+  if (collapsed && commitMessage) {
+    lines.push(`**Summary:** ${commitMessage}`)
+    lines.push('')
+  }
+
+  const sectionStart = (title: string) => {
+    if (collapsed) {
+      lines.push('<details>')
+      lines.push(`<summary>${title}</summary>`)
+      lines.push('')
+    } else {
+      lines.push(`### ${title}`)
+    }
+  }
+
+  const sectionEnd = () => {
+    if (collapsed) {
+      lines.push('')
+      lines.push('</details>')
+    }
+    lines.push('')
+  }
+
   // Business Case Analysis (always present)
-  lines.push('### 📋 Business Case Analysis')
+  sectionStart('📋 Business Case Analysis')
   lines.push(report.businessCaseAnalysis)
-  lines.push('')
+  sectionEnd()
 
   // New Tests Created (omit if empty)
   if (report.newTestsCreated.length > 0) {
-    lines.push('### 💡 New Tests Created')
+    sectionStart('💡 New Tests Created')
     for (const t of report.newTestsCreated) {
       lines.push(`- **${t.testType}** for ${t.endpoint} — \`${t.fileName}\``)
     }
-    lines.push('')
+    sectionEnd()
   }
 
   // Test Maintenance (omit if empty)
   if (report.testMaintenance.length > 0) {
-    lines.push('### ✅ Test Maintenance')
+    sectionStart('✅ Test Maintenance')
     for (const m of report.testMaintenance) {
       lines.push(`- ${m.description}`)
     }
-    lines.push('')
+    sectionEnd()
   }
 
   // Test Results (always present)
-  lines.push('### 🧪 Test Results')
+  sectionStart('🧪 Test Results')
   lines.push('| Test Type | Endpoint | Status | Details |')
   lines.push('|-----------|----------|--------|---------|')
   for (const r of report.testResults) {
     lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`)
   }
-  lines.push('')
+  sectionEnd()
 
   // Issues Found (omit if empty)
   if (report.issuesFound.length > 0) {
-    lines.push('### ⚠️ Issues Found')
+    sectionStart('⚠️ Issues Found')
     for (const issue of report.issuesFound) {
       lines.push(`- ${issue.description}`)
     }
-    lines.push('')
+    sectionEnd()
   }
 
   return lines.join('\n')
@@ -89,7 +121,7 @@ export function renderReport(report: TestbotReport): string {
  * the standard markdown format. Otherwise uses the raw content as-is.
  * Writes the final report to combinedResultPath for PR comment posting.
  */
-export function readSummary(paths: Paths): { summary: string; commitMessage?: string } {
+export function readSummary(paths: Paths, reportCollapsed = false): { summary: string; commitMessage?: string } {
   core.startGroup('Reading test summary')
 
   const src = resolveSummarySource(paths)
@@ -101,7 +133,7 @@ export function readSummary(paths: Paths): { summary: string; commitMessage?: st
     const report = tryParseReport(raw)
     if (report) {
       core.notice('Testbot report parsed from JSON')
-      summary = renderReport(report)
+      summary = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed })
       commitMessage = report.commitMessage
     } else {
       core.info('Summary is not JSON — using raw content')

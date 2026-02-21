@@ -101046,6 +101046,7 @@ function getInputs() {
     testbotMaxRetries: parseInt(getInput("testbot_max_retries"), 10) || 3,
     testbotRetryDelay: parseInt(getInput("testbot_retry_delay"), 10) || 10,
     testbotTimeout: parseInt(getInput("testbot_timeout"), 10) || 10,
+    reportCollapsed: getBooleanInput("report_collapsed"),
     enableDebug: getBooleanInput("enable_debug")
   };
 }
@@ -101131,6 +101132,7 @@ async function loadConfig(inputs) {
     testbotMaxRetries: inputs.testbotMaxRetries,
     testbotRetryDelay: inputs.testbotRetryDelay,
     testbotTimeout: inputs.testbotTimeout,
+    reportCollapsed: inputs.reportCollapsed,
     enableDebug: inputs.enableDebug,
     services
   };
@@ -101789,42 +101791,63 @@ function tryParseReport(raw) {
     return null;
   }
 }
-function renderReport(report) {
+function renderReport(report, options = {}) {
+  const { commitMessage, collapsed = false } = options;
   const lines = [];
-  lines.push("### \u{1F4CB} Business Case Analysis");
+  if (collapsed && commitMessage) {
+    lines.push(`**Summary:** ${commitMessage}`);
+    lines.push("");
+  }
+  const sectionStart = (title) => {
+    if (collapsed) {
+      lines.push("<details>");
+      lines.push(`<summary>${title}</summary>`);
+      lines.push("");
+    } else {
+      lines.push(`### ${title}`);
+    }
+  };
+  const sectionEnd = () => {
+    if (collapsed) {
+      lines.push("");
+      lines.push("</details>");
+    }
+    lines.push("");
+  };
+  sectionStart("\u{1F4CB} Business Case Analysis");
   lines.push(report.businessCaseAnalysis);
-  lines.push("");
+  sectionEnd();
   if (report.newTestsCreated.length > 0) {
-    lines.push("### \u{1F4A1} New Tests Created");
+    sectionStart("\u{1F4A1} New Tests Created");
     for (const t of report.newTestsCreated) {
       lines.push(`- **${t.testType}** for ${t.endpoint} \u2014 \`${t.fileName}\``);
     }
-    lines.push("");
+    sectionEnd();
   }
   if (report.testMaintenance.length > 0) {
-    lines.push("### \u2705 Test Maintenance");
+    sectionStart("\u2705 Test Maintenance");
     for (const m of report.testMaintenance) {
       lines.push(`- ${m.description}`);
     }
-    lines.push("");
+    sectionEnd();
   }
-  lines.push("### \u{1F9EA} Test Results");
+  sectionStart("\u{1F9EA} Test Results");
   lines.push("| Test Type | Endpoint | Status | Details |");
   lines.push("|-----------|----------|--------|---------|");
   for (const r of report.testResults) {
     lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
   }
-  lines.push("");
+  sectionEnd();
   if (report.issuesFound.length > 0) {
-    lines.push("### \u26A0\uFE0F Issues Found");
+    sectionStart("\u26A0\uFE0F Issues Found");
     for (const issue2 of report.issuesFound) {
       lines.push(`- ${issue2.description}`);
     }
-    lines.push("");
+    sectionEnd();
   }
   return lines.join("\n");
 }
-function readSummary(paths) {
+function readSummary(paths, reportCollapsed = false) {
   startGroup("Reading test summary");
   const src = resolveSummarySource(paths);
   let summary2;
@@ -101834,7 +101857,7 @@ function readSummary(paths) {
     const report = tryParseReport(raw);
     if (report) {
       notice("Testbot report parsed from JSON");
-      summary2 = renderReport(report);
+      summary2 = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed });
       commitMessage = report.commitMessage;
     } else {
       info("Summary is not JSON \u2014 using raw content");
@@ -102045,7 +102068,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     }
     return agentResult;
   });
-  const { summary: summary2, commitMessage: reportCommitMessage } = readSummary(paths);
+  const { summary: summary2, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed);
   parseMetrics(summary2);
   if (reportCommitMessage) {
     let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").trim();

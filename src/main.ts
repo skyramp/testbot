@@ -237,7 +237,7 @@ async function run(): Promise<void> {
   })
 
   // ── 15. Read summary & parse metrics ───────────────────────────────
-  const { summary, commitMessage: reportCommitMessage } = readSummary(paths)
+  const { summary, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed)
   parseMetrics(summary)
 
   // Use agent-provided commit message if available (keeps user input as fallback)

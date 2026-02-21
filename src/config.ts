@@ -83,6 +83,7 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
     testbotMaxRetries: inputs.testbotMaxRetries,
     testbotRetryDelay: inputs.testbotRetryDelay,
     testbotTimeout: inputs.testbotTimeout,
+    reportCollapsed: inputs.reportCollapsed,
     enableDebug: inputs.enableDebug,
     services,
   }

@@ -62,7 +62,7 @@ describe('tryParseReport', () => {
 })
 
 describe('renderReport', () => {
-  it('renders a full report with all sections', () => {
+  it('renders a full report with ### headings by default', () => {
     const md = renderReport(validReport)
 
     expect(md).toContain('### 📋 Business Case Analysis')
@@ -80,6 +80,21 @@ describe('renderReport', () => {
 
     expect(md).toContain('### ⚠️ Issues Found')
     expect(md).toContain('- Server returns 500 on empty query param')
+
+    expect(md).not.toContain('<details>')
+    expect(md).not.toContain('</details>')
+  })
+
+  it('renders collapsible details when collapsed is true', () => {
+    const md = renderReport(validReport, { collapsed: true })
+
+    expect(md).toContain('<details>')
+    expect(md).toContain('<summary>📋 Business Case Analysis</summary>')
+    expect(md).toContain('<summary>💡 New Tests Created</summary>')
+    expect(md).toContain('<summary>🧪 Test Results</summary>')
+    expect(md).toContain('<summary>⚠️ Issues Found</summary>')
+    expect(md).toContain('</details>')
+    expect(md).not.toContain('###')
   })
 
   it('omits empty optional sections', () => {
@@ -96,15 +111,33 @@ describe('renderReport', () => {
 
     expect(md).toContain('### 📋 Business Case Analysis')
     expect(md).toContain('### 🧪 Test Results')
-    expect(md).not.toContain('### 💡 New Tests Created')
-    expect(md).not.toContain('### ✅ Test Maintenance')
-    expect(md).not.toContain('### ⚠️ Issues Found')
+    expect(md).not.toContain('💡 New Tests Created')
+    expect(md).not.toContain('✅ Test Maintenance')
+    expect(md).not.toContain('⚠️ Issues Found')
   })
 
   it('renders the test results table with headers', () => {
     const md = renderReport(validReport)
     expect(md).toContain('| Test Type | Endpoint | Status | Details |')
     expect(md).toContain('|-----------|----------|--------|---------|')
+  })
+
+  it('renders summary line when collapsed with commitMessage', () => {
+    const md = renderReport(validReport, { commitMessage: 'add smoke tests for GET /products', collapsed: true })
+    expect(md).toContain('**Summary:** add smoke tests for GET /products')
+    const summaryIdx = md.indexOf('**Summary:**')
+    const detailsIdx = md.indexOf('<details>')
+    expect(summaryIdx).toBeLessThan(detailsIdx)
+  })
+
+  it('does not render summary line when not collapsed even with commitMessage', () => {
+    const md = renderReport(validReport, { commitMessage: 'some message' })
+    expect(md).not.toContain('**Summary:**')
+  })
+
+  it('does not render summary line when collapsed but commitMessage is empty', () => {
+    const md = renderReport(validReport, { collapsed: true, commitMessage: '' })
+    expect(md).not.toContain('**Summary:**')
   })
 })
 
@@ -129,13 +162,26 @@ describe('readSummary', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('returns commitMessage from valid JSON report', () => {
+  it('returns commitMessage from valid JSON report (no collapsed by default)', () => {
     const report = { ...validReport, commitMessage: 'add tests for /products endpoint' }
     fs.writeFileSync(paths.summaryPath, JSON.stringify(report))
 
     const result = readSummary(paths)
     expect(result.commitMessage).toBe('add tests for /products endpoint')
-    expect(result.summary).toContain('Business Case Analysis')
+    expect(result.summary).toContain('### 📋 Business Case Analysis')
+    expect(result.summary).not.toContain('<details>')
+    expect(result.summary).not.toContain('**Summary:**')
+  })
+
+  it('renders collapsed sections and summary line when reportCollapsed is true', () => {
+    const report = { ...validReport, commitMessage: 'add tests for /products endpoint' }
+    fs.writeFileSync(paths.summaryPath, JSON.stringify(report))
+
+    const result = readSummary(paths, true)
+    expect(result.commitMessage).toBe('add tests for /products endpoint')
+    expect(result.summary).toContain('**Summary:** add tests for /products endpoint')
+    expect(result.summary).toContain('<details>')
+    expect(result.summary).toContain('<summary>📋 Business Case Analysis</summary>')
   })
 
   it('returns undefined commitMessage for raw (non-JSON) summary', () => {

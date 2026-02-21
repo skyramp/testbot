@@ -27,6 +27,7 @@ export interface ActionInputs {
   testbotMaxRetries: number
   testbotRetryDelay: number
   testbotTimeout: number
+  reportCollapsed: boolean
   enableDebug: boolean
 }
 
@@ -60,6 +61,7 @@ export interface ResolvedConfig {
   testbotMaxRetries: number
   testbotRetryDelay: number
   testbotTimeout: number
+  reportCollapsed: boolean
   enableDebug: boolean
   services: WorkspaceServiceInfo[]
 }

@@ -110,6 +110,10 @@ inputs:
     description: 'Timeout in minutes for the agent execution (safety net; does not kill the child process)'
     required: false
     default: '10'
+  report_collapsed:
+    description: 'Wrap report sections in collapsible <details> blocks with a summary line'
+    required: false
+    default: 'false'
   enable_debug:
     description: 'Enable debug logging'
     required: false
