@@ -86,7 +86,7 @@ export async function initializeAgent(agentType: AgentType, enableDebug: boolean
  */
 export function buildAgentCommand(agentType: AgentType, enableDebug: boolean): AgentCommand {
   if (agentType === 'cursor') {
-    const args = ['-f', '-p', '--model', 'auto']
+    const args = ['-f', '-p', '--model', 'sonnet-4.5']
     if (enableDebug) {
       args.push('--output-format', 'stream-json')
     }

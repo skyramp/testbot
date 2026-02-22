@@ -101535,7 +101535,7 @@ async function initializeAgent(agentType, enableDebug) {
 }
 function buildAgentCommand(agentType, enableDebug) {
   if (agentType === "cursor") {
-    const args = ["-f", "-p", "--model", "auto"];
+    const args = ["-f", "-p", "--model", "sonnet-4.5"];
     if (enableDebug) {
       args.push("--output-format", "stream-json");
     }
