@@ -121,7 +121,7 @@ describe('buildAgentCommand', () => {
   it('returns cursor command', () => {
     const cmd = buildAgentCommand('cursor', false)
     expect(cmd.command).toBe('agent')
-    expect(cmd.args).toEqual(['-f', '-p', '--model', 'auto'])
+    expect(cmd.args).toEqual(['-f', '-p', '--model', 'sonnet-4.5'])
   })
 
   it('returns cursor command with debug flags', () => {

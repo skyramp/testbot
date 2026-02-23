@@ -29,6 +29,7 @@ function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
     testbotMaxRetries: 3,
     testbotRetryDelay: 10,
     testbotTimeout: 10,
+    reportCollapsed: false,
     enableDebug: false,
     ...overrides,
   }
