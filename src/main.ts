@@ -200,6 +200,7 @@ async function run(): Promise<void> {
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,
+      repositoryPath: workingDir,
       services: config.services,
     })
 

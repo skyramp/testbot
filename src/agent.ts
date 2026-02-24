@@ -114,20 +114,17 @@ export function buildPrompt(opts: {
   testDirectory: string
   summaryPath: string
   authToken: string
+  repositoryPath: string
   services?: WorkspaceServiceInfo[]
 }): string {
   const serviceContext = opts.services?.length
     ? buildServiceContext(opts.services)
     : ''
 
-  return `<title>${opts.prTitle}</title>
-<description>${opts.prBody}</description>
-<diff_file>.skyramp_git_diff</diff_file>
-<test_directory>${opts.testDirectory}</test_directory>
-<summary_output_file>${opts.summaryPath}</summary_output_file>
-<auth_token>${opts.authToken}</auth_token>
+  return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
+skyramp://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}
 ${serviceContext}
-Use the skyramp_testbot prompt and follow the returned instructions.
+After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
 AUTHENTICATION:
 When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${opts.authToken}

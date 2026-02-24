@@ -101554,14 +101554,10 @@ function buildAgentCommand(agentType, enableDebug) {
 }
 function buildPrompt(opts) {
   const serviceContext = opts.services?.length ? buildServiceContext(opts.services) : "";
-  return `<title>${opts.prTitle}</title>
-<description>${opts.prBody}</description>
-<diff_file>.skyramp_git_diff</diff_file>
-<test_directory>${opts.testDirectory}</test_directory>
-<summary_output_file>${opts.summaryPath}</summary_output_file>
-<auth_token>${opts.authToken}</auth_token>
+  return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
+skyramp://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}
 ${serviceContext}
-Use the skyramp_testbot prompt and follow the returned instructions.
+After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
 AUTHENTICATION:
 When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${opts.authToken}
@@ -102043,6 +102039,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,
+      repositoryPath: workingDir,
       services: config.services
     });
     const useDebugLog = agentType === "cursor" && config.enableDebug;
