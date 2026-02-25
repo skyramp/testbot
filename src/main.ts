@@ -266,9 +266,7 @@ async function run(): Promise<void> {
     try {
       const { DefaultArtifactClient } = await import('@actions/artifact')
       const artifact = new DefaultArtifactClient()
-      await artifact.uploadArtifact('skyramp-agent-logs', [paths.agentLogPath], tempDir, {
-        retentionDays: 1,
-      })
+      await artifact.uploadArtifact('skyramp-agent-logs', [paths.agentLogPath], tempDir)
     } catch (err) {
       core.warning(`Failed to upload agent logs artifact: ${err}`)
     }
