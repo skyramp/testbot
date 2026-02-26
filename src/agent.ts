@@ -22,9 +22,11 @@ export async function installAgentCli(agentType: AgentType): Promise<void> {
 
     await withRetry(
       async () => {
-        await exec('bash', ['-c', 'curl https://cursor.com/install -fsS | bash'])
-        core.notice('Cursor CLI installed successfully')
+        await exec('bash', ['-c', 'set -o pipefail; curl https://cursor.com/install -fsS | bash'])
         core.addPath(`${process.env.HOME}/.local/bin`)
+        // Verify the binary actually exists after install
+        await exec('agent', ['--version'], { silent: true })
+        core.notice('Cursor CLI installed successfully')
       },
       { retries: 3, delay: 5, label: 'Cursor CLI install' },
     )

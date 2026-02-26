@@ -102010,9 +102010,10 @@ async function installAgentCli(agentType) {
     }
     await withRetry(
       async () => {
-        await exec2("bash", ["-c", "curl https://cursor.com/install -fsS | bash"]);
-        notice("Cursor CLI installed successfully");
+        await exec2("bash", ["-c", "set -o pipefail; curl https://cursor.com/install -fsS | bash"]);
         addPath(`${process.env.HOME}/.local/bin`);
+        await exec2("agent", ["--version"], { silent: true });
+        notice("Cursor CLI installed successfully");
       },
       { retries: 3, delay: 5, label: "Cursor CLI install" }
     );
@@ -102610,9 +102611,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     try {
       const { DefaultArtifactClient: DefaultArtifactClient2 } = await Promise.resolve().then(() => (init_artifact2(), artifact_exports));
       const artifact = new DefaultArtifactClient2();
-      await artifact.uploadArtifact("skyramp-agent-logs", [paths.agentLogPath], tempDir, {
-        retentionDays: 1
-      });
+      await artifact.uploadArtifact("skyramp-agent-logs", [paths.agentLogPath], tempDir);
     } catch (err) {
       warning(`Failed to upload agent logs artifact: ${err}`);
     }

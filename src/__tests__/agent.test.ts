@@ -1,6 +1,13 @@
 import './mocks/core'
-import { describe, it, expect } from 'vitest'
-import { buildPrompt, buildAgentCommand } from '../agent'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { buildPrompt, buildAgentCommand, installAgentCli } from '../agent'
+import { exec } from '../utils'
+
+vi.mock('../utils', () => ({
+  exec: vi.fn(),
+  sleep: vi.fn(),
+  withRetry: vi.fn(async (fn: () => Promise<void>) => fn()),
+}))
 
 describe('buildPrompt', () => {
   it('includes resource URI with all encoded params', () => {
@@ -150,5 +157,66 @@ describe('buildAgentCommand', () => {
     const cmd = buildAgentCommand('copilot', false)
     const mcpIdx = cmd.args.indexOf('--additional-mcp-config')
     expect(cmd.args[mcpIdx + 1]).toMatch(/^@/)
+  })
+})
+
+describe('installAgentCli', () => {
+  const mockExec = vi.mocked(exec)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    process.env.HOME = '/home/runner'
+  })
+
+  it('uses pipefail when installing cursor CLI', async () => {
+    // First call: agent --version check (not installed)
+    mockExec.mockRejectedValueOnce(new Error('not found'))
+    // Second call: curl | bash install
+    mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+    // Third call: agent --version verification
+    mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '1.0.0', stderr: '' })
+
+    await installAgentCli('cursor')
+
+    // The install command should use pipefail
+    expect(mockExec).toHaveBeenCalledWith(
+      'bash',
+      ['-c', 'set -o pipefail; curl https://cursor.com/install -fsS | bash'],
+    )
+  })
+
+  it('verifies agent binary exists after install', async () => {
+    // First call: agent --version check (not installed)
+    mockExec.mockRejectedValueOnce(new Error('not found'))
+    // Second call: curl | bash install
+    mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+    // Third call: agent --version verification
+    mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '1.0.0', stderr: '' })
+
+    await installAgentCli('cursor')
+
+    // Should verify the binary after install
+    expect(mockExec).toHaveBeenCalledWith('agent', ['--version'], { silent: true })
+  })
+
+  it('propagates error when post-install verification fails', async () => {
+    // First call: agent --version check (not installed)
+    mockExec.mockRejectedValueOnce(new Error('not found'))
+    // Second call: curl | bash succeeds (but binary not actually installed)
+    mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+    // Third call: agent --version verification fails
+    mockExec.mockRejectedValueOnce(new Error('Unable to locate executable file: agent'))
+
+    await expect(installAgentCli('cursor')).rejects.toThrow('Unable to locate executable file: agent')
+  })
+
+  it('skips install if cursor CLI already present', async () => {
+    // agent --version succeeds
+    mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '1.0.0', stderr: '' })
+
+    await installAgentCli('cursor')
+
+    // Should only have called exec once (the version check)
+    expect(mockExec).toHaveBeenCalledTimes(1)
   })
 })
