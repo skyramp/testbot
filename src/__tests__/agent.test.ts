@@ -158,6 +158,12 @@ describe('buildAgentCommand', () => {
     const mcpIdx = cmd.args.indexOf('--additional-mcp-config')
     expect(cmd.args[mcpIdx + 1]).toMatch(/^@/)
   })
+
+  it('returns claude command with model flag', () => {
+    const cmd = buildAgentCommand('claude', false)
+    expect(cmd.command).toBe('claude')
+    expect(cmd.args).toEqual(['--dangerously-skip-permissions', '--model', 'sonnet', '-p'])
+  })
 })
 
 describe('installAgentCli', () => {

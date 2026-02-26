@@ -101542,6 +101542,7 @@ function getInputs() {
     skyrampLicenseFile: getInput("skyramp_license_file", { required: true }),
     cursorApiKey: getInput("cursor_api_key"),
     copilotApiKey: getInput("copilot_api_key"),
+    anthropicApiKey: getInput("anthropic_api_key"),
     testDirectory: getInput("test_directory"),
     serviceStartupCommand: getInput("service_startup_command"),
     authTokenCommand: getInput("auth_token_command"),
@@ -101577,15 +101578,24 @@ function getInputs() {
 function detectAgentType(inputs) {
   const hasCursor = !!inputs.cursorApiKey;
   const hasCopilot = !!inputs.copilotApiKey;
-  if (hasCursor && hasCopilot) {
-    throw new Error("Both cursor_api_key and copilot_api_key provided. Please provide only one.");
+  const hasClaude = !!inputs.anthropicApiKey;
+  const count = [hasCursor, hasCopilot, hasClaude].filter(Boolean).length;
+  if (count > 1) {
+    throw new Error("Multiple agent API keys provided. Please provide only one of: cursor_api_key, copilot_api_key, anthropic_api_key.");
   }
-  if (!hasCursor && !hasCopilot) {
-    throw new Error("Either cursor_api_key or copilot_api_key must be provided.");
+  if (hasCursor) {
+    notice("Using Cursor CLI agent");
+    return "cursor";
   }
-  const agentType = hasCursor ? "cursor" : "copilot";
-  notice(`Using ${agentType === "cursor" ? "Cursor CLI" : "GitHub Copilot CLI"} agent`);
-  return agentType;
+  if (hasCopilot) {
+    notice("Using GitHub Copilot CLI agent");
+    return "copilot";
+  }
+  if (hasClaude) {
+    notice("Using Claude Code CLI agent");
+    return "claude";
+  }
+  throw new Error("No agent API key provided. Please provide one of: cursor_api_key, copilot_api_key, or anthropic_api_key.");
 }
 
 // src/config.ts
@@ -101969,6 +101979,13 @@ async function configureMcp(agentType, mcpCommand, mcpArgs, licensePath, testExe
       }
     };
     fs4.writeFileSync(path6.join(configDir, "mcp.json"), JSON.stringify(config, null, 2));
+  } else if (agentType === "claude") {
+    const addArgs = ["mcp", "add", "--scope", "user", "skyramp-mcp"];
+    for (const [key, value] of Object.entries(env)) {
+      addArgs.push("-e", `${key}=${value}`);
+    }
+    addArgs.push("--", mcpCommand, ...argsArray);
+    await exec2("claude", addArgs);
   } else {
     const homeDir = path6.join(process.env.HOME ?? "~", ".copilot");
     fs4.mkdirSync(homeDir, { recursive: true });
@@ -101998,8 +102015,13 @@ async function configureMcp(agentType, mcpCommand, mcpArgs, licensePath, testExe
 // src/agent.ts
 init_core();
 var fs5 = __toESM(require("fs"));
+var AGENT_LABELS = {
+  cursor: "Cursor",
+  copilot: "GitHub Copilot",
+  claude: "Claude Code"
+};
 async function installAgentCli(agentType) {
-  startGroup(`Installing ${agentType === "cursor" ? "Cursor" : "GitHub Copilot"} CLI`);
+  startGroup(`Installing ${AGENT_LABELS[agentType]} CLI`);
   if (agentType === "cursor") {
     try {
       const { stdout } = await exec2("agent", ["--version"], { silent: true, ignoreReturnCode: true });
@@ -102017,7 +102039,7 @@ async function installAgentCli(agentType) {
       },
       { retries: 3, delay: 5, label: "Cursor CLI install" }
     );
-  } else {
+  } else if (agentType === "copilot") {
     try {
       const { stdout } = await exec2("copilot", ["--version"], { silent: true, ignoreReturnCode: true });
       notice(`GitHub Copilot CLI already installed (version: ${stdout.trim()})`);
@@ -102032,28 +102054,63 @@ async function installAgentCli(agentType) {
       },
       { retries: 3, delay: 5, label: "GitHub Copilot CLI install" }
     );
+  } else {
+    try {
+      const { stdout } = await exec2("claude", ["--version"], { silent: true, ignoreReturnCode: true });
+      notice(`Claude Code CLI already installed (version: ${stdout.trim()})`);
+      endGroup();
+      return;
+    } catch {
+    }
+    await withRetry(
+      async () => {
+        await exec2("npm", ["install", "-g", "@anthropic-ai/claude-code"]);
+        notice("Claude Code CLI installed successfully");
+      },
+      { retries: 3, delay: 5, label: "Claude Code CLI install" }
+    );
   }
   endGroup();
 }
-async function initializeAgent(agentType, enableDebug) {
-  startGroup(`Initializing ${agentType === "cursor" ? "Cursor" : "GitHub Copilot"} agent`);
+async function initializeAgent(agentType, _enableDebug) {
+  startGroup(`Initializing ${AGENT_LABELS[agentType]} agent`);
   if (agentType === "cursor") {
     await exec2("agent", ["mcp", "enable", "skyramp-mcp"]);
     await sleep(10);
-    if (enableDebug) {
-      try {
-        await exec2("agent", ["mcp", "list"]);
-      } catch {
-        warning("Could not list MCP servers");
+    try {
+      const { stdout } = await exec2("agent", ["mcp", "list"]);
+      if (stdout.includes("skyramp-mcp")) {
+        notice("Cursor MCP server verified: skyramp-mcp is listed");
+      } else {
+        warning("skyramp-mcp not found in MCP server list");
       }
+    } catch {
+      warning("Could not list MCP servers");
     }
-  } else {
+  } else if (agentType === "copilot") {
     await sleep(5);
     try {
       await exec2("copilot", ["--version"]);
       notice("GitHub Copilot CLI initialized successfully");
     } catch {
       warning("Could not verify Copilot CLI version");
+    }
+  } else {
+    try {
+      await exec2("claude", ["--version"]);
+      notice("Claude Code CLI initialized successfully");
+    } catch {
+      warning("Could not verify Claude Code CLI version");
+    }
+    try {
+      const { stdout } = await exec2("claude", ["mcp", "list"]);
+      if (stdout.includes("Connected")) {
+        notice("Claude MCP server verified: skyramp-mcp is connected");
+      } else {
+        warning("skyramp-mcp does not appear connected in MCP server list");
+      }
+    } catch {
+      warning("Could not verify MCP server connectivity");
     }
   }
   endGroup();
@@ -102065,6 +102122,17 @@ function buildAgentCommand(agentType, enableDebug) {
       args.push("--output-format", "stream-json");
     }
     return { command: "agent", args };
+  }
+  if (agentType === "claude") {
+    return {
+      command: "claude",
+      args: [
+        "--dangerously-skip-permissions",
+        "--model",
+        "sonnet",
+        "-p"
+      ]
+    };
   }
   return {
     command: "copilot",
@@ -102542,6 +102610,9 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     exportVariable("CURSOR_API_KEY", inputs.cursorApiKey);
   } else if (agentType === "copilot" && inputs.copilotApiKey) {
     exportVariable("GH_TOKEN", inputs.copilotApiKey);
+  } else if (agentType === "claude" && inputs.anthropicApiKey) {
+    process.env.ANTHROPIC_API_KEY = inputs.anthropicApiKey;
+    process.env.MCP_TIMEOUT = String(secondsToMilliseconds(config.testExecutionTimeout));
   }
   await installAgentCli(agentType);
   await configureMcp(agentType, mcp.command, mcp.args, mcp.licensePath, config.testExecutionTimeout);

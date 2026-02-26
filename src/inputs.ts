@@ -6,6 +6,7 @@ export function getInputs(): ActionInputs {
     skyrampLicenseFile: core.getInput('skyramp_license_file', { required: true }),
     cursorApiKey: core.getInput('cursor_api_key'),
     copilotApiKey: core.getInput('copilot_api_key'),
+    anthropicApiKey: core.getInput('anthropic_api_key'),
     testDirectory: core.getInput('test_directory'),
     serviceStartupCommand: core.getInput('service_startup_command'),
     authTokenCommand: core.getInput('auth_token_command'),
@@ -39,18 +40,37 @@ export function getInputs(): ActionInputs {
   }
 }
 
+/**
+ * Detect which agent CLI to use based on provided inputs.
+ *
+ * Priority order:
+ * 1. cursor_api_key provided → Cursor CLI
+ * 2. copilot_api_key provided → Copilot CLI
+ * 3. anthropic_api_key provided → Claude Code CLI
+ * 4. None → error
+ */
 export function detectAgentType(inputs: ActionInputs): AgentType {
   const hasCursor = !!inputs.cursorApiKey
   const hasCopilot = !!inputs.copilotApiKey
+  const hasClaude = !!inputs.anthropicApiKey
 
-  if (hasCursor && hasCopilot) {
-    throw new Error('Both cursor_api_key and copilot_api_key provided. Please provide only one.')
-  }
-  if (!hasCursor && !hasCopilot) {
-    throw new Error('Either cursor_api_key or copilot_api_key must be provided.')
+  const count = [hasCursor, hasCopilot, hasClaude].filter(Boolean).length
+  if (count > 1) {
+    throw new Error('Multiple agent API keys provided. Please provide only one of: cursor_api_key, copilot_api_key, anthropic_api_key.')
   }
 
-  const agentType = hasCursor ? 'cursor' : 'copilot'
-  core.notice(`Using ${agentType === 'cursor' ? 'Cursor CLI' : 'GitHub Copilot CLI'} agent`)
-  return agentType
+  if (hasCursor) {
+    core.notice('Using Cursor CLI agent')
+    return 'cursor'
+  }
+  if (hasCopilot) {
+    core.notice('Using GitHub Copilot CLI agent')
+    return 'copilot'
+  }
+  if (hasClaude) {
+    core.notice('Using Claude Code CLI agent')
+    return 'claude'
+  }
+
+  throw new Error('No agent API key provided. Please provide one of: cursor_api_key, copilot_api_key, or anthropic_api_key.')
 }

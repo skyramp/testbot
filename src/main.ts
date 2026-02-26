@@ -12,7 +12,7 @@ import { installAgentCli, initializeAgent, buildAgentCommand, buildPrompt, runAg
 import { startServices, generateAuthToken } from './services'
 import { generateGitDiff, configureGitIdentity, autoCommit } from './git'
 import { readSummary, parseMetrics } from './report'
-import { exec, withRetry, withGroup, setDebugEnabled, debug } from './utils'
+import { exec, withRetry, withGroup, setDebugEnabled, debug, secondsToMilliseconds } from './utils'
 
 async function run(): Promise<void> {
   // ── 1. Self-trigger check ───────────────────────────────────────────
@@ -166,6 +166,11 @@ async function run(): Promise<void> {
     core.exportVariable('CURSOR_API_KEY', inputs.cursorApiKey)
   } else if (agentType === 'copilot' && inputs.copilotApiKey) {
     core.exportVariable('GH_TOKEN', inputs.copilotApiKey)
+  } else if (agentType === 'claude' && inputs.anthropicApiKey) {
+    // Set as subprocess-scoped env var (not core.exportVariable which leaks to subsequent steps)
+    process.env.ANTHROPIC_API_KEY = inputs.anthropicApiKey
+    // Set MCP tool timeout (in ms) so long-running tools like skyramp_execute_test don't time out
+    process.env.MCP_TIMEOUT = String(secondsToMilliseconds(config.testExecutionTimeout))
   }
 
   await installAgentCli(agentType)

@@ -117,6 +117,15 @@ export async function configureMcp(
       },
     }
     fs.writeFileSync(path.join(configDir, 'mcp.json'), JSON.stringify(config, null, 2))
+  } else if (agentType === 'claude') {
+    // Use `claude mcp add` to register the server properly
+    // Note: server name must come before -e flags (CLI parses -e greedily)
+    const addArgs = ['mcp', 'add', '--scope', 'user', 'skyramp-mcp']
+    for (const [key, value] of Object.entries(env)) {
+      addArgs.push('-e', `${key}=${value}`)
+    }
+    addArgs.push('--', mcpCommand, ...argsArray)
+    await exec('claude', addArgs)
   } else {
     // Copilot
     const homeDir = path.join(process.env.HOME ?? '~', '.copilot')

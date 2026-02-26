@@ -8,6 +8,7 @@ function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
     skyrampLicenseFile: '',
     cursorApiKey: '',
     copilotApiKey: '',
+    anthropicApiKey: '',
     testDirectory: 'tests',
     serviceStartupCommand: '',
     authTokenCommand: '',
@@ -46,13 +47,33 @@ describe('detectAgentType', () => {
     expect(detectAgentType(inputs)).toBe('copilot')
   })
 
-  it('throws when both keys are provided', () => {
-    const inputs = makeInputs({ cursorApiKey: 'sk-123', copilotApiKey: 'ghp-456' })
-    expect(() => detectAgentType(inputs)).toThrow('Both cursor_api_key and copilot_api_key provided')
+  it('returns claude when only anthropicApiKey is set', () => {
+    const inputs = makeInputs({ anthropicApiKey: 'sk-ant-api03-test' })
+    expect(detectAgentType(inputs)).toBe('claude')
   })
 
-  it('throws when neither key is provided', () => {
+  it('throws when cursor and copilot keys are provided', () => {
+    const inputs = makeInputs({ cursorApiKey: 'sk-123', copilotApiKey: 'ghp-456' })
+    expect(() => detectAgentType(inputs)).toThrow('Multiple agent API keys provided')
+  })
+
+  it('throws when cursor and claude keys are provided', () => {
+    const inputs = makeInputs({ cursorApiKey: 'sk-123', anthropicApiKey: 'sk-ant-api03-test' })
+    expect(() => detectAgentType(inputs)).toThrow('Multiple agent API keys provided')
+  })
+
+  it('throws when copilot and claude keys are provided', () => {
+    const inputs = makeInputs({ copilotApiKey: 'ghp-456', anthropicApiKey: 'sk-ant-api03-test' })
+    expect(() => detectAgentType(inputs)).toThrow('Multiple agent API keys provided')
+  })
+
+  it('throws when all three keys are provided', () => {
+    const inputs = makeInputs({ cursorApiKey: 'sk-123', copilotApiKey: 'ghp-456', anthropicApiKey: 'sk-ant-api03-test' })
+    expect(() => detectAgentType(inputs)).toThrow('Multiple agent API keys provided')
+  })
+
+  it('throws when no key is provided', () => {
     const inputs = makeInputs()
-    expect(() => detectAgentType(inputs)).toThrow('Either cursor_api_key or copilot_api_key must be provided')
+    expect(() => detectAgentType(inputs)).toThrow('No agent API key provided')
   })
 })

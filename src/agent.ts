@@ -3,11 +3,17 @@ import * as fs from 'fs'
 import type { AgentCommand, AgentType, ResolvedConfig, WorkspaceServiceInfo } from './types'
 import { exec, sleep, withRetry } from './utils'
 
+const AGENT_LABELS: Record<AgentType, string> = {
+  cursor: 'Cursor',
+  copilot: 'GitHub Copilot',
+  claude: 'Claude Code',
+}
+
 /**
- * Install the appropriate agent CLI (Cursor or Copilot).
+ * Install the appropriate agent CLI (Cursor, Copilot, or Claude Code).
  */
 export async function installAgentCli(agentType: AgentType): Promise<void> {
-  core.startGroup(`Installing ${agentType === 'cursor' ? 'Cursor' : 'GitHub Copilot'} CLI`)
+  core.startGroup(`Installing ${AGENT_LABELS[agentType]} CLI`)
 
   if (agentType === 'cursor') {
     // Check if already installed
@@ -30,8 +36,7 @@ export async function installAgentCli(agentType: AgentType): Promise<void> {
       },
       { retries: 3, delay: 5, label: 'Cursor CLI install' },
     )
-  } else {
-    // Copilot
+  } else if (agentType === 'copilot') {
     try {
       const { stdout } = await exec('copilot', ['--version'], { silent: true, ignoreReturnCode: true })
       core.notice(`GitHub Copilot CLI already installed (version: ${stdout.trim()})`)
@@ -48,6 +53,24 @@ export async function installAgentCli(agentType: AgentType): Promise<void> {
       },
       { retries: 3, delay: 5, label: 'GitHub Copilot CLI install' },
     )
+  } else {
+    // Claude Code
+    try {
+      const { stdout } = await exec('claude', ['--version'], { silent: true, ignoreReturnCode: true })
+      core.notice(`Claude Code CLI already installed (version: ${stdout.trim()})`)
+      core.endGroup()
+      return
+    } catch {
+      // Not installed, continue
+    }
+
+    await withRetry(
+      async () => {
+        await exec('npm', ['install', '-g', '@anthropic-ai/claude-code'])
+        core.notice('Claude Code CLI installed successfully')
+      },
+      { retries: 3, delay: 5, label: 'Claude Code CLI install' },
+    )
   }
 
   core.endGroup()
@@ -56,27 +79,51 @@ export async function installAgentCli(agentType: AgentType): Promise<void> {
 /**
  * Initialize the agent (enable MCP server, wait for startup).
  */
-export async function initializeAgent(agentType: AgentType, enableDebug: boolean): Promise<void> {
-  core.startGroup(`Initializing ${agentType === 'cursor' ? 'Cursor' : 'GitHub Copilot'} agent`)
+export async function initializeAgent(agentType: AgentType, _enableDebug: boolean): Promise<void> {
+  core.startGroup(`Initializing ${AGENT_LABELS[agentType]} agent`)
 
   if (agentType === 'cursor') {
     await exec('agent', ['mcp', 'enable', 'skyramp-mcp'])
     await sleep(10)
 
-    if (enableDebug) {
-      try {
-        await exec('agent', ['mcp', 'list'])
-      } catch {
-        core.warning('Could not list MCP servers')
+    // Verify MCP server is connected
+    try {
+      const { stdout } = await exec('agent', ['mcp', 'list'])
+      if (stdout.includes('skyramp-mcp')) {
+        core.notice('Cursor MCP server verified: skyramp-mcp is listed')
+      } else {
+        core.warning('skyramp-mcp not found in MCP server list')
       }
+    } catch {
+      core.warning('Could not list MCP servers')
     }
-  } else {
+  } else if (agentType === 'copilot') {
     await sleep(5)
     try {
       await exec('copilot', ['--version'])
       core.notice('GitHub Copilot CLI initialized successfully')
     } catch {
       core.warning('Could not verify Copilot CLI version')
+    }
+  } else {
+    // Claude Code — MCP is configured via settings.json, no explicit enable needed
+    try {
+      await exec('claude', ['--version'])
+      core.notice('Claude Code CLI initialized successfully')
+    } catch {
+      core.warning('Could not verify Claude Code CLI version')
+    }
+
+    // Verify MCP server is connected
+    try {
+      const { stdout } = await exec('claude', ['mcp', 'list'])
+      if (stdout.includes('Connected')) {
+        core.notice('Claude MCP server verified: skyramp-mcp is connected')
+      } else {
+        core.warning('skyramp-mcp does not appear connected in MCP server list')
+      }
+    } catch {
+      core.warning('Could not verify MCP server connectivity')
     }
   }
 
@@ -93,6 +140,17 @@ export function buildAgentCommand(agentType: AgentType, enableDebug: boolean): A
       args.push('--output-format', 'stream-json')
     }
     return { command: 'agent', args }
+  }
+
+  if (agentType === 'claude') {
+    return {
+      command: 'claude',
+      args: [
+        '--dangerously-skip-permissions',
+        '--model', 'sonnet',
+        '-p',
+      ],
+    }
   }
 
   return {

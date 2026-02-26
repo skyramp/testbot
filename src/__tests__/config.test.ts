@@ -24,6 +24,7 @@ function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
     skyrampLicenseFile: 'license',
     cursorApiKey: 'key',
     copilotApiKey: '',
+    anthropicApiKey: '',
     testDirectory: 'tests',
     serviceStartupCommand: 'docker compose up -d',
     authTokenCommand: '',

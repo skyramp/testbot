@@ -23,6 +23,9 @@ inputs:
   copilot_api_key:
     description: 'Copilot API key for AI agent access. Requires a GitHub PAT with "Copilot Requests" permission.'
     required: false
+  anthropic_api_key:
+    description: 'Anthropic API key for Claude Code agent access (store in GitHub Secrets)'
+    required: false
 
   # High priority optional inputs
   test_directory:

@@ -1,4 +1,4 @@
-export type AgentType = 'cursor' | 'copilot'
+export type AgentType = 'cursor' | 'copilot' | 'claude'
 
 export type McpSource = 'npm' | 'github'
 
@@ -6,6 +6,7 @@ export interface ActionInputs {
   skyrampLicenseFile: string
   cursorApiKey: string
   copilotApiKey: string
+  anthropicApiKey: string
   testDirectory: string
   serviceStartupCommand: string
   authTokenCommand: string
