@@ -1,0 +1,137 @@
+name: 'Skyramp Testbot'
+description: "Github Action for using Skyramp's Testbot for AI-Powered Deterministic Testing"
+author: 'Skyramp Inc'
+
+branding:
+  icon: 'zap'
+  color: 'purple'
+
+inputs:
+  # GitHub token (automatically provided by the runner)
+  github_token:
+    description: 'GitHub token for PR comments and API access. Defaults to the automatic GITHUB_TOKEN.'
+    required: false
+    default: ${{ github.token }}
+
+  # Required inputs
+  skyramp_license_file:
+    description: 'Skyramp license file content (store in GitHub Secrets)'
+    required: true
+  cursor_api_key:
+    description: 'Cursor API key for AI agent access (store in GitHub Secrets)'
+    required: false
+  copilot_api_key:
+    description: 'Copilot API key for AI agent access. Requires a GitHub PAT with "Copilot Requests" permission.'
+    required: false
+
+  # High priority optional inputs
+  test_directory:
+    description: 'Directory containing Skyramp tests'
+    required: false
+    default: 'tests'
+  service_startup_command:
+    description: 'Command to start services before test maintenance'
+    required: false
+    default: 'docker compose up -d'
+  auth_token_command:
+    description: 'Shell command to generate an authentication token. Runs after services start; stdout is captured and set as SKYRAMP_TEST_TOKEN for test execution.'
+    required: false
+    default: ''
+
+  # Medium priority optional inputs
+  skyramp_executor_version:
+    description: 'Skyramp Executor Docker image version'
+    required: false
+    default: 'v1.3.3'
+  skyramp_mcp_version:
+    description: 'Skyramp MCP package version'
+    required: false
+    default: 'latest'
+  skyramp_mcp_source:
+    description: 'Source for Skyramp MCP package: "npm" or "github"'
+    required: false
+    default: 'npm'
+  skyramp_mcp_github_token:
+    description: 'GitHub PAT with read access to letsramp/mcp (required when source is "github")'
+    required: false
+  skyramp_mcp_github_ref:
+    description: 'Git ref (branch/tag/commit) for letsramp/mcp (used when source is "github")'
+    required: false
+    default: 'main'
+  node_version:
+    description: 'Node.js version to use'
+    required: false
+    default: 'lts/*'
+  skip_service_startup:
+    description: 'Skip running service startup command'
+    required: false
+    default: 'false'
+  health_check_command:
+    description: 'Shell command to verify services are ready (retried until success or timeout)'
+    required: false
+    default: 'sleep 5'
+  health_check_timeout:
+    description: 'Maximum seconds to wait for health check command to succeed'
+    required: false
+    default: '30'
+  health_check_diagnostics_command:
+    description: 'Shell command to collect diagnostics on health check timeout. Runs when health_check_command times out.'
+    required: false
+    default: "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' && docker ps -a --format '{{.Names}}' | while read name; do [ -n \"$name\" ] && echo \"--- logs $name (last 30) ---\" && docker logs --tail 30 \"$name\"; done"
+  working_directory:
+    description: 'Working directory for the action'
+    required: false
+    default: '.'
+  auto_commit:
+    description: 'Automatically commit test changes'
+    required: false
+    default: 'true'
+  commit_message:
+    description: 'Commit message for test changes'
+    required: false
+    default: 'Skyramp Testbot: test maintenance suggestions'
+  post_pr_comment:
+    description: 'Post summary as PR comment'
+    required: false
+    default: 'true'
+  testbot_max_retries:
+    description: 'Maximum number of retries for transient agent CLI errors (e.g., Cursor "Connection stalled")'
+    required: false
+    default: '3'
+  testbot_retry_delay:
+    description: 'Delay in seconds between agent retry attempts'
+    required: false
+    default: '10'
+  test_execution_timeout:
+    description: 'Timeout in seconds for individual MCP tool calls (e.g., test execution). Increase if tests take longer than 5 minutes.'
+    required: false
+    default: '300'
+  testbot_timeout:
+    description: 'Timeout in minutes for the agent execution (safety net; does not kill the child process)'
+    required: false
+    default: '10'
+  report_collapsed:
+    description: 'Wrap report sections in collapsible <details> blocks with a summary line'
+    required: false
+    default: 'false'
+  enable_debug:
+    description: 'Enable debug logging'
+    required: false
+    default: 'false'
+outputs:
+  test_summary:
+    description: 'Full summary of test maintenance actions'
+  tests_modified:
+    description: 'Number of tests modified'
+  tests_created:
+    description: 'Number of tests created'
+  tests_executed:
+    description: 'Number of tests executed'
+  skipped_self_trigger:
+    description: 'Whether execution was skipped due to detecting own commit'
+  commit_sha:
+    description: 'SHA of the commit made by testbot (empty if no commit)'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
