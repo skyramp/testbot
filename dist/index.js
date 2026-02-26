@@ -102219,50 +102219,54 @@ async function runAgentWithRetry(agentCmd, prompt, config, opts = {}) {
 // src/services.ts
 init_core();
 async function startServices(config, workingDir) {
-  startGroup("Starting services");
-  if (config.skipServiceStartup) {
-    notice("Skipping service startup (skip_service_startup=true)");
-    endGroup();
-    return;
-  }
-  info(`Running command: ${config.serviceStartupCommand}`);
-  try {
-    await exec2("bash", ["-c", config.serviceStartupCommand], { cwd: workingDir });
-    notice("Services started successfully");
-  } catch {
-    warning("Service startup command failed, but continuing...");
-  }
-  info(`Running health check: ${config.healthCheckCommand}`);
-  const startTime = Date.now();
-  const timeoutMs = secondsToMilliseconds(config.healthCheckTimeout);
-  const pollInterval = 2;
-  let attempt = 0;
-  while (Date.now() - startTime < timeoutMs) {
-    attempt++;
-    const { exitCode } = await exec2("bash", ["-c", config.healthCheckCommand], {
-      cwd: workingDir,
-      ignoreReturnCode: true
-    });
-    if (exitCode === 0) {
-      notice(`Health check passed on attempt ${attempt}`);
-      endGroup();
+  await withGroup("Starting services", async () => {
+    if (config.skipServiceStartup) {
+      notice("Skipping service startup (skip_service_startup=true)");
       return;
     }
-    const elapsed = Math.round((Date.now() - startTime) / 1e3);
-    info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.healthCheckTimeout}s), retrying in ${pollInterval}s...`);
-    await sleep(pollInterval);
-  }
-  warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`);
-  try {
-    info("--- Diagnostics ---");
-    await exec2("bash", ["-c", config.healthCheckDiagnosticsCommand], {
-      cwd: workingDir,
-      ignoreReturnCode: true
-    });
-  } catch {
-    info("Could not retrieve diagnostics");
-  }
-  endGroup();
+    info(`Running command: ${config.serviceStartupCommand}`);
+    try {
+      await exec2("bash", ["-c", config.serviceStartupCommand], { cwd: workingDir });
+      notice("Services started successfully");
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      error(`Service startup command failed: ${errMsg}`);
+      throw new Error(
+        `Service startup failed \u2014 all subsequent tests will likely fail. Command: ${config.serviceStartupCommand}`,
+        { cause: err }
+      );
+    }
+    info(`Running health check: ${config.healthCheckCommand}`);
+    const startTime = Date.now();
+    const timeoutMs = secondsToMilliseconds(config.healthCheckTimeout);
+    const pollInterval = 2;
+    let attempt = 0;
+    while (Date.now() - startTime < timeoutMs) {
+      attempt++;
+      const { exitCode } = await exec2("bash", ["-c", config.healthCheckCommand], {
+        cwd: workingDir,
+        ignoreReturnCode: true
+      });
+      if (exitCode === 0) {
+        notice(`Health check passed on attempt ${attempt}`);
+        return;
+      }
+      const elapsed = Math.round((Date.now() - startTime) / 1e3);
+      info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.healthCheckTimeout}s), retrying in ${pollInterval}s...`);
+      await sleep(pollInterval);
+    }
+    warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`);
+    try {
+      info("--- Diagnostics ---");
+      await exec2("bash", ["-c", config.healthCheckDiagnosticsCommand], {
+        cwd: workingDir,
+        ignoreReturnCode: true
+      });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      warning(`Could not retrieve diagnostics: ${errMsg}`);
+    }
+  });
 }
 async function generateAuthToken(config, workingDir) {
   if (!config.authTokenCommand) return "";
@@ -102618,7 +102622,27 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   await configureMcp(agentType, mcp.command, mcp.args, mcp.licensePath, config.testExecutionTimeout);
   await initializeAgent(agentType, config.enableDebug);
   const agentCmd = buildAgentCommand(agentType, config.enableDebug);
-  await startServices(config, workingDir);
+  try {
+    await startServices(config, workingDir);
+  } catch (err) {
+    const errMsg = err.message;
+    if (prNumber) {
+      await postStandaloneComment(prNumber, [
+        `### :x: Skyramp Testbot \u2014 Service Startup Failed`,
+        "",
+        `**Error:** ${errMsg}`,
+        "",
+        "**How to fix:**",
+        `- Check that your \`service_startup_command\` is correct: \`${config.serviceStartupCommand}\``,
+        "- Verify the service names in your `docker-compose.yml` (or equivalent) match the command",
+        "- Ensure all referenced Docker images exist and can be pulled",
+        "- You can test locally by running the command manually",
+        "",
+        "This setting can be configured in your workflow file (`service_startup_command` input) or in `.skyramp/workspace.yml`."
+      ].join("\n"));
+    }
+    throw err;
+  }
   const dynamicToken = await generateAuthToken(config, workingDir);
   const authToken = dynamicToken || process.env.SKYRAMP_TEST_TOKEN || "";
   const tokenSource = dynamicToken ? "auth_token_command" : process.env.SKYRAMP_TEST_TOKEN ? "SKYRAMP_TEST_TOKEN env var" : "none";

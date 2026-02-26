@@ -179,7 +179,27 @@ async function run(): Promise<void> {
   const agentCmd = buildAgentCommand(agentType, config.enableDebug)
 
   // ── 12. Start services & generate auth token ───────────────────────
-  await startServices(config, workingDir)
+  try {
+    await startServices(config, workingDir)
+  } catch (err) {
+    const errMsg = (err as Error).message
+    if (prNumber) {
+      await postStandaloneComment(prNumber, [
+        `### :x: Skyramp Testbot — Service Startup Failed`,
+        '',
+        `**Error:** ${errMsg}`,
+        '',
+        '**How to fix:**',
+        `- Check that your \`service_startup_command\` is correct: \`${config.serviceStartupCommand}\``,
+        '- Verify the service names in your `docker-compose.yml` (or equivalent) match the command',
+        '- Ensure all referenced Docker images exist and can be pulled',
+        '- You can test locally by running the command manually',
+        '',
+        'This setting can be configured in your workflow file (`service_startup_command` input) or in `.skyramp/workspace.yml`.',
+      ].join('\n'))
+    }
+    throw err
+  }
   // Dynamic token (from auth_token_command) takes priority, then fall back
   // to the static SKYRAMP_TEST_TOKEN env var set at the workflow level.
   const dynamicToken = await generateAuthToken(config, workingDir)
