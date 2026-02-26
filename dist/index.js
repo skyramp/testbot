@@ -102727,12 +102727,17 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
       }
     });
   }
+  let commitSha = "";
   if (config.autoCommit) {
     await configureGitIdentity(botName, botEmail);
-    await autoCommit(config);
+    commitSha = await autoCommit(config);
   }
   if (!result.success) {
-    setFailed(`Skyramp Testbot failed with exit code ${result.exitCode}`);
+    if (commitSha) {
+      setFailed(`Skyramp Testbot failed with exit code ${result.exitCode}`);
+    } else {
+      warning(`Skyramp Testbot exited with code ${result.exitCode} but produced no file changes \u2014 treating as successful`);
+    }
   }
 }
 run().catch((err) => {

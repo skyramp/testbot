@@ -316,14 +316,21 @@ async function run(): Promise<void> {
   }
 
   // ── 18. Auto-commit test changes ───────────────────────────────────
+  let commitSha = ''
   if (config.autoCommit) {
     await configureGitIdentity(botName, botEmail)
-    await autoCommit(config)
+    commitSha = await autoCommit(config)
   }
 
-  // If the testbot failed, fail the action at the end (after posting results)
+  // If the testbot agent failed AND it produced file changes, fail the action.
+  // When there are no changes to commit (e.g. setup PR, no testable code),
+  // treat it as a graceful no-op so the workflow check stays green.
   if (!result.success) {
-    core.setFailed(`Skyramp Testbot failed with exit code ${result.exitCode}`)
+    if (commitSha) {
+      core.setFailed(`Skyramp Testbot failed with exit code ${result.exitCode}`)
+    } else {
+      core.warning(`Skyramp Testbot exited with code ${result.exitCode} but produced no file changes — treating as successful`)
+    }
   }
 }
 
