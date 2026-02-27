@@ -2,6 +2,9 @@ export type AgentType = 'cursor' | 'copilot' | 'claude'
 
 export type McpSource = 'npm' | 'github'
 
+/** Name used to register and reference the Skyramp MCP server across all agent types. */
+export const SKYRAMP_MCP_SERVER_NAME = 'skyramp'
+
 export interface ActionInputs {
   skyrampLicenseFile: string
   cursorApiKey: string

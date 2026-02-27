@@ -1,6 +1,7 @@
 import './mocks/core'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { buildPrompt, buildAgentCommand, installAgentCli } from '../agent'
+import { SKYRAMP_MCP_SERVER_NAME } from '../types'
 import { exec } from '../utils'
 
 vi.mock('../utils', () => ({
@@ -20,7 +21,7 @@ describe('buildPrompt', () => {
       repositoryPath: '/home/runner/work/repo',
     })
 
-    expect(prompt).toContain('skyramp://prompts/testbot?')
+    expect(prompt).toContain(`${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?`)
     expect(prompt).toContain('prTitle=Add%20product%20search')
     expect(prompt).toContain('prDescription=Implements%20search%20endpoint')
     expect(prompt).toContain('testDirectory=tests%2Fpython')
@@ -106,6 +107,22 @@ describe('buildPrompt', () => {
 
     expect(prompt).not.toContain('<services>')
     expect(prompt).not.toContain('<service')
+  })
+
+  it('uses SKYRAMP_MCP_SERVER_NAME constant for URI scheme', () => {
+    const prompt = buildPrompt({
+      prTitle: 'Test',
+      prBody: '',
+      testDirectory: 'tests',
+      summaryPath: '/tmp/summary.json',
+      authToken: '',
+      repositoryPath: '.',
+    })
+
+    // URI scheme must derive from the constant, not be hardcoded
+    const uriMatch = prompt.match(/^(.+?):\/\/prompts\/testbot\?/m)
+    expect(uriMatch).not.toBeNull()
+    expect(uriMatch![1]).toBe(SKYRAMP_MCP_SERVER_NAME)
   })
 
   it('only includes non-empty service fields', () => {

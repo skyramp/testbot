@@ -1,6 +1,7 @@
 import * as core from '@actions/core'
 import * as fs from 'fs'
 import type { AgentCommand, AgentType, ResolvedConfig, WorkspaceServiceInfo } from './types'
+import { SKYRAMP_MCP_SERVER_NAME } from './types'
 import { exec, sleep, withRetry } from './utils'
 
 const AGENT_LABELS: Record<AgentType, string> = {
@@ -83,16 +84,16 @@ export async function initializeAgent(agentType: AgentType, _enableDebug: boolea
   core.startGroup(`Initializing ${AGENT_LABELS[agentType]} agent`)
 
   if (agentType === 'cursor') {
-    await exec('agent', ['mcp', 'enable', 'skyramp-mcp'])
+    await exec('agent', ['mcp', 'enable', SKYRAMP_MCP_SERVER_NAME])
     await sleep(10)
 
     // Verify MCP server is connected
     try {
       const { stdout } = await exec('agent', ['mcp', 'list'])
-      if (stdout.includes('skyramp-mcp')) {
-        core.notice('Cursor MCP server verified: skyramp-mcp is listed')
+      if (stdout.includes(SKYRAMP_MCP_SERVER_NAME)) {
+        core.notice(`Cursor MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is listed`)
       } else {
-        core.warning('skyramp-mcp not found in MCP server list')
+        core.warning(`${SKYRAMP_MCP_SERVER_NAME} not found in MCP server list`)
       }
     } catch {
       core.warning('Could not list MCP servers')
@@ -117,10 +118,14 @@ export async function initializeAgent(agentType: AgentType, _enableDebug: boolea
     // Verify MCP server is connected
     try {
       const { stdout } = await exec('claude', ['mcp', 'list'])
-      if (stdout.includes('Connected')) {
-        core.notice('Claude MCP server verified: skyramp-mcp is connected')
+      const isSkyrampConnected = stdout
+        .split('\n')
+        .some(line => line.includes(SKYRAMP_MCP_SERVER_NAME) && line.toLowerCase().includes('connected'))
+
+      if (isSkyrampConnected) {
+        core.notice(`Claude MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is connected`)
       } else {
-        core.warning('skyramp-mcp does not appear connected in MCP server list')
+        core.warning(`${SKYRAMP_MCP_SERVER_NAME} does not appear connected in MCP server list`)
       }
     } catch {
       core.warning('Could not verify MCP server connectivity')
@@ -185,7 +190,7 @@ export function buildPrompt(opts: {
   const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : ''
 
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-skyramp://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}
+${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 

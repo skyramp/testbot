@@ -2,6 +2,7 @@ import * as core from '@actions/core'
 import * as fs from 'fs'
 import * as path from 'path'
 import type { ActionInputs, AgentType, McpPaths, ResolvedConfig } from './types'
+import { SKYRAMP_MCP_SERVER_NAME } from './types'
 import { exec, debug, secondsToMilliseconds } from './utils'
 
 
@@ -108,7 +109,7 @@ export async function configureMcp(
 
     const config = {
       mcpServers: {
-        'skyramp-mcp': {
+        [SKYRAMP_MCP_SERVER_NAME]: {
           command: mcpCommand,
           args: argsArray,
           env,
@@ -120,7 +121,7 @@ export async function configureMcp(
   } else if (agentType === 'claude') {
     // Use `claude mcp add` to register the server properly
     // Note: server name must come before -e flags (CLI parses -e greedily)
-    const addArgs = ['mcp', 'add', '--scope', 'user', 'skyramp-mcp']
+    const addArgs = ['mcp', 'add', '--scope', 'user', SKYRAMP_MCP_SERVER_NAME]
     for (const [key, value] of Object.entries(env)) {
       addArgs.push('-e', `${key}=${value}`)
     }
@@ -133,7 +134,7 @@ export async function configureMcp(
 
     const config = {
       mcpServers: {
-        'skyramp-mcp': {
+        [SKYRAMP_MCP_SERVER_NAME]: {
           type: 'local',
           command: mcpCommand,
           args: argsArray,
