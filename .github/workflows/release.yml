@@ -73,11 +73,21 @@ jobs:
           token: ${{ secrets.PUBLIC_REPO_TOKEN }}
           path: public-testbot
 
+      - name: Update README version references
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          MINOR_TAG="${{ steps.version.outputs.minor_tag }}"
+          sed -i -E "s|skyramp/testbot@v[0-9]+\.[0-9]+\.[0-9]+|skyramp/testbot@${TAG}|g" README.md
+          sed -i -E "s|skyramp/testbot@v[0-9]+\.[0-9]+([^0-9.]|$)|skyramp/testbot@${MINOR_TAG}\1|g" README.md
+          echo "Updated README version references to ${TAG} / ${MINOR_TAG}:"
+          grep -n 'skyramp/testbot@' README.md
+
       - name: Copy artifacts
         run: |
           mkdir -p public-testbot/dist
           cp dist/index.js public-testbot/dist/index.js
           cp action.yml public-testbot/action.yml
+          cp README.md public-testbot/README.md
 
       - name: Commit and push to public repo
         if: steps.version.outputs.dry_run == 'false'
@@ -85,7 +95,7 @@ jobs:
           cd public-testbot
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist/index.js action.yml
+          git add dist/index.js action.yml README.md
           if git diff --cached --quiet; then
             echo "No changes to commit — artifacts are identical to the last release"
             exit 0
@@ -116,7 +126,7 @@ jobs:
           echo "Release name: ${{ steps.version.outputs.release_name }}"
           echo ""
           echo "Artifacts that would be published:"
-          ls -la public-testbot/dist/index.js public-testbot/action.yml
+          ls -la public-testbot/dist/index.js public-testbot/action.yml public-testbot/README.md
           echo ""
           echo "Diff in public repo:"
           cd public-testbot && git diff

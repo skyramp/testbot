@@ -3,23 +3,22 @@
 > Automated test maintenance for your REST APIs using Skyramp's AI-powered Testbot
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Skyramp%20Testbot-blue?logo=github)](https://github.com/marketplace/actions/skyramp-testbot)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 
 ## Features
 
 - 🤖 **Skyramp Powered Test Maintenance** - Automatically updates tests when code changes
 - 🔍 **Smart Change Detection** - Analyzes git diffs to identify impacted tests
-- ✨ **Test Generation** - Creates new tests for uncovered code changes
+- ✨ **Test Generation** - Creates new tests for new code additions
 - ✅ **Automated Test Execution** - Runs tests and validates results
 - 💬 **PR Integration** - Posts detailed summaries as PR comments
 - 🔄 **Auto-commit** - Optionally commits test changes automatically
-- 📁 **Workspace Config** - Project-level settings via .skyramp.yml
 
 ## Quick Start
 
-1. Setup your repository with 2 secrets
-    1. Obtain [Skyramp](https://skyramp.dev) license key.
-    2. Generate a Cursor or GitHub Copilot API Key.
+1. Setup your repository with 2 secrets:
+    1. Obtain a [Skyramp](https://skyramp.dev) license key and store it as `SKYRAMP_LICENSE`.
+    2. Add an API key for your chosen AI agent (`ANTHROPIC_API_KEY`, `CURSOR_API_KEY`, or `COPILOT_PAT`).
 2. Add this workflow to your repository:
 
     Cursor version
@@ -29,50 +28,26 @@
     on: [pull_request]
 
     jobs:
-      test-maintenance:
+      testbot:
         runs-on: ubuntu-latest
         permissions:
           contents: write
           pull-requests: write
         steps:
-          - uses: actions/checkout@v6
+          - uses: actions/checkout@v4
             with:
               fetch-depth: 0
 
-          - uses: skyramp/testbot@v0.2
+          - uses: skyramp/testbot@v0.1
             with:
               skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-              cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
     ```
 
-    GitHub Copilot version
+## Agent Customization
 
-    ```yaml
-    name: Skyramp Testbot
-    on: [pull_request]
+Should you want to use your own AI agent subscription, provision a key and use the appropriate input.
 
-    jobs:
-      test-maintenance:
-        runs-on: ubuntu-latest
-        permissions:
-          contents: write
-          pull-requests: write
-        steps:
-          - uses: actions/checkout@v6
-            with:
-              fetch-depth: 0
-
-          - uses: skyramp/testbot@v0.2
-            with:
-              skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-              copilot_api_key: ${{ secrets.COPILOT_API_KEY }}
-    ```
-
-
-## Agent Selection
-
-This action supports two AI agents:
-
+- Claude Code - Coding Agent by Anthropic
 - **Cursor CLI** - Powerful AI agent from Cursor
 - **GitHub Copilot CLI** - GitHub's AI coding assistant
 
@@ -83,6 +58,7 @@ Choose the agent that best fits your needs and existing subscriptions.
 Before using this action, ensure you have:
 
 - [ ] Skyramp license file content stored in GitHub Secrets as `SKYRAMP_LICENSE`
+- [ ] **For Claude Code**: Claude Code API key stored in GitHub Secrets as `ANTHROPIC_API_KEY`
 - [ ] **For Cursor**: Cursor API key stored in GitHub Secrets as `CURSOR_API_KEY`
 - [ ] **For Copilot**: GitHub token with Copilot access stored in GitHub Secrets as `GITHUB_TOKEN` or `COPILOT_PAT`
 - [ ] Docker available in your runner (for Skyramp Executor)
@@ -98,6 +74,7 @@ Before using this action, ensure you have:
 | Input | Description |
 |-------|-------------|
 | `skyramp_license_file` | Skyramp license file content (store in GitHub Secrets) |
+| `anthropic_api_key` | Anthropic API key (provide this to use Claude Code) |
 | `cursor_api_key` | Cursor API key (provide this to use Cursor agent) |
 | `copilot_api_key` | GitHub token with Copilot access (provide this to use Copilot agent) |
 
@@ -123,41 +100,8 @@ Before using this action, ensure you have:
 | `post_pr_comment` | Post summary as PR comment | `true` |
 | `testbot_max_retries` | Maximum number of retries for transient agent CLI errors | `3` |
 | `testbot_retry_delay` | Delay in seconds between agent retry attempts | `10` |
-| `enable_debug` | Enable debug logging | `false` |
+| `enable_debug` | Enable debug logging | `true` |
 | `config_file` | Path to Skyramp workspace config file | `.skyramp.yml` |
-
-## Workspace Configuration (.skyramp.yml)
-
-You can configure Testbot at the project level by creating a `.skyramp.yml` file in your repository root. Values in this file take precedence over workflow defaults.
-
-```yaml
-# .skyramp.yml
-test_directory: "tests"
-service_startup_command: "docker compose up -d"
-auth_token_command: ""
-skyramp_executor_version: "v1.3.3"
-skyramp_mcp_version: "latest"
-node_version: "lts/*"
-skip_service_startup: false
-working_directory: "."
-auto_commit: true
-commit_message: "Skyramp Testbot: test maintenance suggestions"
-post_pr_comment: true
-testbot_max_retries: 3
-testbot_retry_delay: 10
-enable_debug: false
-```
-
-### Configuration Precedence
-
-1. **.skyramp.yml values** - project-level configuration (highest priority)
-2. **GitHub Action inputs** - workflow file values or defaults
-
-This allows teams to define project-specific settings that override workflow defaults without modifying the workflow file.
-
-> **Note:** Secrets (`skyramp_license_file` and `cursor_api_key`) must always be provided via GitHub Secrets and cannot be configured in .skyramp.yml.
-
-For detailed configuration options, see [docs/configuration.md](docs/configuration.md).
 
 ## Outputs
 
@@ -170,10 +114,20 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 
 ## Usage Examples
 
-### Basic Usage with Cursor (Default)
+### Basic Usage with Claude Code
 
 ```yaml
-- uses: skyramp/testbot@v1
+- uses: skyramp/testbot@v0.1.0
+  with:
+    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+
+```
+
+### Basic Usage with Cursor
+
+```yaml
+- uses: skyramp/testbot@v0.1.0
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -182,7 +136,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 ### Using GitHub Copilot CLI
 
 ```yaml
-- uses: skyramp/testbot@v1
+- uses: skyramp/testbot@v0.1.0
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     copilot_api_key: ${{ secrets.COPILOT_PAT }}
@@ -191,7 +145,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v1
+- uses: skyramp/testbot@v0.1.0
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -201,7 +155,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v1
+- uses: skyramp/testbot@v0.1.0
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -211,7 +165,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 ### Custom Test Directory Location
 
 ```yaml
-- uses: skyramp/testbot@v1
+- uses: skyramp/testbot@v0.1.0
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -220,7 +174,7 @@ For detailed configuration options, see [docs/configuration.md](docs/configurati
 
 ### Authentication
 
-If your API requires authentication, there are two ways to provide a token for test execution.
+If your API under test requires authentication, there are two ways to provide a token for test execution.
 
 #### Static Token
 
@@ -238,7 +192,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v1
+      - uses: skyramp/testbot@v0.1.0
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -249,7 +203,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `auth_token_command` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v1
+- uses: skyramp/testbot@v0.1.0
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -261,7 +215,7 @@ The token is automatically masked in GitHub Actions logs via `::add-mask::`. If 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v1
+- uses: skyramp/testbot@v0.1.0
   id: skyramp
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
@@ -298,7 +252,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead of GITHUB_TOKEN
 
-      - uses: skyramp/testbot@v1
+      - uses: skyramp/testbot@v0.1.0
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -309,6 +263,7 @@ See [examples/trigger-workflows.yml](examples/trigger-workflows.yml) for a compl
 ### How It Works
 
 The recursion prevention has two layers:
+
 1. **Job-level condition**: On `push` events, skips the entire job if the commit was made by Testbot
 2. **Action-level detection**: The action detects self-triggers (using `git log` for `pull_request` events where `head_commit` is unavailable) and exits gracefully
 
@@ -333,23 +288,27 @@ This ensures Testbot never runs on its own commits while allowing other workflow
 ### Common Issues
 
 **CLI installation fails**
+
 - Check runner network connectivity
 - Verify the installation endpoint is accessible
 - Try enabling debug mode: `enable_debug: true`
 - For Copilot: Ensure npm is working correctly
 
 **License validation errors**
+
 - Ensure license content is properly stored in GitHub Secrets
 - Check that license file is not expired
 - Verify secret name matches input parameter
 
 **Service startup issues**
+
 - Verify docker-compose.yml exists in repository
 - Check that Docker is available in runner
 - Use `skip_service_startup: true` if services not needed
 - Customize with `service_startup_command` for different startup methods
 
 **Agent timeout or failures**
+
 - **Cursor**: Check API key is valid and has quota remaining
 - **Copilot**: Verify Copilot subscription is active and token is valid
 - Review agent logs for specific errors
@@ -369,26 +328,14 @@ For advanced configuration options and patterns, see [docs/configuration.md](doc
 4. **Review auto-commits** - Consider disabling auto-commit for sensitive repositories
 5. **Audit logs** - Enable debug mode periodically to review action behavior
 
-## Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/skyramp/testbot/issues)
 - **Documentation**: [docs/](docs/)
 - **Website**: [skyramp.dev](https://skyramp.dev)
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-Built with:
-- [Cursor CLI](https://cursor.com) - AI-powered agent capabilities
-- [GitHub Copilot CLI](https://github.com/features/copilot/cli) - GitHub's AI coding assistant
-- [GitHub Actions](https://github.com/features/actions) - CI/CD automation
+This project is licensed under the ISC License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
