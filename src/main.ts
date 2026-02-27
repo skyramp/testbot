@@ -222,6 +222,7 @@ async function run(): Promise<void> {
     const prompt = buildPrompt({
       prTitle: github.context.payload.pull_request?.title ?? '',
       prBody: github.context.payload.pull_request?.body ?? '',
+      baseBranch: github.context.payload.pull_request?.base?.ref ?? '',
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,

@@ -102147,8 +102147,9 @@ function buildAgentCommand(agentType, enableDebug) {
 }
 function buildPrompt(opts) {
   const serviceContext = opts.services?.length ? buildServiceContext(opts.services) : "";
+  const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-skyramp://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}
+skyramp://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
@@ -102656,6 +102657,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     const prompt = buildPrompt({
       prTitle: context2.payload.pull_request?.title ?? "",
       prBody: context2.payload.pull_request?.body ?? "",
+      baseBranch: context2.payload.pull_request?.base?.ref ?? "",
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,

@@ -171,6 +171,7 @@ export function buildAgentCommand(agentType: AgentType, enableDebug: boolean): A
 export function buildPrompt(opts: {
   prTitle: string
   prBody: string
+  baseBranch?: string
   testDirectory: string
   summaryPath: string
   authToken: string
@@ -181,8 +182,10 @@ export function buildPrompt(opts: {
     ? buildServiceContext(opts.services)
     : ''
 
+  const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : ''
+
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-skyramp://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}
+skyramp://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
