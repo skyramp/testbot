@@ -101914,6 +101914,11 @@ Please check your workflow configuration and ensure all required secrets are set
 init_core();
 var fs4 = __toESM(require("fs"));
 var path6 = __toESM(require("path"));
+
+// src/types.ts
+var SKYRAMP_MCP_SERVER_NAME = "skyramp";
+
+// src/mcp.ts
 async function installMcp(config, inputs, workingDir) {
   startGroup("Installing Skyramp MCP");
   let command;
@@ -101970,7 +101975,7 @@ async function configureMcp(agentType, mcpCommand, mcpArgs, licensePath, testExe
     fs4.mkdirSync(configDir, { recursive: true });
     const config = {
       mcpServers: {
-        "skyramp-mcp": {
+        [SKYRAMP_MCP_SERVER_NAME]: {
           command: mcpCommand,
           args: argsArray,
           env,
@@ -101980,7 +101985,7 @@ async function configureMcp(agentType, mcpCommand, mcpArgs, licensePath, testExe
     };
     fs4.writeFileSync(path6.join(configDir, "mcp.json"), JSON.stringify(config, null, 2));
   } else if (agentType === "claude") {
-    const addArgs = ["mcp", "add", "--scope", "user", "skyramp-mcp"];
+    const addArgs = ["mcp", "add", "--scope", "user", SKYRAMP_MCP_SERVER_NAME];
     for (const [key, value] of Object.entries(env)) {
       addArgs.push("-e", `${key}=${value}`);
     }
@@ -101991,7 +101996,7 @@ async function configureMcp(agentType, mcpCommand, mcpArgs, licensePath, testExe
     fs4.mkdirSync(homeDir, { recursive: true });
     const config = {
       mcpServers: {
-        "skyramp-mcp": {
+        [SKYRAMP_MCP_SERVER_NAME]: {
           type: "local",
           command: mcpCommand,
           args: argsArray,
@@ -102075,14 +102080,14 @@ async function installAgentCli(agentType) {
 async function initializeAgent(agentType, _enableDebug) {
   startGroup(`Initializing ${AGENT_LABELS[agentType]} agent`);
   if (agentType === "cursor") {
-    await exec2("agent", ["mcp", "enable", "skyramp-mcp"]);
+    await exec2("agent", ["mcp", "enable", SKYRAMP_MCP_SERVER_NAME]);
     await sleep(10);
     try {
       const { stdout } = await exec2("agent", ["mcp", "list"]);
-      if (stdout.includes("skyramp-mcp")) {
-        notice("Cursor MCP server verified: skyramp-mcp is listed");
+      if (stdout.includes(SKYRAMP_MCP_SERVER_NAME)) {
+        notice(`Cursor MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is listed`);
       } else {
-        warning("skyramp-mcp not found in MCP server list");
+        warning(`${SKYRAMP_MCP_SERVER_NAME} not found in MCP server list`);
       }
     } catch {
       warning("Could not list MCP servers");
@@ -102104,10 +102109,11 @@ async function initializeAgent(agentType, _enableDebug) {
     }
     try {
       const { stdout } = await exec2("claude", ["mcp", "list"]);
-      if (stdout.includes("Connected")) {
-        notice("Claude MCP server verified: skyramp-mcp is connected");
+      const isSkyrampConnected = stdout.split("\n").some((line) => line.includes(SKYRAMP_MCP_SERVER_NAME) && line.toLowerCase().includes("connected"));
+      if (isSkyrampConnected) {
+        notice(`Claude MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is connected`);
       } else {
-        warning("skyramp-mcp does not appear connected in MCP server list");
+        warning(`${SKYRAMP_MCP_SERVER_NAME} does not appear connected in MCP server list`);
       }
     } catch {
       warning("Could not verify MCP server connectivity");
@@ -102147,8 +102153,9 @@ function buildAgentCommand(agentType, enableDebug) {
 }
 function buildPrompt(opts) {
   const serviceContext = opts.services?.length ? buildServiceContext(opts.services) : "";
+  const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-skyramp://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}
+${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
@@ -102656,6 +102663,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     const prompt = buildPrompt({
       prTitle: context2.payload.pull_request?.title ?? "",
       prBody: context2.payload.pull_request?.body ?? "",
+      baseBranch: context2.payload.pull_request?.base?.ref ?? "",
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,

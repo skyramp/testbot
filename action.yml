@@ -120,7 +120,7 @@ inputs:
   enable_debug:
     description: 'Enable debug logging'
     required: false
-    default: 'false'
+    default: 'true'
 outputs:
   test_summary:
     description: 'Full summary of test maintenance actions'
