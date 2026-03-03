@@ -1,6 +1,6 @@
 import './mocks/core'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { buildPrompt, buildAgentCommand, installAgentCli } from '../agent'
+import { buildPrompt, buildAgentCommand, installAgentCli, initializeAgent } from '../agent'
 import { SKYRAMP_MCP_SERVER_NAME } from '../types'
 import { exec } from '../utils'
 
@@ -8,6 +8,7 @@ vi.mock('../utils', () => ({
   exec: vi.fn(),
   sleep: vi.fn(),
   withRetry: vi.fn(async (fn: () => Promise<void>) => fn()),
+  withGroup: vi.fn(async (_name: string, fn: () => Promise<void>) => fn()),
 }))
 
 describe('buildPrompt', () => {
@@ -241,5 +242,40 @@ describe('installAgentCli', () => {
 
     // Should only have called exec once (the version check)
     expect(mockExec).toHaveBeenCalledTimes(1)
+  })
+
+  it('installs when version check returns non-zero exit code', async () => {
+    // agent --version returns non-zero (ignoreReturnCode: true means no throw)
+    mockExec.mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' })
+    // curl | bash install
+    mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+    // agent --version verification
+    mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '1.0.0', stderr: '' })
+
+    await installAgentCli('cursor')
+
+    // Should have proceeded to install (3 calls total)
+    expect(mockExec).toHaveBeenCalledTimes(3)
+  })
+})
+
+describe('initializeAgent', () => {
+  const mockExec = vi.mocked(exec)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('throws on non-zero mcp enable exit code', async () => {
+    mockExec.mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error' })
+
+    await expect(initializeAgent('cursor', false))
+      .rejects.toThrow(`Failed to enable MCP server '${SKYRAMP_MCP_SERVER_NAME}' (exit code 1)`)
+  })
+
+  it('succeeds when mcp enable returns zero', async () => {
+    mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: 'Enabled', stderr: '' })
+
+    await expect(initializeAgent('cursor', false)).resolves.toBeUndefined()
   })
 })

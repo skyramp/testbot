@@ -57,7 +57,7 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
         }
       }
     } catch (err) {
-      core.warning(`Failed to read workspace.yml: ${(err as Error).message}`)
+      core.warning(`Failed to parse ${manager.getConfigPath()}: ${(err as Error).message} — falling back to action input defaults`)
     }
   } else {
     core.notice('No .skyramp/workspace.yml found, using action input defaults')

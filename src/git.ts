@@ -91,6 +91,8 @@ export async function autoCommit(config: ResolvedConfig): Promise<string> {
   const headRef = github.context.payload.pull_request?.head?.ref as string | undefined
   if (headRef) {
     await exec('git', ['push', 'origin', `HEAD:refs/heads/${headRef}`])
+  } else if (github.context.eventName === 'pull_request') {
+    throw new Error('Cannot push: pull_request event but head ref is missing from payload')
   } else {
     await exec('git', ['push'])
   }

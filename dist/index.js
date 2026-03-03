@@ -99267,7 +99267,7 @@ async function loadConfig(inputs) {
         }
       }
     } catch (err) {
-      warning(`Failed to read workspace.yml: ${err.message}`);
+      warning(`Failed to parse ${manager.getConfigPath()}: ${err.message} \u2014 falling back to action input defaults`);
     }
   } else {
     notice("No .skyramp/workspace.yml found, using action input defaults");
@@ -99513,8 +99513,11 @@ async function postStandaloneComment(prNumber, bodyOrFile, isFile = false) {
       issue_number: prNumber,
       body: body2
     });
+    return true;
   } catch (err) {
-    warning(`Failed to post standalone comment: ${err}`);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    error(`Failed to post standalone comment for PR #${prNumber}: ${errorMessage}`);
+    return false;
   }
 }
 async function postValidationError(prNumber, errorMsg) {
@@ -99536,6 +99539,7 @@ var path7 = __toESM(require("path"));
 var SKYRAMP_MCP_SERVER_NAME = "skyramp";
 
 // src/mcp.ts
+var NPM_INSTALL_TIMEOUT_MS = secondsToMilliseconds(180);
 async function installMcp(config, inputs, workingDir) {
   startGroup("Installing Skyramp MCP");
   let command;
@@ -99564,14 +99568,14 @@ async function installMcp(config, inputs, workingDir) {
     notice(`@skyramp/mcp commit: ${commitSha.trim()} (ref: ${ref})`);
     fs7.rmSync(path7.join(mcpPkgDir, ".git"), { recursive: true, force: true });
     info("Installing dependencies and building...");
-    await exec2("npm", ["install", "--include=dev"], { cwd: mcpPkgDir });
+    await exec2("npm", ["install", "--include=dev"], { cwd: mcpPkgDir, timeout: NPM_INSTALL_TIMEOUT_MS });
     await exec2("npm", ["run", "build"], { cwd: mcpPkgDir });
     command = "node";
     args = path7.join(mcpPkgDir, "build", "index.js");
     exportVariable("NODE_PATH", path7.join(mcpPkgDir, "node_modules"));
   } else {
     const pkg = config.skyrampMcpVersion === "latest" ? "@skyramp/mcp" : `@skyramp/mcp@${config.skyrampMcpVersion}`;
-    await exec2("npm", ["install", pkg], { cwd: workingDir });
+    await exec2("npm", ["install", pkg], { cwd: workingDir, timeout: NPM_INSTALL_TIMEOUT_MS });
     command = "npx";
     args = config.skyrampMcpVersion === "latest" ? "-y @skyramp/mcp" : `-y @skyramp/mcp@${config.skyrampMcpVersion}`;
   }
@@ -99645,11 +99649,15 @@ async function installAgentCli(agentType) {
   startGroup(`Installing ${AGENT_LABELS[agentType]} CLI`);
   if (agentType === "cursor") {
     try {
-      const { stdout } = await exec2("agent", ["--version"], { silent: true, ignoreReturnCode: true });
-      notice(`Cursor CLI already installed (version: ${stdout.trim()})`);
-      endGroup();
-      return;
-    } catch {
+      const { exitCode, stdout } = await exec2("agent", ["--version"], { silent: true, ignoreReturnCode: true });
+      if (exitCode === 0 && stdout.trim()) {
+        notice(`Cursor CLI already installed (version: ${stdout.trim()})`);
+        endGroup();
+        return;
+      }
+      info("Cursor CLI not found (non-zero exit or empty output), will install");
+    } catch (err) {
+      info(`Cursor CLI not found, will install (${err instanceof Error ? err.message : String(err)})`);
     }
     await withRetry(
       async () => {
@@ -99662,11 +99670,15 @@ async function installAgentCli(agentType) {
     );
   } else if (agentType === "copilot") {
     try {
-      const { stdout } = await exec2("copilot", ["--version"], { silent: true, ignoreReturnCode: true });
-      notice(`GitHub Copilot CLI already installed (version: ${stdout.trim()})`);
-      endGroup();
-      return;
-    } catch {
+      const { exitCode, stdout } = await exec2("copilot", ["--version"], { silent: true, ignoreReturnCode: true });
+      if (exitCode === 0 && stdout.trim()) {
+        notice(`GitHub Copilot CLI already installed (version: ${stdout.trim()})`);
+        endGroup();
+        return;
+      }
+      info("Copilot CLI not found (non-zero exit or empty output), will install");
+    } catch (err) {
+      info(`Copilot CLI not found, will install (${err instanceof Error ? err.message : String(err)})`);
     }
     await withRetry(
       async () => {
@@ -99694,48 +99706,49 @@ async function installAgentCli(agentType) {
   endGroup();
 }
 async function initializeAgent(agentType, _enableDebug) {
-  startGroup(`Initializing ${AGENT_LABELS[agentType]} agent`);
-  if (agentType === "cursor") {
-    await exec2("agent", ["mcp", "enable", SKYRAMP_MCP_SERVER_NAME]);
-    await sleep(10);
-    try {
-      const { stdout } = await exec2("agent", ["mcp", "list"]);
-      if (stdout.includes(SKYRAMP_MCP_SERVER_NAME)) {
-        notice(`Cursor MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is listed`);
-      } else {
-        warning(`${SKYRAMP_MCP_SERVER_NAME} not found in MCP server list`);
+  await withGroup(`Initializing ${AGENT_LABELS[agentType]} agent`, async () => {
+    if (agentType === "cursor") {
+      const { exitCode } = await exec2("agent", ["mcp", "enable", SKYRAMP_MCP_SERVER_NAME], { ignoreReturnCode: true });
+      if (exitCode !== 0) {
+        throw new Error(`Failed to enable MCP server '${SKYRAMP_MCP_SERVER_NAME}' (exit code ${exitCode})`);
       }
-    } catch {
-      warning("Could not list MCP servers");
-    }
-  } else if (agentType === "copilot") {
-    await sleep(5);
-    try {
-      await exec2("copilot", ["--version"]);
-      notice("GitHub Copilot CLI initialized successfully");
-    } catch {
-      warning("Could not verify Copilot CLI version");
-    }
-  } else {
-    try {
-      await exec2("claude", ["--version"]);
-      notice("Claude Code CLI initialized successfully");
-    } catch {
-      warning("Could not verify Claude Code CLI version");
-    }
-    try {
-      const { stdout } = await exec2("claude", ["mcp", "list"]);
-      const isSkyrampConnected = stdout.split("\n").some((line) => line.includes(SKYRAMP_MCP_SERVER_NAME) && line.toLowerCase().includes("connected"));
-      if (isSkyrampConnected) {
-        notice(`Claude MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is connected`);
-      } else {
-        warning(`${SKYRAMP_MCP_SERVER_NAME} does not appear connected in MCP server list`);
+      try {
+        const { stdout } = await exec2("agent", ["mcp", "list"]);
+        if (stdout.includes(SKYRAMP_MCP_SERVER_NAME)) {
+          notice(`Cursor MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is listed`);
+        } else {
+          warning(`${SKYRAMP_MCP_SERVER_NAME} not found in MCP server list`);
+        }
+      } catch {
+        warning("Could not list MCP servers");
       }
-    } catch {
-      warning("Could not verify MCP server connectivity");
+    } else if (agentType === "copilot") {
+      try {
+        await exec2("copilot", ["--version"]);
+        notice("GitHub Copilot CLI initialized successfully");
+      } catch {
+        warning("Could not verify Copilot CLI version");
+      }
+    } else {
+      try {
+        await exec2("claude", ["--version"]);
+        notice("Claude Code CLI initialized successfully");
+      } catch {
+        warning("Could not verify Claude Code CLI version");
+      }
+      try {
+        const { stdout } = await exec2("claude", ["mcp", "list"]);
+        const isSkyrampConnected = stdout.split("\n").some((line) => line.includes(SKYRAMP_MCP_SERVER_NAME) && line.toLowerCase().includes("connected"));
+        if (isSkyrampConnected) {
+          notice(`Claude MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is connected`);
+        } else {
+          warning(`${SKYRAMP_MCP_SERVER_NAME} does not appear connected in MCP server list`);
+        }
+      } catch {
+        warning("Could not verify MCP server connectivity");
+      }
     }
-  }
-  endGroup();
+  });
 }
 function buildAgentCommand(agentType, enableDebug) {
   if (agentType === "cursor") {
@@ -99796,7 +99809,7 @@ ${blocks2.join("\n")}
 async function runAgentWithRetry(agentCmd, prompt, config, opts = {}) {
   const maxRetries = config.testbotMaxRetries;
   const retryDelay = config.testbotRetryDelay;
-  const timeoutMs = config.testbotTimeout * 6e4;
+  const timeoutMs = secondsToMilliseconds(config.testbotTimeout * 60);
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     let stdout = "";
     let stderr = "";
@@ -99972,6 +99985,8 @@ async function autoCommit(config) {
   const headRef = context2.payload.pull_request?.head?.ref;
   if (headRef) {
     await exec2("git", ["push", "origin", `HEAD:refs/heads/${headRef}`]);
+  } else if (context2.eventName === "pull_request") {
+    throw new Error("Cannot push: pull_request event but head ref is missing from payload");
   } else {
     await exec2("git", ["push"]);
   }
@@ -100346,17 +100361,21 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   }
   if (config.postPrComment && prNumber) {
     await withGroup("Posting final PR comment", async () => {
+      let posted = false;
       if (progressCommentId) {
-        const appended = await appendReportToProgress(progressCommentId, paths.combinedResultPath);
-        if (appended) {
+        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath);
+        if (posted) {
           notice("Progress comment updated with final report");
         } else {
-          notice("Creating standalone PR comment (failed to update progress comment)");
-          await postStandaloneComment(prNumber, paths.combinedResultPath, true);
+          warning("Failed to update progress comment, falling back to standalone comment");
+          posted = await postStandaloneComment(prNumber, paths.combinedResultPath, true);
         }
       } else {
         notice("Creating standalone PR comment (no progress comment to update)");
-        await postStandaloneComment(prNumber, paths.combinedResultPath, true);
+        posted = await postStandaloneComment(prNumber, paths.combinedResultPath, true);
+      }
+      if (!posted) {
+        error("Failed to post testbot report to PR \u2014 report is available in action outputs only");
       }
     });
   }

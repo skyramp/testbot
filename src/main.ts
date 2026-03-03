@@ -326,17 +326,21 @@ async function run(): Promise<void> {
   // ── 18. Post final PR comment ──────────────────────────────────────
   if (config.postPrComment && prNumber) {
     await withGroup('Posting final PR comment', async () => {
+      let posted = false
       if (progressCommentId) {
-        const appended = await appendReportToProgress(progressCommentId, paths.combinedResultPath)
-        if (appended) {
+        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath)
+        if (posted) {
           core.notice('Progress comment updated with final report')
         } else {
-          core.notice('Creating standalone PR comment (failed to update progress comment)')
-          await postStandaloneComment(prNumber, paths.combinedResultPath, true)
+          core.warning('Failed to update progress comment, falling back to standalone comment')
+          posted = await postStandaloneComment(prNumber, paths.combinedResultPath, true)
         }
       } else {
         core.notice('Creating standalone PR comment (no progress comment to update)')
-        await postStandaloneComment(prNumber, paths.combinedResultPath, true)
+        posted = await postStandaloneComment(prNumber, paths.combinedResultPath, true)
+      }
+      if (!posted) {
+        core.error('Failed to post testbot report to PR — report is available in action outputs only')
       }
     })
   }

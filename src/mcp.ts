@@ -6,6 +6,11 @@ import { SKYRAMP_MCP_SERVER_NAME } from './types'
 import { exec, debug, secondsToMilliseconds } from './utils'
 
 
+// npm install can stall indefinitely if a postinstall script downloads
+// large binaries over a slow connection (e.g. @skyramp/skyramp's 172MB .so).
+// 3 minutes is generous for any single npm install.
+const NPM_INSTALL_TIMEOUT_MS = secondsToMilliseconds(180)
+
 /**
  * Install the Skyramp MCP server (from npm or github source).
  * Returns the command/args needed to run the MCP server.
@@ -56,7 +61,7 @@ export async function installMcp(
 
     // Install dependencies and build
     core.info('Installing dependencies and building...')
-    await exec('npm', ['install', '--include=dev'], { cwd: mcpPkgDir })
+    await exec('npm', ['install', '--include=dev'], { cwd: mcpPkgDir, timeout: NPM_INSTALL_TIMEOUT_MS })
     await exec('npm', ['run', 'build'], { cwd: mcpPkgDir })
 
     command = 'node'
@@ -70,7 +75,7 @@ export async function installMcp(
       ? '@skyramp/mcp'
       : `@skyramp/mcp@${config.skyrampMcpVersion}`
 
-    await exec('npm', ['install', pkg], { cwd: workingDir })
+    await exec('npm', ['install', pkg], { cwd: workingDir, timeout: NPM_INSTALL_TIMEOUT_MS })
 
     command = 'npx'
     args = config.skyrampMcpVersion === 'latest'

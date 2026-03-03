@@ -103,7 +103,7 @@ export async function appendReportToProgress(commentId: number, reportFile: stri
 /**
  * Post a standalone PR comment (fallback when no progress comment exists).
  */
-export async function postStandaloneComment(prNumber: number, bodyOrFile: string, isFile = false): Promise<void> {
+export async function postStandaloneComment(prNumber: number, bodyOrFile: string, isFile = false): Promise<boolean> {
   try {
     const octokit = getOctokit()
     let body: string
@@ -119,8 +119,11 @@ export async function postStandaloneComment(prNumber: number, bodyOrFile: string
       issue_number: prNumber,
       body,
     })
+    return true
   } catch (err) {
-    core.warning(`Failed to post standalone comment: ${err}`)
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    core.error(`Failed to post standalone comment for PR #${prNumber}: ${errorMessage}`)
+    return false
   }
 }
 
