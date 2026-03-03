@@ -2,6 +2,7 @@ import * as core from '@actions/core'
 import * as fs from 'fs'
 import * as github from '@actions/github'
 import * as path from 'path'
+import { DefaultArtifactClient } from '@actions/artifact'
 import type { Paths } from './types'
 import { getInputs, detectAgentType } from './inputs'
 import { loadConfig } from './config'
@@ -160,7 +161,23 @@ async function run(): Promise<void> {
     core.notice('Successfully pulled Skyramp Executor')
   })
 
-  // ── 11. Install & configure agent CLI ──────────────────────────────
+  // ── 11. Install Playwright browsers ───────────────────────────────
+  await withGroup('Installing Playwright browsers', async () => {
+    await withRetry(
+      async () => {
+        // Install globally so we don't create/modify a node_modules/ at the repo root.
+        // When MCP source is 'github', the MCP server's dependencies live under
+        // <repo>/node_modules/@skyramp/mcp/node_modules/. A bare `npm install` here
+        // would see those 600+ packages as extraneous and remove them, breaking MCP.
+        await exec('npm', ['install', '-g', '@playwright/test'])
+        await exec('playwright', ['install', '--with-deps', 'chromium'])
+        core.notice('Playwright chromium browser installed successfully')
+      },
+      { retries: 2, delay: 5, label: 'Playwright install' },
+    )
+  })
+
+  // ── 12. Install & configure agent CLI ──────────────────────────────
   // Ensure agent API keys are in the process environment for CLI auth
   if (agentType === 'cursor' && inputs.cursorApiKey) {
     core.exportVariable('CURSOR_API_KEY', inputs.cursorApiKey)
@@ -178,7 +195,7 @@ async function run(): Promise<void> {
   await initializeAgent(agentType, config.enableDebug)
   const agentCmd = buildAgentCommand(agentType, config.enableDebug)
 
-  // ── 12. Start services & generate auth token ───────────────────────
+  // ── 13. Start services & generate auth token ───────────────────────
   try {
     await startServices(config, workingDir)
   } catch (err) {
@@ -208,12 +225,12 @@ async function run(): Promise<void> {
   const tokenSource = dynamicToken ? 'auth_token_command' : process.env.SKYRAMP_TEST_TOKEN ? 'SKYRAMP_TEST_TOKEN env var' : 'none'
   debug(`Auth token source: ${tokenSource}, length: ${authToken.length}`)
 
-  // ── 13. Update progress (step 2: analyzing changes) ────────────────
+  // ── 14. Update progress (step 2: analyzing changes) ────────────────
   if (progressCommentId) {
     await updateProgress(progressCommentId, 2)
   }
 
-  // ── 14. Run Skyramp Testbot ────────────────────────────────────────
+  // ── 15. Run Skyramp Testbot ────────────────────────────────────────
   const result = await withGroup('Running Skyramp Testbot', async () => {
     // Copy git diff to working directory for consistent agent access
     const localDiffPath = path.join(workingDir, '.skyramp_git_diff')
@@ -263,7 +280,7 @@ async function run(): Promise<void> {
     return agentResult
   })
 
-  // ── 15. Read summary & parse metrics ───────────────────────────────
+  // ── 16. Read summary & parse metrics ───────────────────────────────
   const { summary, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed)
   parseMetrics(summary)
 
@@ -287,18 +304,26 @@ async function run(): Promise<void> {
   debug(`Agent stdout file exists: ${fs.existsSync(paths.agentStdoutPath)}`)
   debug(`Combined result file exists: ${fs.existsSync(paths.combinedResultPath)}`)
 
-  // ── 16. Upload agent logs (debug only) ─────────────────────────────
-  if (config.enableDebug && fs.existsSync(paths.agentLogPath)) {
-    try {
-      const { DefaultArtifactClient } = await import('@actions/artifact')
-      const artifact = new DefaultArtifactClient()
-      await artifact.uploadArtifact('skyramp-agent-logs', [paths.agentLogPath], tempDir)
-    } catch (err) {
-      core.warning(`Failed to upload agent logs artifact: ${err}`)
+  // ── 17. Upload artifacts ─────────────────────────────────────────
+  try {
+    const artifact = new DefaultArtifactClient()
+
+    // Upload raw summary + agent stdout so we can diagnose report-format issues
+    const reportFiles = [paths.summaryPath, paths.combinedResultPath, paths.agentStdoutPath]
+      .filter(f => fs.existsSync(f))
+    if (reportFiles.length > 0) {
+      await artifact.uploadArtifact('skyramp-testbot-report', reportFiles, tempDir)
     }
+
+    // Upload agent logs when debug is enabled
+    if (config.enableDebug && fs.existsSync(paths.agentLogPath)) {
+      await artifact.uploadArtifact('skyramp-agent-logs', [paths.agentLogPath], tempDir)
+    }
+  } catch (err) {
+    core.warning(`Failed to upload artifacts: ${err}`)
   }
 
-  // ── 17. Post final PR comment ──────────────────────────────────────
+  // ── 18. Post final PR comment ──────────────────────────────────────
   if (config.postPrComment && prNumber) {
     await withGroup('Posting final PR comment', async () => {
       if (progressCommentId) {
@@ -316,7 +341,7 @@ async function run(): Promise<void> {
     })
   }
 
-  // ── 18. Auto-commit test changes ───────────────────────────────────
+  // ── 19. Auto-commit test changes ───────────────────────────────────
   let commitSha = ''
   if (config.autoCommit) {
     await configureGitIdentity(botName, botEmail)
