@@ -1,181 +1,53 @@
 import * as core from '@actions/core'
 import * as fs from 'fs'
-import type { AgentCommand, AgentType, ResolvedConfig, WorkspaceServiceInfo } from './types'
+import type { AgentCommand, ResolvedConfig, WorkspaceServiceInfo } from './types'
+import type { AgentStrategy } from './types'
 import { SKYRAMP_MCP_SERVER_NAME } from './types'
 import { exec, sleep, withRetry, withGroup, secondsToMilliseconds } from './utils'
 
-const AGENT_LABELS: Record<AgentType, string> = {
-  cursor: 'Cursor',
-  copilot: 'GitHub Copilot',
-  claude: 'Claude Code',
-}
-
 /**
- * Install the appropriate agent CLI (Cursor, Copilot, or Claude Code).
+ * Install the appropriate agent CLI.
  */
-export async function installAgentCli(agentType: AgentType): Promise<void> {
-  core.startGroup(`Installing ${AGENT_LABELS[agentType]} CLI`)
-
-  if (agentType === 'cursor') {
-    // Check if already installed. Two failure modes:
+export async function installAgentCli(agent: AgentStrategy): Promise<void> {
+  await withGroup(`Installing ${agent.label} CLI`, async () => {
+    // Two failure modes:
     //   - Binary exists but broken → ignoreReturnCode prevents throw, we check exitCode
     //   - Binary missing entirely  → exec throws "unable to locate executable", caught below
     try {
-      const { exitCode, stdout } = await exec('agent', ['--version'], { silent: true, ignoreReturnCode: true })
+      const { exitCode, stdout } = await exec(agent.binary, ['--version'], { silent: true, ignoreReturnCode: true })
       if (exitCode === 0 && stdout.trim()) {
-        core.notice(`Cursor CLI already installed (version: ${stdout.trim()})`)
-        core.endGroup()
+        core.notice(`${agent.label} CLI already installed (version: ${stdout.trim()})`)
         return
       }
-      core.info('Cursor CLI not found (non-zero exit or empty output), will install')
+      core.info(`${agent.label} CLI not found (non-zero exit or empty output), will install`)
     } catch (err) {
-      core.info(`Cursor CLI not found, will install (${err instanceof Error ? err.message : String(err)})`)
+      core.info(`${agent.label} CLI not found, will install (${err instanceof Error ? err.message : String(err)})`)
     }
 
     await withRetry(
       async () => {
-        await exec('bash', ['-c', 'set -o pipefail; curl https://cursor.com/install -fsS | bash'])
-        core.addPath(`${process.env.HOME}/.local/bin`)
-        // Verify the binary actually exists after install
-        await exec('agent', ['--version'], { silent: true })
-        core.notice('Cursor CLI installed successfully')
+        await agent.install()
+        core.notice(`${agent.label} CLI installed successfully`)
       },
-      { retries: 3, delay: 5, label: 'Cursor CLI install' },
+      { retries: 3, delay: 5, label: `${agent.label} CLI install` },
     )
-  } else if (agentType === 'copilot') {
-    // Same two-failure-mode probe as cursor above
-    try {
-      const { exitCode, stdout } = await exec('copilot', ['--version'], { silent: true, ignoreReturnCode: true })
-      if (exitCode === 0 && stdout.trim()) {
-        core.notice(`GitHub Copilot CLI already installed (version: ${stdout.trim()})`)
-        core.endGroup()
-        return
-      }
-      core.info('Copilot CLI not found (non-zero exit or empty output), will install')
-    } catch (err) {
-      core.info(`Copilot CLI not found, will install (${err instanceof Error ? err.message : String(err)})`)
-    }
-
-    await withRetry(
-      async () => {
-        await exec('npm', ['install', '-g', '@github/copilot'])
-        core.notice('GitHub Copilot CLI installed successfully')
-      },
-      { retries: 3, delay: 5, label: 'GitHub Copilot CLI install' },
-    )
-  } else {
-    // Claude Code
-    try {
-      const { stdout } = await exec('claude', ['--version'], { silent: true, ignoreReturnCode: true })
-      core.notice(`Claude Code CLI already installed (version: ${stdout.trim()})`)
-      core.endGroup()
-      return
-    } catch {
-      // Not installed, continue
-    }
-
-    await withRetry(
-      async () => {
-        await exec('npm', ['install', '-g', '@anthropic-ai/claude-code'])
-        core.notice('Claude Code CLI installed successfully')
-      },
-      { retries: 3, delay: 5, label: 'Claude Code CLI install' },
-    )
-  }
-
-  core.endGroup()
+  })
 }
 
 /**
  * Initialize the agent (enable MCP server, wait for startup).
  */
-export async function initializeAgent(agentType: AgentType, _enableDebug: boolean): Promise<void> {
-  await withGroup(`Initializing ${AGENT_LABELS[agentType]} agent`, async () => {
-    if (agentType === 'cursor') {
-      const { exitCode } = await exec('agent', ['mcp', 'enable', SKYRAMP_MCP_SERVER_NAME], { ignoreReturnCode: true })
-      if (exitCode !== 0) {
-        throw new Error(`Failed to enable MCP server '${SKYRAMP_MCP_SERVER_NAME}' (exit code ${exitCode})`)
-      }
-
-      // Verify MCP server is connected
-      try {
-        const { stdout } = await exec('agent', ['mcp', 'list'])
-        if (stdout.includes(SKYRAMP_MCP_SERVER_NAME)) {
-          core.notice(`Cursor MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is listed`)
-        } else {
-          core.warning(`${SKYRAMP_MCP_SERVER_NAME} not found in MCP server list`)
-        }
-      } catch {
-        core.warning('Could not list MCP servers')
-      }
-    } else if (agentType === 'copilot') {
-      try {
-        await exec('copilot', ['--version'])
-        core.notice('GitHub Copilot CLI initialized successfully')
-      } catch {
-        core.warning('Could not verify Copilot CLI version')
-      }
-    } else {
-      // Claude Code — MCP is configured via settings.json, no explicit enable needed
-      try {
-        await exec('claude', ['--version'])
-        core.notice('Claude Code CLI initialized successfully')
-      } catch {
-        core.warning('Could not verify Claude Code CLI version')
-      }
-
-      // Verify MCP server is connected
-      try {
-        const { stdout } = await exec('claude', ['mcp', 'list'])
-        const isSkyrampConnected = stdout
-          .split('\n')
-          .some(line => line.includes(SKYRAMP_MCP_SERVER_NAME) && line.toLowerCase().includes('connected'))
-
-        if (isSkyrampConnected) {
-          core.notice(`Claude MCP server verified: ${SKYRAMP_MCP_SERVER_NAME} is connected`)
-        } else {
-          core.warning(`${SKYRAMP_MCP_SERVER_NAME} does not appear connected in MCP server list`)
-        }
-      } catch {
-        core.warning('Could not verify MCP server connectivity')
-      }
-    }
+export async function initializeAgent(agent: AgentStrategy): Promise<void> {
+  await withGroup(`Initializing ${agent.label} agent`, async () => {
+    await agent.initialize()
   })
 }
 
 /**
  * Build the agent command (binary + args) for execution.
  */
-export function buildAgentCommand(agentType: AgentType, enableDebug: boolean): AgentCommand {
-  if (agentType === 'cursor') {
-    const args = ['-f', '-p', '--model', 'sonnet-4.5']
-    if (enableDebug) {
-      args.push('--output-format', 'stream-json')
-    }
-    return { command: 'agent', args }
-  }
-
-  if (agentType === 'claude') {
-    return {
-      command: 'claude',
-      args: [
-        '--dangerously-skip-permissions',
-        '--model', 'sonnet',
-        '-p',
-      ],
-    }
-  }
-
-  return {
-    command: 'copilot',
-    args: [
-      '--additional-mcp-config',
-      `@${process.env.HOME}/.copilot/mcp-config.json`,
-      '--allow-all-tools',
-      '--allow-all-paths',
-      '-p',
-    ],
-  }
+export function buildAgentCommand(agent: AgentStrategy, enableDebug: boolean): AgentCommand {
+  return agent.buildCommand(enableDebug)
 }
 
 /**

@@ -6,6 +6,7 @@ import type { ActionInputs, ResolvedConfig } from '../types'
 vi.mock('../utils', () => ({
   exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
   debug: vi.fn(),
+  withGroup: vi.fn(async (_name: string, fn: () => Promise<unknown>) => fn()),
   secondsToMilliseconds: (s: number) => s * 1000,
 }))
 

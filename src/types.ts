@@ -1,3 +1,5 @@
+import * as core from '@actions/core'
+
 export type AgentType = 'cursor' | 'copilot' | 'claude'
 
 export type McpSource = 'npm' | 'github'
@@ -104,4 +106,33 @@ export interface Paths {
   agentLogPath: string
   agentStdoutPath: string
   combinedResultPath: string
+}
+
+/** Strategy interface for agent-type-specific behavior. */
+export abstract class AgentStrategy {
+  abstract readonly label: string
+  abstract readonly binary: string
+  abstract readonly envVar: string
+  abstract readonly apiKeyField: keyof ActionInputs
+  readonly supportsNdjsonLog: boolean = false
+
+  /** Install steps (called inside withRetry). */
+  abstract install(): Promise<void>
+
+  /** Post-install initialization (enable MCP, verify connectivity). */
+  abstract initialize(): Promise<void>
+
+  /** Write MCP config for this agent. */
+  abstract configureMcp(
+    mcpCommand: string, argsArray: string[], env: Record<string, string>, timeout: number
+  ): Promise<void>
+
+  /** Build the CLI command + args. */
+  abstract buildCommand(enableDebug: boolean): AgentCommand
+
+  /** Export API key via core.exportVariable. Override for custom behavior (e.g., process.env). */
+  exportEnv(inputs: ActionInputs, _config: ResolvedConfig): void {
+    const key = inputs[this.apiKeyField]
+    if (key) core.exportVariable(this.envVar, key)
+  }
 }

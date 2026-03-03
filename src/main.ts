@@ -5,6 +5,7 @@ import * as path from 'path'
 import { DefaultArtifactClient } from '@actions/artifact'
 import type { Paths } from './types'
 import { getInputs, detectAgentType } from './inputs'
+import { createAgent } from './agents'
 import { loadConfig } from './config'
 import { checkSelfTrigger } from './self-trigger'
 import { setGitHubToken, postInitialProgress, updateProgress, appendReportToProgress, postStandaloneComment, postValidationError } from './progress'
@@ -13,7 +14,7 @@ import { installAgentCli, initializeAgent, buildAgentCommand, buildPrompt, runAg
 import { startServices, generateAuthToken } from './services'
 import { generateGitDiff, configureGitIdentity, autoCommit } from './git'
 import { readSummary, parseMetrics } from './report'
-import { exec, withRetry, withGroup, setDebugEnabled, debug, secondsToMilliseconds } from './utils'
+import { exec, withRetry, withGroup, setDebugEnabled, debug } from './utils'
 
 async function run(): Promise<void> {
   // ── 1. Self-trigger check ───────────────────────────────────────────
@@ -30,9 +31,10 @@ async function run(): Promise<void> {
   const githubToken = core.getInput('github_token')
   setGitHubToken(githubToken)
 
-  let agentType: ReturnType<typeof detectAgentType>
+  let agent: ReturnType<typeof createAgent>
   try {
-    agentType = detectAgentType(inputs)
+    const agentType = detectAgentType(inputs)
+    agent = createAgent(agentType)
   } catch (err) {
     await postValidationError(prNumber, (err as Error).message)
     throw err
@@ -178,22 +180,12 @@ async function run(): Promise<void> {
   })
 
   // ── 12. Install & configure agent CLI ──────────────────────────────
-  // Ensure agent API keys are in the process environment for CLI auth
-  if (agentType === 'cursor' && inputs.cursorApiKey) {
-    core.exportVariable('CURSOR_API_KEY', inputs.cursorApiKey)
-  } else if (agentType === 'copilot' && inputs.copilotApiKey) {
-    core.exportVariable('GH_TOKEN', inputs.copilotApiKey)
-  } else if (agentType === 'claude' && inputs.anthropicApiKey) {
-    // Set as subprocess-scoped env var (not core.exportVariable which leaks to subsequent steps)
-    process.env.ANTHROPIC_API_KEY = inputs.anthropicApiKey
-    // Set MCP tool timeout (in ms) so long-running tools like skyramp_execute_test don't time out
-    process.env.MCP_TIMEOUT = String(secondsToMilliseconds(config.testExecutionTimeout))
-  }
+  agent.exportEnv(inputs, config)
 
-  await installAgentCli(agentType)
-  await configureMcp(agentType, mcp.command, mcp.args, mcp.licensePath, config.testExecutionTimeout)
-  await initializeAgent(agentType, config.enableDebug)
-  const agentCmd = buildAgentCommand(agentType, config.enableDebug)
+  await installAgentCli(agent)
+  await configureMcp(agent, mcp.command, mcp.args, mcp.licensePath, config.testExecutionTimeout)
+  await initializeAgent(agent)
+  const agentCmd = buildAgentCommand(agent, config.enableDebug)
 
   // ── 13. Start services & generate auth token ───────────────────────
   try {
@@ -247,7 +239,7 @@ async function run(): Promise<void> {
       services: config.services,
     })
 
-    const useDebugLog = agentType === 'cursor' && config.enableDebug
+    const useDebugLog = agent.supportsNdjsonLog && config.enableDebug
 
     debug(`Agent command: ${agentCmd.command} ${agentCmd.args.join(' ')}`)
     debug(`Agent log file: ${useDebugLog ? paths.agentLogPath : 'none (streaming to console)'}`)
@@ -268,12 +260,12 @@ async function run(): Promise<void> {
       core.notice('Skyramp Testbot completed successfully')
     }
 
-    // Log Cursor's auto-selected model if available
+    // Log agent's auto-selected model if available in NDJSON logs
     if (useDebugLog && fs.existsSync(paths.agentLogPath)) {
       const logContent = fs.readFileSync(paths.agentLogPath, 'utf-8')
       const modelMatch = logContent.match(/"model"\s*:\s*"([^"]+)"/)
       if (modelMatch) {
-        core.notice(`Cursor auto-selected model: ${modelMatch[1]}`)
+        core.notice(`${agent.label} auto-selected model: ${modelMatch[1]}`)
       }
     }
 

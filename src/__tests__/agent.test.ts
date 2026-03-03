@@ -1,12 +1,14 @@
 import './mocks/core'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { buildPrompt, buildAgentCommand, installAgentCli, initializeAgent } from '../agent'
+import { createAgent } from '../agents'
 import { SKYRAMP_MCP_SERVER_NAME } from '../types'
 import { exec } from '../utils'
 
 vi.mock('../utils', () => ({
   exec: vi.fn(),
   sleep: vi.fn(),
+  secondsToMilliseconds: vi.fn((s: number) => s * 1000),
   withRetry: vi.fn(async (fn: () => Promise<void>) => fn()),
   withGroup: vi.fn(async (_name: string, fn: () => Promise<void>) => fn()),
 }))
@@ -150,20 +152,20 @@ describe('buildPrompt', () => {
 
 describe('buildAgentCommand', () => {
   it('returns cursor command', () => {
-    const cmd = buildAgentCommand('cursor', false)
+    const cmd = buildAgentCommand(createAgent('cursor'), false)
     expect(cmd.command).toBe('agent')
     expect(cmd.args).toEqual(['-f', '-p', '--model', 'sonnet-4.5'])
   })
 
   it('returns cursor command with debug flags', () => {
-    const cmd = buildAgentCommand('cursor', true)
+    const cmd = buildAgentCommand(createAgent('cursor'), true)
     expect(cmd.command).toBe('agent')
     expect(cmd.args).toContain('--output-format')
     expect(cmd.args).toContain('stream-json')
   })
 
   it('returns copilot command', () => {
-    const cmd = buildAgentCommand('copilot', false)
+    const cmd = buildAgentCommand(createAgent('copilot'), false)
     expect(cmd.command).toBe('copilot')
     expect(cmd.args).toContain('--additional-mcp-config')
     expect(cmd.args).toContain('--allow-all-tools')
@@ -172,15 +174,28 @@ describe('buildAgentCommand', () => {
   })
 
   it('copilot mcp config path has @ prefix', () => {
-    const cmd = buildAgentCommand('copilot', false)
+    const cmd = buildAgentCommand(createAgent('copilot'), false)
     const mcpIdx = cmd.args.indexOf('--additional-mcp-config')
     expect(cmd.args[mcpIdx + 1]).toMatch(/^@/)
   })
 
   it('returns claude command with model flag', () => {
-    const cmd = buildAgentCommand('claude', false)
+    const cmd = buildAgentCommand(createAgent('claude'), false)
     expect(cmd.command).toBe('claude')
     expect(cmd.args).toEqual(['--dangerously-skip-permissions', '--model', 'sonnet', '-p'])
+  })
+
+  it('returns claude command with debug flags', () => {
+    const cmd = buildAgentCommand(createAgent('claude'), true)
+    expect(cmd.command).toBe('claude')
+    expect(cmd.args).toContain('--output-format')
+    expect(cmd.args).toContain('stream-json')
+    expect(cmd.args).toContain('--verbose')
+  })
+
+  it('claude agent supports ndjson log', () => {
+    const agent = createAgent('claude')
+    expect(agent.supportsNdjsonLog).toBe(true)
   })
 })
 
@@ -200,7 +215,7 @@ describe('installAgentCli', () => {
     // Third call: agent --version verification
     mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '1.0.0', stderr: '' })
 
-    await installAgentCli('cursor')
+    await installAgentCli(createAgent('cursor'))
 
     // The install command should use pipefail
     expect(mockExec).toHaveBeenCalledWith(
@@ -217,7 +232,7 @@ describe('installAgentCli', () => {
     // Third call: agent --version verification
     mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '1.0.0', stderr: '' })
 
-    await installAgentCli('cursor')
+    await installAgentCli(createAgent('cursor'))
 
     // Should verify the binary after install
     expect(mockExec).toHaveBeenCalledWith('agent', ['--version'], { silent: true })
@@ -231,14 +246,14 @@ describe('installAgentCli', () => {
     // Third call: agent --version verification fails
     mockExec.mockRejectedValueOnce(new Error('Unable to locate executable file: agent'))
 
-    await expect(installAgentCli('cursor')).rejects.toThrow('Unable to locate executable file: agent')
+    await expect(installAgentCli(createAgent('cursor'))).rejects.toThrow('Unable to locate executable file: agent')
   })
 
   it('skips install if cursor CLI already present', async () => {
     // agent --version succeeds
     mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '1.0.0', stderr: '' })
 
-    await installAgentCli('cursor')
+    await installAgentCli(createAgent('cursor'))
 
     // Should only have called exec once (the version check)
     expect(mockExec).toHaveBeenCalledTimes(1)
@@ -252,7 +267,7 @@ describe('installAgentCli', () => {
     // agent --version verification
     mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: '1.0.0', stderr: '' })
 
-    await installAgentCli('cursor')
+    await installAgentCli(createAgent('cursor'))
 
     // Should have proceeded to install (3 calls total)
     expect(mockExec).toHaveBeenCalledTimes(3)
@@ -269,13 +284,13 @@ describe('initializeAgent', () => {
   it('throws on non-zero mcp enable exit code', async () => {
     mockExec.mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'error' })
 
-    await expect(initializeAgent('cursor', false))
+    await expect(initializeAgent(createAgent('cursor')))
       .rejects.toThrow(`Failed to enable MCP server '${SKYRAMP_MCP_SERVER_NAME}' (exit code 1)`)
   })
 
   it('succeeds when mcp enable returns zero', async () => {
     mockExec.mockResolvedValueOnce({ exitCode: 0, stdout: 'Enabled', stderr: '' })
 
-    await expect(initializeAgent('cursor', false)).resolves.toBeUndefined()
+    await expect(initializeAgent(createAgent('cursor'))).resolves.toBeUndefined()
   })
 })
