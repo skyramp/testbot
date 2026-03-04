@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Inspect MCP tool call inputs and outputs from agent NDJSON logs.
+ * Inspect MCP tool call inputs and outputs from agent NDJSON logs (Cursor + Claude Code).
  *
  * Extracts the full request/response for specific Skyramp MCP tool calls,
  * making it easy to debug prompt instructions, tool parameters, and tool
@@ -21,25 +21,12 @@
  *   npx tsx tools/inspect-prompt.ts --file agent-log.ndjson --tool skyramp_submit_report
  */
 
-import { execFileSync } from "child_process";
-import * as fs from "fs";
-import * as os from "os";
+import * as fsp from "fs/promises";
 import * as path from "path";
-import * as readline from "readline";
 
-// ── Types ──
-
-interface ToolCallEntry {
-  index: number;
-  callId: string;
-  toolName: string;
-  startedMs: number;
-  completedMs?: number;
-  durationMs?: number;
-  input: unknown;
-  output: unknown;
-  status: "ok" | "error" | "incomplete";
-}
+import type { ToolCallRecord } from "./lib/types";
+import { FatalError, downloadLog, formatDuration } from "./lib/download";
+import { parseLog } from "./lib/parse-log";
 
 // ── Arg parsing ──
 
@@ -116,153 +103,7 @@ Common tool names:
   skyramp_*_test_generation     — test generation output (smoke, fuzz, contract, etc.)`);
 }
 
-// ── Log acquisition ──
-
-function downloadLog(runId: string, repo: string): string {
-  try {
-    execFileSync("gh", ["--version"], { stdio: "ignore" });
-  } catch {
-    console.error("Error: gh CLI not found. Install from https://cli.github.com/ or use --file mode.");
-    process.exit(1);
-  }
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "inspect-prompt-"));
-  try {
-    execFileSync(
-      "gh",
-      ["run", "download", runId, "--repo", repo, "--name", "skyramp-agent-logs", "--dir", tmpDir],
-      { stdio: "pipe" }
-    );
-  } catch (e: unknown) {
-    const msg =
-      e instanceof Error && "stderr" in e
-        ? (e as { stderr: Buffer }).stderr?.toString()
-        : String(e);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-    console.error(
-      `Failed to download artifact from run ${runId}:\n${msg}\nThe run may not have debug enabled, or the artifact may have expired.`
-    );
-    process.exit(1);
-  }
-
-  const logFile = path.join(tmpDir, "agent-log.ndjson");
-  if (!fs.existsSync(logFile)) {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-    console.error("agent-log.ndjson not found in downloaded artifact.");
-    process.exit(1);
-  }
-
-  return logFile;
-}
-
-// ── NDJSON parsing ──
-
-function extractMcpToolName(toolCall: Record<string, unknown>): string | null {
-  if ("mcpToolCall" in toolCall) {
-    const mcp = toolCall.mcpToolCall as {
-      args?: { toolName?: string };
-    };
-    return mcp.args?.toolName ?? null;
-  }
-  return null;
-}
-
-function extractMcpInput(toolCall: Record<string, unknown>): unknown {
-  if ("mcpToolCall" in toolCall) {
-    const mcp = toolCall.mcpToolCall as {
-      args?: { args?: unknown };
-    };
-    return mcp.args?.args ?? null;
-  }
-  return null;
-}
-
-function extractMcpOutput(toolCall: Record<string, unknown>): { output: unknown; status: "ok" | "error" } {
-  if ("mcpToolCall" in toolCall) {
-    const mcp = toolCall.mcpToolCall as {
-      result?: {
-        success?: { content?: unknown; isError?: boolean };
-        error?: unknown;
-      };
-    };
-    const result = mcp.result;
-    if (!result) return { output: null, status: "ok" };
-    if (result.error) return { output: result.error, status: "error" };
-    if (result.success?.isError) return { output: result.success.content, status: "error" };
-    return { output: result.success?.content ?? null, status: "ok" };
-  }
-  return { output: null, status: "ok" };
-}
-
-async function parseLog(filePath: string, toolFilter?: string): Promise<ToolCallEntry[]> {
-  const entries: ToolCallEntry[] = [];
-  const pending = new Map<string, ToolCallEntry>();
-  let index = 0;
-
-  const rl = readline.createInterface({
-    input: fs.createReadStream(filePath),
-    crlfDelay: Infinity,
-  });
-
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    let obj: Record<string, unknown>;
-    try {
-      obj = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
-    if (obj.type !== "tool_call") continue;
-
-    const callId = obj.call_id as string;
-    const toolCall = obj.tool_call as Record<string, unknown>;
-    const toolName = extractMcpToolName(toolCall);
-
-    // Only process MCP tool calls (skip builtins)
-    if (!toolName) continue;
-
-    // Apply filter if specified
-    if (toolFilter && !toolName.includes(toolFilter)) continue;
-
-    if (obj.subtype === "started") {
-      const entry: ToolCallEntry = {
-        index: ++index,
-        callId,
-        toolName,
-        startedMs: obj.timestamp_ms as number,
-        input: extractMcpInput(toolCall),
-        output: null,
-        status: "incomplete",
-      };
-      pending.set(callId, entry);
-      entries.push(entry);
-    } else if (obj.subtype === "completed") {
-      const entry = pending.get(callId);
-      if (entry) {
-        const completedMs = obj.timestamp_ms as number;
-        entry.completedMs = completedMs;
-        entry.durationMs = completedMs - entry.startedMs;
-        const { output, status } = extractMcpOutput(toolCall);
-        entry.output = output;
-        entry.status = status;
-        pending.delete(callId);
-      } else {
-        console.error(`Warning: completed event for unknown call_id ${callId} (tool: ${toolName}) — missing started event`);
-      }
-    }
-  }
-
-  return entries;
-}
-
 // ── Rendering ──
-
-function formatDuration(ms?: number): string {
-  if (ms === undefined) return "-";
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
 
 function formatContent(content: unknown): string {
   if (content === null || content === undefined) return "(empty)";
@@ -296,13 +137,14 @@ function formatContent(content: unknown): string {
   return JSON.stringify(content, null, 2);
 }
 
-function renderEntries(entries: ToolCallEntry[], runId?: string, repo?: string): void {
+function renderEntries(entries: ToolCallRecord[], runId?: string, repo?: string, format?: string): void {
   if (entries.length === 0) {
     console.log("No matching MCP tool calls found.");
     return;
   }
 
   if (runId) console.log(`Run: ${runId}${repo ? ` | Repo: ${repo}` : ""}`);
+  if (format) console.log(`Format: ${format}`);
   console.log(`Found ${entries.length} MCP tool call(s)\n`);
 
   for (const entry of entries) {
@@ -318,7 +160,6 @@ function renderEntries(entries: ToolCallEntry[], runId?: string, repo?: string):
       const input = entry.input as Record<string, unknown>;
       for (const [key, value] of Object.entries(input)) {
         const valueStr = typeof value === "string" ? value : JSON.stringify(value);
-        // Truncate long values
         const display = valueStr.length > 200 ? valueStr.slice(0, 200) + "..." : valueStr;
         console.log(`  ${key}: ${display}`);
       }
@@ -329,7 +170,6 @@ function renderEntries(entries: ToolCallEntry[], runId?: string, repo?: string):
     // Output
     console.log("\n── Output ──");
     const formatted = formatContent(entry.output);
-    // For very long outputs, show first and last portions
     const lines = formatted.split("\n");
     if (lines.length > 80) {
       console.log(lines.slice(0, 40).join("\n"));
@@ -371,31 +211,39 @@ async function main(): Promise<void> {
   let tmpDir: string | undefined;
 
   if (file) {
-    if (!fs.existsSync(file)) {
-      console.error(`File not found: ${file}`);
-      process.exit(1);
-    }
     logFile = file;
   } else {
     console.error(`Downloading agent logs for run ${runId}...`);
-    logFile = downloadLog(runId!, repo);
+    logFile = await downloadLog(runId!, repo);
     tmpDir = path.dirname(logFile);
   }
 
-  const entries = await parseLog(logFile, toolFilter);
-  renderEntries(entries, runId, repo);
+  const { calls, format } = await parseLog(logFile);
+
+  // Filter to MCP-only tool calls, optionally by tool name
+  const filtered = calls.filter((c) => {
+    if (c.toolType === "builtin") return false;
+    if (toolFilter && !c.toolName.includes(toolFilter)) return false;
+    return true;
+  });
+
+  renderEntries(filtered, runId, repo, format);
 
   // Cleanup
   if (tmpDir) {
     if (keepLogs) {
       console.log(`\nLog file kept at: ${logFile}`);
     } else {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      await fsp.rm(tmpDir, { recursive: true, force: true });
     }
   }
 }
 
 main().catch((e: unknown) => {
-  console.error(e instanceof Error ? e.message : String(e));
+  if (e instanceof FatalError) {
+    console.error(e.message);
+  } else {
+    console.error(e instanceof Error ? e.message : String(e));
+  }
   process.exitCode = 1;
 });

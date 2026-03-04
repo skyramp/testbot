@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * Evaluate Skyramp MCP tool call efficacy across multiple testbot runs.
+ * Evaluate Skyramp MCP tool call efficacy across multiple testbot runs (Cursor + Claude Code).
  *
  * Usage:
  *   npx tsx tools/evaluate-runs.ts <run_id1> <run_id2> ... [--repo owner/repo]
@@ -8,34 +8,15 @@
  *   npx tsx tools/evaluate-runs.ts --files log1.ndjson log2.ndjson ...
  */
 
-import { execFileSync, execFile } from "child_process";
-import { promisify } from "util";
-import * as fs from "fs";
-import * as os from "os";
+import { execFileSync } from "child_process";
+import * as fsp from "fs/promises";
 import * as path from "path";
 
-const execFileAsync = promisify(execFile);
-import * as readline from "readline";
+import type { ToolCallRecord, InitInfo, ParsedLog } from "./lib/types";
+import { FatalError, requireGh, downloadLog, formatDuration } from "./lib/download";
+import { parseLog } from "./lib/parse-log";
 
 // ── Types ──
-
-interface ToolCallRecord {
-  callId: string;
-  toolName: string;
-  toolType: "skyramp" | "mcp" | "builtin";
-  startedMs: number;
-  completedMs?: number;
-  durationMs?: number;
-  success?: boolean;
-  errorMsg?: string;
-  args?: Record<string, unknown>;
-  resultContent?: string;
-}
-
-interface InitInfo {
-  sessionId?: string;
-  model?: string;
-}
 
 interface SubmitReportData {
   testResults?: {
@@ -59,25 +40,20 @@ interface RunMetrics {
   builtinCalls: number;
   otherMcpCalls: number;
   skyrampRatio: number;
-  // Success/failure
   successCount: number;
   failureCount: number;
   incompleteCount: number;
   successRate: number;
-  // Test execution
   executeTestCalls: number;
   executeTestPasses: number;
   executeTestFailures: number;
   executeTestSuccessRate: number;
-  // Self-correction
   correctionCycles: number;
   editsInCycles: number;
-  // Timing
   sessionDurationMs: number;
   skyrampTimeMs: number;
   thinkingTimeMs: number;
   avgTestExecMs: number;
-  // Report
   report: SubmitReportData | null;
   testsCreated: number;
   testsPassed: number;
@@ -85,7 +61,6 @@ interface RunMetrics {
   testsSkipped: number;
   endpointsCovered: number;
   testTypes: string[];
-  // Derived
   executeToPassRatio: number;
   reportPresent: boolean;
   commitMsgPresent: boolean;
@@ -113,7 +88,7 @@ function parseArgs(argv: string[]): {
         files.push(args[i]);
         i++;
       }
-      i--; // back up for the outer loop
+      i--;
     } else if (arg === "--pr") {
       pr = args[++i];
     } else if (arg === "--repo") {
@@ -155,24 +130,7 @@ Options:
   --help, -h     Show this help message`);
 }
 
-// ── Log acquisition ──
-
-class FatalError extends Error {
-  constructor(msg: string) {
-    super(msg);
-    this.name = "FatalError";
-  }
-}
-
-function requireGh(): void {
-  try {
-    execFileSync("gh", ["--version"], { stdio: "ignore" });
-  } catch {
-    throw new FatalError(
-      "gh CLI not found. Install from https://cli.github.com/ or use --files mode."
-    );
-  }
-}
+// ── PR run lookup ──
 
 function getRunIdsForPr(pr: string, repo: string): string[] {
   requireGh();
@@ -189,7 +147,6 @@ function getRunIdsForPr(pr: string, repo: string): string[] {
       event: string;
     }[];
 
-    // Get PR branch name
     const prInfo = execFileSync(
       "gh",
       ["pr", "view", pr, "--repo", repo, "--json", "headRefName"],
@@ -197,7 +154,6 @@ function getRunIdsForPr(pr: string, repo: string): string[] {
     ).toString();
     const { headRefName } = JSON.parse(prInfo);
 
-    // Filter runs for this PR's branch
     const prRuns = runs
       .filter((r) => r.headBranch === headRefName)
       .map((r) => String(r.databaseId));
@@ -214,183 +170,9 @@ function getRunIdsForPr(pr: string, repo: string): string[] {
   }
 }
 
-async function downloadLog(runId: string, repo: string): Promise<string | null> {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "eval-run-"));
-  try {
-    await execFileAsync(
-      "gh",
-      ["run", "download", runId, "--repo", repo, "--name", "skyramp-agent-logs", "--dir", tmpDir],
-    );
-  } catch {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-    return null; // No artifact for this run
-  }
-
-  const logFile = path.join(tmpDir, "agent-log.ndjson");
-  if (!fs.existsSync(logFile)) {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-    return null;
-  }
-  return logFile;
-}
-
-// ── NDJSON parsing ──
-
-function getToolName(toolCall: Record<string, unknown>): {
-  name: string;
-  type: "skyramp" | "mcp" | "builtin";
-  args?: Record<string, unknown>;
-} {
-  if ("mcpToolCall" in toolCall) {
-    const mcp = toolCall.mcpToolCall as {
-      args?: {
-        toolName?: string;
-        providerIdentifier?: string;
-        args?: Record<string, unknown>;
-      };
-    };
-    const toolName = mcp.args?.toolName ?? "unknown_mcp_tool";
-    const provider = mcp.args?.providerIdentifier;
-    const isSkyramp =
-      provider?.includes("skyramp") || toolName.startsWith("skyramp_");
-    return {
-      name: toolName,
-      type: isSkyramp ? "skyramp" : "mcp",
-      args: mcp.args?.args,
-    };
-  }
-  const key = Object.keys(toolCall)[0];
-  return { name: key, type: "builtin" };
-}
-
-function getToolResult(toolCall: Record<string, unknown>): {
-  success: boolean;
-  content?: string;
-} {
-  for (const val of Object.values(toolCall)) {
-    if (val && typeof val === "object" && "result" in (val as object)) {
-      const result = (val as { result: Record<string, unknown> }).result;
-      if ("error" in result) {
-        return { success: false, content: JSON.stringify(result.error) };
-      }
-      if (result.success && typeof result.success === "object") {
-        const s = result.success as { isError?: boolean; content?: unknown };
-        if (s.isError) {
-          return { success: false, content: JSON.stringify(s.content) };
-        }
-        // Extract text content from MCP responses
-        if (Array.isArray(s.content)) {
-          const texts = s.content
-            .filter(
-              (c: { type?: string }) =>
-                c && typeof c === "object" && c.type === "text"
-            )
-            .map(
-              (c: { text?: string | { text?: string } }) =>
-                typeof c.text === "string"
-                  ? c.text
-                  : typeof c.text === "object"
-                    ? c.text?.text ?? ""
-                    : ""
-            );
-          return { success: true, content: texts.join("\n") };
-        }
-        return { success: true };
-      }
-      return { success: true };
-    }
-  }
-  return { success: true };
-}
-
-interface ParsedLog {
-  calls: ToolCallRecord[];
-  init: InitInfo;
-  assistantMessages: { timestampMs: number; content: string }[];
-}
-
-async function parseLog(filePath: string): Promise<ParsedLog> {
-  const calls: ToolCallRecord[] = [];
-  const pending = new Map<string, ToolCallRecord>();
-  const init: InitInfo = {};
-  const assistantMessages: { timestampMs: number; content: string }[] = [];
-
-  const rl = readline.createInterface({
-    input: fs.createReadStream(filePath),
-    crlfDelay: Infinity,
-  });
-
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    let obj: Record<string, unknown>;
-    try {
-      obj = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
-    if (obj.type === "system" && obj.subtype === "init") {
-      init.sessionId = obj.session_id as string;
-      init.model = obj.model as string;
-      continue;
-    }
-
-    if (obj.type === "assistant" && obj.timestamp_ms) {
-      const msg = obj.message as { content?: { type: string; text: string }[] };
-      const text =
-        msg?.content
-          ?.filter((c) => c.type === "text")
-          .map((c) => c.text)
-          .join("\n") ?? "";
-      assistantMessages.push({
-        timestampMs: obj.timestamp_ms as number,
-        content: text,
-      });
-      continue;
-    }
-
-    if (obj.type !== "tool_call") continue;
-
-    const callId = obj.call_id as string;
-    const toolCall = obj.tool_call as Record<string, unknown>;
-
-    if (obj.subtype === "started") {
-      const { name, type, args } = getToolName(toolCall);
-      const record: ToolCallRecord = {
-        callId,
-        toolName: name,
-        toolType: type,
-        startedMs: obj.timestamp_ms as number,
-        args,
-      };
-      pending.set(callId, record);
-      calls.push(record);
-    } else if (obj.subtype === "completed") {
-      const record = pending.get(callId);
-      if (record) {
-        const completedMs = obj.timestamp_ms as number;
-        record.completedMs = completedMs;
-        record.durationMs = completedMs - record.startedMs;
-        const { success, content } = getToolResult(toolCall);
-        record.success = success;
-        record.resultContent = content;
-        if (!success) {
-          record.errorMsg = content;
-        }
-        pending.delete(callId);
-      } else {
-        console.warn(`Warning: completed event with no matching started (call_id=${callId})`);
-      }
-    }
-  }
-
-  return { calls, init, assistantMessages };
-}
-
 // ── Metrics computation ──
 
 function extractReportData(calls: ToolCallRecord[]): SubmitReportData | null {
-  // Find submit_report call and extract its args (the structured report data)
   const reportCall = calls.find(
     (c) => c.toolName === "skyramp_submit_report" && c.args
   );
@@ -398,22 +180,21 @@ function extractReportData(calls: ToolCallRecord[]): SubmitReportData | null {
 
   return {
     testResults: reportCall.args.testResults as SubmitReportData["testResults"],
-    newTestsCreated: reportCall.args
-      .newTestsCreated as SubmitReportData["newTestsCreated"],
-    testMaintenance: reportCall.args
-      .testMaintenance as SubmitReportData["testMaintenance"],
-    issuesFound: reportCall.args
-      .issuesFound as SubmitReportData["issuesFound"],
+    newTestsCreated: reportCall.args.newTestsCreated as SubmitReportData["newTestsCreated"],
+    testMaintenance: reportCall.args.testMaintenance as SubmitReportData["testMaintenance"],
+    issuesFound: reportCall.args.issuesFound as SubmitReportData["issuesFound"],
     businessCaseAnalysis: reportCall.args.businessCaseAnalysis as string,
     commitMessage: reportCall.args.commitMessage as string,
   };
 }
 
+/** Edit tool names across both formats (Cursor: editToolCall, Claude Code: Edit/Write) */
+const EDIT_TOOL_NAMES = new Set(["editToolCall", "Edit", "Write"]);
+
 function detectCorrectionCycles(calls: ToolCallRecord[]): {
   cycles: number;
   edits: number;
 } {
-  // A correction cycle: execute_test fails → edit(s) → execute_test again
   let cycles = 0;
   let totalEdits = 0;
   let lastExecFailed = false;
@@ -421,19 +202,15 @@ function detectCorrectionCycles(calls: ToolCallRecord[]): {
 
   for (const c of calls) {
     if (c.toolName === "skyramp_execute_test") {
-      if (
-        lastExecFailed &&
-        editsInCurrentCycle > 0
-      ) {
+      if (lastExecFailed && editsInCurrentCycle > 0) {
         cycles++;
         totalEdits += editsInCurrentCycle;
       }
-      // Check if this execution's result indicates failure
       lastExecFailed =
         c.success === false ||
         (c.resultContent?.includes("Test execution failed") ?? false);
       editsInCurrentCycle = 0;
-    } else if (c.toolName === "editToolCall" && lastExecFailed) {
+    } else if (EDIT_TOOL_NAMES.has(c.toolName) && lastExecFailed) {
       editsInCurrentCycle++;
     }
   }
@@ -441,10 +218,7 @@ function detectCorrectionCycles(calls: ToolCallRecord[]): {
   return { cycles, edits: totalEdits };
 }
 
-function computeMetrics(
-  runId: string,
-  parsed: ParsedLog
-): RunMetrics {
+function computeMetrics(runId: string, parsed: ParsedLog): RunMetrics {
   const { calls, init } = parsed;
 
   const skyrampCalls = calls.filter((c) => c.toolType === "skyramp");
@@ -456,10 +230,7 @@ function computeMetrics(
   const failures = completed.filter((c) => c.success === false);
   const incomplete = calls.filter((c) => c.success === undefined);
 
-  // Test execution metrics
-  const execCalls = calls.filter(
-    (c) => c.toolName === "skyramp_execute_test"
-  );
+  const execCalls = calls.filter((c) => c.toolName === "skyramp_execute_test");
   const execPasses = execCalls.filter(
     (c) =>
       c.success === true &&
@@ -471,7 +242,6 @@ function computeMetrics(
       (c.resultContent?.includes("Test execution failed") ?? false)
   );
 
-  // Timing
   const timestamps = calls
     .flatMap((c) => [c.startedMs, c.completedMs].filter(Boolean) as number[]);
   const sessionDurationMs =
@@ -484,7 +254,6 @@ function computeMetrics(
     0
   );
 
-  // Thinking time = session duration - all tool durations
   const totalToolTime = calls.reduce(
     (sum, c) => sum + (c.durationMs ?? 0),
     0
@@ -499,7 +268,6 @@ function computeMetrics(
       ? execDurations.reduce((a, b) => a + b, 0) / execDurations.length
       : 0;
 
-  // Report data
   const report = extractReportData(calls);
   const testResults = report?.testResults ?? [];
   const passed = testResults.filter(
@@ -516,7 +284,6 @@ function computeMetrics(
     ...new Set(testResults.map((t) => t.testType.toLowerCase())),
   ];
 
-  // Self-correction
   const { cycles, edits } = detectCorrectionCycles(calls);
 
   return {
@@ -559,14 +326,6 @@ function computeMetrics(
 
 // ── Report rendering ──
 
-function fmtDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  const min = Math.floor(ms / 60000);
-  const sec = Math.round((ms % 60000) / 1000);
-  return `${min}m ${sec}s`;
-}
-
 function fmtPct(n: number): string {
   return `${Math.round(n * 100)}%`;
 }
@@ -575,9 +334,13 @@ function renderReport(allMetrics: RunMetrics[]): void {
   const n = allMetrics.length;
 
   console.log("═══ Testbot Evaluation Report ═══");
-  console.log(`Runs analyzed: ${n}\n`);
+  console.log(`Runs analyzed: ${n}`);
 
-  // Dynamic column width: at least 14, wide enough for full run IDs + 2 padding
+  // Show detected formats
+  const formats = [...new Set(allMetrics.map((m) => m.init.format ?? "cursor"))];
+  if (formats.length > 0) console.log(`Formats: ${formats.join(", ")}`);
+  console.log();
+
   const colLabel = 28;
   const maxIdLen = Math.max(...allMetrics.map((m) => m.runId.length), 3);
   const colWidth = Math.max(14, maxIdLen + 2);
@@ -587,7 +350,6 @@ function renderReport(allMetrics: RunMetrics[]): void {
     (n > 1 ? "Avg".padEnd(colWidth) : "");
   const separator = "─".repeat(header.length);
 
-  // Helper to render a row
   const row = (
     label: string,
     values: string[],
@@ -641,7 +403,6 @@ function renderReport(allMetrics: RunMetrics[]): void {
     allMetrics.map((m) => String(m.endpointsCovered)),
     avgNum(allMetrics.map((m) => m.endpointsCovered)).toFixed(1)
   );
-  // Test types: render as a sub-list below the table row
   if (allMetrics.some((m) => m.testTypes.length > 0)) {
     const maxTypes = Math.max(...allMetrics.map((m) => m.testTypes.length));
     for (let t = 0; t < maxTypes; t++) {
@@ -699,25 +460,25 @@ function renderReport(allMetrics: RunMetrics[]): void {
 
   row(
     "Session duration",
-    allMetrics.map((m) => fmtDuration(m.sessionDurationMs)),
-    fmtDuration(avgNum(allMetrics.map((m) => m.sessionDurationMs)))
+    allMetrics.map((m) => formatDuration(m.sessionDurationMs)),
+    formatDuration(avgNum(allMetrics.map((m) => m.sessionDurationMs)))
   );
   row(
     "Skyramp tool time",
-    allMetrics.map((m) => fmtDuration(m.skyrampTimeMs)),
-    fmtDuration(avgNum(allMetrics.map((m) => m.skyrampTimeMs)))
+    allMetrics.map((m) => formatDuration(m.skyrampTimeMs)),
+    formatDuration(avgNum(allMetrics.map((m) => m.skyrampTimeMs)))
   );
   row(
     "Agent thinking time",
-    allMetrics.map((m) => fmtDuration(m.thinkingTimeMs)),
-    fmtDuration(avgNum(allMetrics.map((m) => m.thinkingTimeMs)))
+    allMetrics.map((m) => formatDuration(m.thinkingTimeMs)),
+    formatDuration(avgNum(allMetrics.map((m) => m.thinkingTimeMs)))
   );
   row(
     "Avg test exec time",
     allMetrics.map((m) =>
-      m.executeTestCalls > 0 ? fmtDuration(m.avgTestExecMs) : "-"
+      m.executeTestCalls > 0 ? formatDuration(m.avgTestExecMs) : "-"
     ),
-    fmtDuration(avgNum(allMetrics.map((m) => m.avgTestExecMs)))
+    formatDuration(avgNum(allMetrics.map((m) => m.avgTestExecMs)))
   );
 
   // ── Self-Correction ──
@@ -769,23 +530,8 @@ function renderReport(allMetrics: RunMetrics[]): void {
     })
   );
 
-  // ── Common Errors ──
-  const allErrors = allMetrics.flatMap((m) =>
-    m.report === null
-      ? []
-      : [] // We'd need to track errors from calls
-  );
-
-  // Collect tool-level errors
+  // Error summary
   console.log();
-  const errorCounts = new Map<string, number>();
-  for (const m of allMetrics) {
-    // We don't have direct access to calls here, but we tracked failureCount
-    // For error details, we'd need to pass them through
-  }
-
-  // If there are errors worth showing, let's collect from a second pass
-  // For now, just show the summary
   if (allMetrics.some((m) => m.failureCount > 0)) {
     console.log(
       `Note: ${allMetrics.reduce((s, m) => s + m.failureCount, 0)} total tool call failures across ${n} runs. Use analyze-tools.ts for per-run error details.`
@@ -798,7 +544,6 @@ function renderReport(allMetrics: RunMetrics[]): void {
 async function main(): Promise<void> {
   const { runIds, files, pr, repo } = parseArgs(process.argv);
 
-  // Resolve run IDs
   let resolvedRunIds = [...runIds];
   if (pr) {
     requireGh();
@@ -807,7 +552,6 @@ async function main(): Promise<void> {
     console.log(`Found ${resolvedRunIds.length} runs\n`);
   }
 
-  // Collect log files
   interface LogSource {
     runId: string;
     filePath: string;
@@ -820,7 +564,7 @@ async function main(): Promise<void> {
     requireGh();
     const results = await Promise.allSettled(
       resolvedRunIds.map(async (runId) => {
-        const logFile = await downloadLog(runId, repo);
+        const logFile = await downloadLog(runId, repo).catch(() => null);
         return { runId, logFile };
       })
     );
@@ -845,10 +589,6 @@ async function main(): Promise<void> {
 
   // Local files
   for (const f of files) {
-    if (!fs.existsSync(f)) {
-      console.error(`  Skipping ${f}: file not found`);
-      continue;
-    }
     sources.push({
       runId: path.basename(f, ".ndjson"),
       filePath: f,
@@ -886,7 +626,7 @@ async function main(): Promise<void> {
   // Cleanup temp dirs
   for (const src of sources) {
     if (src.tmpDir) {
-      fs.rmSync(src.tmpDir, { recursive: true, force: true });
+      await fsp.rm(src.tmpDir, { recursive: true, force: true });
     }
   }
 }
