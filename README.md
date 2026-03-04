@@ -78,22 +78,27 @@ Before using this action, ensure you have:
 | `cursor_api_key` | Cursor API key (provide this to use Cursor agent) |
 | `copilot_api_key` | GitHub token with Copilot access (provide this to use Copilot agent) |
 
-### Optional - High Priority
+### Optional - Service Lifecycle
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `target_setup_command` | Command to start services before test maintenance | `docker compose up -d` |
+| `skip_target_setup` | Skip running service startup command | `false` |
+| `target_ready_check_command` | Command to verify services are ready (retried until success or timeout) | `sleep 5` |
+| `target_ready_check_timeout` | Max seconds to wait for ready check to succeed | `30` |
+| `target_ready_check_diagnostics_command` | Command to collect diagnostics on ready check timeout | Docker container status/logs |
+| `target_teardown_command` | Command to tear down services after tests (runs in post step, non-fatal) | `''` |
+| `skip_target_teardown` | Skip running service teardown command | `false` |
+| `auth_token_command` | Shell command to generate an authentication token (stdout is captured) | `''` |
+
+### Optional - Other
 
 | Input | Description | Default |
 |-------|-------------|---------|
 | `test_directory` | Directory containing Skyramp tests | `tests` |
-| `target_setup_command` | Command to start services before test maintenance | `docker compose up -d` |
-| `auth_token_command` | Shell command to generate an authentication token (stdout is captured) | `''` |
-
-### Optional - Medium Priority
-
-| Input | Description | Default |
-|-------|-------------|---------|
 | `skyramp_executor_version` | Skyramp Executor Docker image version | `v1.3.3` |
 | `skyramp_mcp_version` | Skyramp MCP package version | `latest` |
 | `node_version` | Node.js version to use | `lts` |
-| `skip_target_setup` | Skip running service startup command | `false` |
 | `working_directory` | Working directory for the action | `.` |
 | `auto_commit` | Automatically commit test changes | `true` |
 | `commit_message` | Commit message for test changes | `Skyramp Testbot: test maintenance suggestions` |
@@ -101,7 +106,6 @@ Before using this action, ensure you have:
 | `testbot_max_retries` | Maximum number of retries for transient agent CLI errors | `3` |
 | `testbot_retry_delay` | Delay in seconds between agent retry attempts | `10` |
 | `enable_debug` | Enable debug logging | `true` |
-| `config_file` | Path to Skyramp workspace config file | `.skyramp.yml` |
 
 ## Outputs
 

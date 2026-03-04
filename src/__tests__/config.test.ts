@@ -150,6 +150,39 @@ describe('loadConfig', () => {
     expect(config.targetSetupCommand).toBe('docker compose up -d')
   })
 
+  it('uses serverTeardownCommand from workspace.yml when present', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{
+        serviceName: 'api',
+        outputDir: 'tests/python',
+        runtimeDetails: Object.assign(
+          { serverStartCommand: 'docker compose up -d', runtime: 'docker' as const },
+          { serverTeardownCommand: 'docker compose down -v' },
+        ),
+      }],
+    })
+
+    const config = await loadConfig(makeInputs())
+
+    expect(config.targetTeardownCommand).toBe('docker compose down -v')
+  })
+
+  it('falls back to input default when serverTeardownCommand is absent', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{
+        serviceName: 'api',
+        outputDir: 'tests/python',
+        runtimeDetails: { serverStartCommand: 'docker compose up -d', runtime: 'docker' },
+      }],
+    })
+
+    const config = await loadConfig(makeInputs({ targetTeardownCommand: 'npm run teardown' }))
+
+    expect(config.targetTeardownCommand).toBe('npm run teardown')
+  })
+
   it('testbot-specific fields always come from inputs', async () => {
     mockExists.mockResolvedValue(true)
     mockRead.mockResolvedValue({

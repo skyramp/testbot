@@ -56,8 +56,9 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
         if (first.runtimeDetails?.serverStartCommand) {
           targetSetupCommand = first.runtimeDetails.serverStartCommand
         }
-        if ((first.runtimeDetails as unknown as Record<string, unknown>)?.serverTeardownCommand) {
-          targetTeardownCommand = (first.runtimeDetails as unknown as Record<string, unknown>).serverTeardownCommand as string
+        const teardown = (first.runtimeDetails as { serverTeardownCommand?: unknown })?.serverTeardownCommand
+        if (typeof teardown === 'string') {
+          targetTeardownCommand = teardown
         }
       }
     } catch (err) {

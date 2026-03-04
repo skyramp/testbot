@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+- Renamed `service_startup_command` → `target_setup_command`
+- Renamed `skip_service_startup` → `skip_target_setup`
+- Renamed `health_check_command` → `target_ready_check_command`
+- Renamed `health_check_timeout` → `target_ready_check_timeout`
+- Renamed `health_check_diagnostics_command` → `target_ready_check_diagnostics_command`
+
+### Added
+- `target_teardown_command` input for guaranteed service cleanup via GitHub Actions `post` step
+- `skip_target_teardown` input to disable teardown without removing the command
+- `dist/post.js` post-step entry point for teardown execution
+
 ### Planned
 - Caching for Cursor CLI installation
 - Enhanced test execution reporting
@@ -42,11 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Optional Inputs:**
   - `test_directory` (default: `tests`)
-  - `target_setup_command` (default: `docker compose up -d`)
+  - `service_startup_command` (default: `docker compose up -d`)
   - `skyramp_executor_version` (default: `v1.3.3`)
   - `skyramp_mcp_version` (default: `latest`)
   - `node_version` (default: `lts`)
-  - `skip_target_setup` (default: `false`)
+  - `skip_service_startup` (default: `false`)
   - `working_directory` (default: `.`)
   - `auto_commit` (default: `true`)
   - `commit_message` (default: `Skyramp Testbot: test maintenance suggestions`)

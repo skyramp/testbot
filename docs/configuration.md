@@ -211,7 +211,7 @@ with:
 
 **Notes:**
 - Command runs in `working_directory`
-- Failure is logged as warning but doesn't fail action
+- Failures are treated as fatal: the action run will fail if this command fails
 - Use `skip_target_setup: true` if not needed
 - See `target_ready_check_command` for controlling readiness polling after startup
 

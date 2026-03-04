@@ -1,6 +1,6 @@
 import './mocks/core'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { startServices } from '../services'
+import { startServices, teardownServices } from '../services'
 import { exec } from '../utils'
 import type { ResolvedConfig } from '../types'
 
@@ -86,5 +86,45 @@ describe('startServices', () => {
     mockExec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
 
     await expect(startServices(baseConfig, '/work')).resolves.toBeUndefined()
+  })
+})
+
+describe('teardownServices', () => {
+  const mockExec = vi.mocked(exec)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockExec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+  })
+
+  it('is a no-op when targetTeardownCommand is empty', async () => {
+    const config = { ...baseConfig, targetTeardownCommand: '' }
+
+    await teardownServices(config, '/work')
+
+    expect(mockExec).not.toHaveBeenCalled()
+  })
+
+  it('skips teardown when skipTargetTeardown is true', async () => {
+    const config = { ...baseConfig, targetTeardownCommand: 'docker compose down', skipTargetTeardown: true }
+
+    await teardownServices(config, '/work')
+
+    expect(mockExec).not.toHaveBeenCalled()
+  })
+
+  it('runs the teardown command successfully', async () => {
+    const config = { ...baseConfig, targetTeardownCommand: 'docker compose down -v' }
+
+    await teardownServices(config, '/work')
+
+    expect(mockExec).toHaveBeenCalledWith('bash', ['-c', 'docker compose down -v'], { cwd: '/work' })
+  })
+
+  it('does not throw on command failure (non-fatal)', async () => {
+    const config = { ...baseConfig, targetTeardownCommand: 'docker compose down' }
+    mockExec.mockRejectedValueOnce(new Error('exit code 1'))
+
+    await expect(teardownServices(config, '/work')).resolves.toBeUndefined()
   })
 })
