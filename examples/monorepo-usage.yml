@@ -44,7 +44,7 @@ jobs:
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
           test_directory: 'services/user-service/tests'
           working_directory: 'services/user-service'
-          service_startup_command: 'docker compose -f services/user-service/docker-compose.yml up -d'
+          target_setup_command: 'docker compose -f services/user-service/docker-compose.yml up -d'
           commit_message: 'test(user-service): update tests via Skyramp bot'
 
   # Run test maintenance for order service
@@ -67,7 +67,7 @@ jobs:
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
           test_directory: 'services/order-service/tests'
           working_directory: 'services/order-service'
-          service_startup_command: 'docker compose -f services/order-service/docker-compose.yml up -d'
+          target_setup_command: 'docker compose -f services/order-service/docker-compose.yml up -d'
           commit_message: 'test(order-service): update tests via Skyramp bot'
 
   # Run test maintenance for payment service
@@ -90,5 +90,5 @@ jobs:
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
           test_directory: 'services/payment-service/tests'
           working_directory: 'services/payment-service'
-          service_startup_command: 'docker compose -f services/payment-service/docker-compose.yml up -d'
+          target_setup_command: 'docker compose -f services/payment-service/docker-compose.yml up -d'
           commit_message: 'test(payment-service): update tests via Skyramp bot'

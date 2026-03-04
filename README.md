@@ -83,7 +83,7 @@ Before using this action, ensure you have:
 | Input | Description | Default |
 |-------|-------------|---------|
 | `test_directory` | Directory containing Skyramp tests | `tests` |
-| `service_startup_command` | Command to start services before test maintenance | `docker compose up -d` |
+| `target_setup_command` | Command to start services before test maintenance | `docker compose up -d` |
 | `auth_token_command` | Shell command to generate an authentication token (stdout is captured) | `''` |
 
 ### Optional - Medium Priority
@@ -93,7 +93,7 @@ Before using this action, ensure you have:
 | `skyramp_executor_version` | Skyramp Executor Docker image version | `v1.3.3` |
 | `skyramp_mcp_version` | Skyramp MCP package version | `latest` |
 | `node_version` | Node.js version to use | `lts` |
-| `skip_service_startup` | Skip running service startup command | `false` |
+| `skip_target_setup` | Skip running service startup command | `false` |
 | `working_directory` | Working directory for the action | `.` |
 | `auto_commit` | Automatically commit test changes | `true` |
 | `commit_message` | Commit message for test changes | `Skyramp Testbot: test maintenance suggestions` |
@@ -149,7 +149,7 @@ Before using this action, ensure you have:
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    service_startup_command: 'npm run start:services'
+    target_setup_command: 'npm run start:services'
 ```
 
 ### Without Auto-commit (Manual Review)
@@ -304,8 +304,8 @@ This ensures Testbot never runs on its own commits while allowing other workflow
 
 - Verify docker-compose.yml exists in repository
 - Check that Docker is available in runner
-- Use `skip_service_startup: true` if services not needed
-- Customize with `service_startup_command` for different startup methods
+- Use `skip_target_setup: true` if services not needed
+- Customize with `target_setup_command` for different startup methods
 
 **Agent timeout or failures**
 

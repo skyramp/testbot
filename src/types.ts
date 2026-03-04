@@ -13,18 +13,20 @@ export interface ActionInputs {
   copilotApiKey: string
   anthropicApiKey: string
   testDirectory: string
-  serviceStartupCommand: string
+  targetSetupCommand: string
   authTokenCommand: string
+  targetTeardownCommand: string
+  skipTargetTeardown: boolean
   skyrampExecutorVersion: string
   skyrampMcpVersion: string
   skyrampMcpSource: McpSource
   skyrampMcpGithubToken: string
   skyrampMcpGithubRef: string
   nodeVersion: string
-  skipServiceStartup: boolean
-  healthCheckCommand: string
-  healthCheckTimeout: number
-  healthCheckDiagnosticsCommand: string
+  skipTargetSetup: boolean
+  targetReadyCheckCommand: string
+  targetReadyCheckTimeout: number
+  targetReadyCheckDiagnosticsCommand: string
   workingDirectory: string
   autoCommit: boolean
   commitMessage: string
@@ -49,17 +51,19 @@ export interface WorkspaceServiceInfo {
 /** Configuration resolved from .skyramp/workspace.yml merged with action inputs. */
 export interface ResolvedConfig {
   testDirectory: string
-  serviceStartupCommand: string
+  targetSetupCommand: string
   authTokenCommand: string
+  targetTeardownCommand: string
+  skipTargetTeardown: boolean
   skyrampExecutorVersion: string
   skyrampMcpVersion: string
   skyrampMcpSource: McpSource
   skyrampMcpGithubRef: string
   nodeVersion: string
-  skipServiceStartup: boolean
-  healthCheckCommand: string
-  healthCheckTimeout: number
-  healthCheckDiagnosticsCommand: string
+  skipTargetSetup: boolean
+  targetReadyCheckCommand: string
+  targetReadyCheckTimeout: number
+  targetReadyCheckDiagnosticsCommand: string
   autoCommit: boolean
   commitMessage: string
   postPrComment: boolean

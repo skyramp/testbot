@@ -42,11 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Optional Inputs:**
   - `test_directory` (default: `tests`)
-  - `service_startup_command` (default: `docker compose up -d`)
+  - `target_setup_command` (default: `docker compose up -d`)
   - `skyramp_executor_version` (default: `v1.3.3`)
   - `skyramp_mcp_version` (default: `latest`)
   - `node_version` (default: `lts`)
-  - `skip_service_startup` (default: `false`)
+  - `skip_target_setup` (default: `false`)
   - `working_directory` (default: `.`)
   - `auto_commit` (default: `true`)
   - `commit_message` (default: `Skyramp Testbot: test maintenance suggestions`)

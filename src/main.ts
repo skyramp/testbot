@@ -51,12 +51,12 @@ async function run(): Promise<void> {
 
   debug(`Resolved config: ${JSON.stringify({
     testDirectory: config.testDirectory,
-    serviceStartupCommand: config.serviceStartupCommand,
+    targetSetupCommand: config.targetSetupCommand,
     authTokenCommand: config.authTokenCommand ? '<set>' : '<empty>',
     skyrampExecutorVersion: config.skyrampExecutorVersion,
     skyrampMcpVersion: config.skyrampMcpVersion,
     skyrampMcpSource: config.skyrampMcpSource,
-    skipServiceStartup: config.skipServiceStartup,
+    skipTargetSetup: config.skipTargetSetup,
     autoCommit: config.autoCommit,
     commitMessage: config.commitMessage,
     postPrComment: config.postPrComment,
@@ -199,12 +199,12 @@ async function run(): Promise<void> {
         `**Error:** ${errMsg}`,
         '',
         '**How to fix:**',
-        `- Check that your \`service_startup_command\` is correct: \`${config.serviceStartupCommand}\``,
+        `- Check that your \`target_setup_command\` is correct: \`${config.targetSetupCommand}\``,
         '- Verify the service names in your `docker-compose.yml` (or equivalent) match the command',
         '- Ensure all referenced Docker images exist and can be pulled',
         '- You can test locally by running the command manually',
         '',
-        'This setting can be configured in your workflow file (`service_startup_command` input) or in `.skyramp/workspace.yml`.',
+        'This setting can be configured in your workflow file (`target_setup_command` input) or in `.skyramp/workspace.yml`.',
       ].join('\n'))
     }
     throw err

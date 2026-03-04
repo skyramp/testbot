@@ -7,34 +7,34 @@ import { exec, sleep, withGroup, secondsToMilliseconds } from './utils'
  */
 export async function startServices(config: ResolvedConfig, workingDir: string): Promise<void> {
   await withGroup('Starting services', async () => {
-    if (config.skipServiceStartup) {
-      core.notice('Skipping service startup (skip_service_startup=true)')
+    if (config.skipTargetSetup) {
+      core.notice('Skipping service startup (skip_target_setup=true)')
       return
     }
 
-    core.info(`Running command: ${config.serviceStartupCommand}`)
+    core.info(`Running command: ${config.targetSetupCommand}`)
     try {
-      await exec('bash', ['-c', config.serviceStartupCommand], { cwd: workingDir })
+      await exec('bash', ['-c', config.targetSetupCommand], { cwd: workingDir })
       core.notice('Services started successfully')
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       core.error(`Service startup command failed: ${errMsg}`)
       throw new Error(
-        `Service startup failed — all subsequent tests will likely fail. Command: ${config.serviceStartupCommand}`,
+        `Service startup failed — all subsequent tests will likely fail. Command: ${config.targetSetupCommand}`,
         { cause: err },
       )
     }
 
     // Wait for services to be ready
-    core.info(`Running health check: ${config.healthCheckCommand}`)
+    core.info(`Running health check: ${config.targetReadyCheckCommand}`)
     const startTime = Date.now()
-    const timeoutMs = secondsToMilliseconds(config.healthCheckTimeout)
+    const timeoutMs = secondsToMilliseconds(config.targetReadyCheckTimeout)
     const pollInterval = 2
     let attempt = 0
 
     while (Date.now() - startTime < timeoutMs) {
       attempt++
-      const { exitCode } = await exec('bash', ['-c', config.healthCheckCommand], {
+      const { exitCode } = await exec('bash', ['-c', config.targetReadyCheckCommand], {
         cwd: workingDir,
         ignoreReturnCode: true,
       })
@@ -43,22 +43,49 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
         return
       }
       const elapsed = Math.round((Date.now() - startTime) / 1000)
-      core.info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.healthCheckTimeout}s), retrying in ${pollInterval}s...`)
+      core.info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.targetReadyCheckTimeout}s), retrying in ${pollInterval}s...`)
       await sleep(pollInterval)
     }
 
-    core.warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`)
+    core.warning(`Health check timed out after ${config.targetReadyCheckTimeout}s, continuing anyway...`)
 
     // Run diagnostics command to help debug service startup issues
     try {
       core.info('--- Diagnostics ---')
-      await exec('bash', ['-c', config.healthCheckDiagnosticsCommand], {
+      await exec('bash', ['-c', config.targetReadyCheckDiagnosticsCommand], {
         cwd: workingDir,
         ignoreReturnCode: true,
       })
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       core.warning(`Could not retrieve diagnostics: ${errMsg}`)
+    }
+  })
+}
+
+/**
+ * Tear down user-defined services (e.g., docker compose down).
+ * Non-fatal: failures log a warning but never throw.
+ */
+export async function teardownServices(config: ResolvedConfig, workingDir: string): Promise<void> {
+  await withGroup('Tearing down services', async () => {
+    if (config.skipTargetTeardown) {
+      core.notice('Skipping service teardown (skip_target_teardown=true)')
+      return
+    }
+
+    if (!config.targetTeardownCommand) {
+      core.info('No target_teardown_command configured, skipping teardown')
+      return
+    }
+
+    core.info(`Running teardown command: ${config.targetTeardownCommand}`)
+    try {
+      await exec('bash', ['-c', config.targetTeardownCommand], { cwd: workingDir })
+      core.notice('Services torn down successfully')
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      core.warning(`Service teardown command failed (non-fatal): ${errMsg}`)
     }
   })
 }

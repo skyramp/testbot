@@ -62,7 +62,8 @@ services:
 | Workspace field | Testbot config field | Notes |
 |---|---|---|
 | `services[i].outputDir` | `testDirectory` | Overrides `test_directory` input |
-| `services[i].runtimeDetails.serverStartCommand` | `serviceStartupCommand` | Overrides `service_startup_command` input |
+| `services[i].runtimeDetails.serverStartCommand` | `targetSetupCommand` | Overrides `target_setup_command` input |
+| `services[i].runtimeDetails.serverTeardownCommand` | `targetTeardownCommand` | Overrides `target_teardown_command` input |
 | `services[i].language` | (passed to agent prompt) | Helps LLM generate appropriate tests |
 | `services[i].framework` | (passed to agent prompt) | Helps LLM use correct test framework |
 | `services[i].api.baseUrl` | (passed to agent prompt) | Helps LLM target correct URL |
@@ -73,7 +74,7 @@ services:
 
 All services defined in `.skyramp/workspace.yml` are passed to the agent prompt. The LLM receives each service's language, framework, base URL, and output directory, allowing it to generate and maintain tests for all services in a single run.
 
-The first service's `outputDir` and `runtimeDetails.serverStartCommand` are used as operational defaults (for `testDirectory` and `serviceStartupCommand`). During auto-commit, files are staged from each service's `outputDir`.
+The first service's `outputDir` and `runtimeDetails.serverStartCommand` are used as operational defaults (for `testDirectory` and `targetSetupCommand`). During auto-commit, files are staged from each service's `outputDir`.
 
 ### Validation and Error Handling
 
@@ -173,7 +174,7 @@ with:
 - Multiple test directories (see Advanced Patterns)
 - Monorepo with service-specific test directories
 
-#### `service_startup_command`
+#### `target_setup_command`
 
 **Description:** Command to start services before test maintenance
 
@@ -185,38 +186,87 @@ with:
 
 1. **Docker Compose v2:**
    ```yaml
-   service_startup_command: 'docker compose up -d'
+   target_setup_command: 'docker compose up -d'
    ```
 
 2. **Docker Compose v1:**
    ```yaml
-   service_startup_command: 'docker-compose up -d'
+   target_setup_command: 'docker-compose up -d'
    ```
 
 3. **npm script:**
    ```yaml
-   service_startup_command: 'npm run start:services'
+   target_setup_command: 'npm run start:services'
    ```
 
 4. **Multiple commands:**
    ```yaml
-   service_startup_command: 'docker compose up -d && npm run migrate'
+   target_setup_command: 'docker compose up -d && npm run migrate'
    ```
 
 5. **Custom script:**
    ```yaml
-   service_startup_command: './scripts/start-test-env.sh'
+   target_setup_command: './scripts/start-test-env.sh'
    ```
 
 **Notes:**
 - Command runs in `working_directory`
 - Failure is logged as warning but doesn't fail action
-- Use `skip_service_startup: true` if not needed
-- See `health_check_command` for controlling readiness polling after startup
+- Use `skip_target_setup: true` if not needed
+- See `target_ready_check_command` for controlling readiness polling after startup
 
-#### `health_check_command`
+#### `target_teardown_command`
 
-**Description:** Shell command to verify services are ready after startup. Retried every 2 seconds until it succeeds (exit code 0) or `health_check_timeout` is reached.
+**Description:** Command to tear down services after test execution. Runs in the GitHub Actions `post` step, which is guaranteed to execute even on failure or cancellation.
+
+**Type:** String
+
+**Default:** `''` (empty — no teardown by default)
+
+**Examples:**
+
+1. **Docker Compose:**
+   ```yaml
+   target_teardown_command: 'docker compose down'
+   ```
+
+2. **Custom cleanup script:**
+   ```yaml
+   target_teardown_command: './scripts/teardown-test-env.sh'
+   ```
+
+3. **Multiple commands:**
+   ```yaml
+   target_teardown_command: 'docker compose down && rm -rf /tmp/test-data'
+   ```
+
+**Notes:**
+- Runs in `working_directory`
+- Failure is non-fatal: logs a warning but never fails the action
+- Runs in the `post` step (after the main step completes), guaranteed by GitHub Actions even on cancellation
+- Use `skip_target_teardown: true` to disable without removing the command
+
+#### `skip_target_teardown`
+
+**Description:** Skip running service teardown command
+
+**Type:** Boolean
+
+**Default:** `false`
+
+**Example:**
+```yaml
+with:
+  skip_target_teardown: true
+```
+
+**Use Cases:**
+- Temporary debugging where you want services to stay up
+- External teardown handled by a separate workflow step
+
+#### `target_ready_check_command`
+
+**Description:** Shell command to verify services are ready after startup. Retried every 2 seconds until it succeeds (exit code 0) or `target_ready_check_timeout` is reached.
 
 **Type:** String
 
@@ -226,17 +276,17 @@ with:
 
 1. **HTTP health endpoint:**
    ```yaml
-   health_check_command: 'curl -sf http://localhost:8000/health'
+   target_ready_check_command: 'curl -sf http://localhost:8000/health'
    ```
 
 2. **TCP port check:**
    ```yaml
-   health_check_command: 'nc -z localhost 5432'
+   target_ready_check_command: 'nc -z localhost 5432'
    ```
 
 3. **Docker container health:**
    ```yaml
-   health_check_command: 'docker compose exec -T api curl -sf http://localhost:8000/health'
+   target_ready_check_command: 'docker compose exec -T api curl -sf http://localhost:8000/health'
    ```
 
 **Notes:**
@@ -244,9 +294,9 @@ with:
 - Each attempt is logged for visibility
 - On timeout, a warning is logged but the action continues (non-fatal)
 
-#### `health_check_timeout`
+#### `target_ready_check_timeout`
 
-**Description:** Maximum seconds to wait for `health_check_command` to succeed
+**Description:** Maximum seconds to wait for `target_ready_check_command` to succeed
 
 **Type:** String (numeric)
 
@@ -255,15 +305,15 @@ with:
 **Example:**
 ```yaml
 with:
-  health_check_timeout: 60
+  target_ready_check_timeout: 60
 ```
 
 **Notes:**
-- Only relevant when `health_check_command` is set
+- Only relevant when `target_ready_check_command` is set
 - The command is polled every 2 seconds until success or this timeout
 - If the timeout is reached, a warning is emitted and execution continues
 
-#### `health_check_diagnostics_command`
+#### `target_ready_check_diagnostics_command`
 
 **Description:** Shell command to collect diagnostics when a health check times out. Runs via `bash -c` in the working directory. Override to use non-Docker diagnostics (e.g., `journalctl`, `kubectl logs`, or custom scripts).
 
@@ -275,21 +325,21 @@ with:
 
 1. **Kubernetes pods:**
    ```yaml
-   health_check_diagnostics_command: 'kubectl get pods -o wide && kubectl logs -l app=myservice --tail=30'
+   target_ready_check_diagnostics_command: 'kubectl get pods -o wide && kubectl logs -l app=myservice --tail=30'
    ```
 
 2. **Systemd journal:**
    ```yaml
-   health_check_diagnostics_command: 'journalctl -u myservice --no-pager -n 50'
+   target_ready_check_diagnostics_command: 'journalctl -u myservice --no-pager -n 50'
    ```
 
 3. **Custom script:**
    ```yaml
-   health_check_diagnostics_command: './scripts/collect-diagnostics.sh'
+   target_ready_check_diagnostics_command: './scripts/collect-diagnostics.sh'
    ```
 
 **Notes:**
-- Only runs when `health_check_command` is set and times out
+- Only runs when `target_ready_check_command` is set and times out
 - Failure of the diagnostics command is non-fatal (caught and logged)
 - Runs via `bash -c`, so pipes and operators work
 
@@ -363,7 +413,7 @@ with:
 - LTS is safest for compatibility
 - Match your project's Node.js version for consistency
 
-#### `skip_service_startup`
+#### `skip_target_setup`
 
 **Description:** Skip running service startup command
 
@@ -374,7 +424,7 @@ with:
 **Example:**
 ```yaml
 with:
-  skip_service_startup: true
+  skip_target_setup: true
 ```
 
 **Use Cases:**
@@ -403,7 +453,7 @@ with:
 - Custom repository structure
 
 **Notes:**
-- Affects where `service_startup_command` runs
+- Affects where `target_setup_command` runs
 - Relative to repository root
 - Test directory is relative to working directory
 
@@ -954,7 +1004,7 @@ This ensures only the latest run proceeds, avoiding stale-branch conflicts and w
 
 ### 6. Performance Optimization
 
-- Use `skip_service_startup: true` if services already running
+- Use `skip_target_setup: true` if services already running
 - Pin `skyramp_mcp_version` to avoid npm registry lookups
 - Cache Docker images if using self-hosted runners
 - Limit diff size for faster agent processing
@@ -1018,8 +1068,8 @@ jobs:
           working_directory: '.'
 
           # Services
-          service_startup_command: 'docker compose -f docker-compose.test.yml up -d'
-          skip_service_startup: false
+          target_setup_command: 'docker compose -f docker-compose.test.yml up -d'
+          skip_target_setup: false
 
           # Versions
           skyramp_executor_version: 'v1.3.3'

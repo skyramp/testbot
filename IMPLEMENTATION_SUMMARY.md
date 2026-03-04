@@ -149,13 +149,13 @@ This document summarizes the implementation of the Skyramp Testbot GitHub Action
 
 ### Optional - High Priority (2)
 - `test_directory` (default: `tests`)
-- `service_startup_command` (default: `docker compose up -d`)
+- `target_setup_command` (default: `docker compose up -d`)
 
 ### Optional - Medium Priority (9)
 - `skyramp_executor_version` (default: `v1.3.3`)
 - `skyramp_mcp_version` (default: `latest`)
 - `node_version` (default: `lts`)
-- `skip_service_startup` (default: `false`)
+- `skip_target_setup` (default: `false`)
 - `working_directory` (default: `.`)
 - `auto_commit` (default: `true`)
 - `commit_message` (default: `Skyramp Testbot: test maintenance suggestions`)

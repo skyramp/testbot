@@ -13,17 +13,19 @@ vi.mock('../utils', () => ({
 
 const baseConfig: ResolvedConfig = {
   testDirectory: 'tests',
-  serviceStartupCommand: 'docker compose up -d',
+  targetSetupCommand: 'docker compose up -d',
   authTokenCommand: '',
+  targetTeardownCommand: '',
+  skipTargetTeardown: false,
   skyrampExecutorVersion: 'v1.3.3',
   skyrampMcpVersion: 'latest',
   skyrampMcpSource: 'npm',
   skyrampMcpGithubRef: '',
   nodeVersion: 'lts/*',
-  skipServiceStartup: false,
-  healthCheckCommand: 'curl -f http://localhost:8000/health',
-  healthCheckTimeout: 30,
-  healthCheckDiagnosticsCommand: 'docker ps',
+  skipTargetSetup: false,
+  targetReadyCheckCommand: 'curl -f http://localhost:8000/health',
+  targetReadyCheckTimeout: 30,
+  targetReadyCheckDiagnosticsCommand: 'docker ps',
   autoCommit: false,
   commitMessage: '',
   postPrComment: true,
@@ -52,7 +54,7 @@ describe('startServices', () => {
   })
 
   it('includes the failing command in the error message', async () => {
-    const config = { ...baseConfig, serviceStartupCommand: 'docker compose up -d bad-service' }
+    const config = { ...baseConfig, targetSetupCommand: 'docker compose up -d bad-service' }
     mockExec.mockRejectedValueOnce(new Error('exit code 1'))
 
     await expect(startServices(config, '/work'))
@@ -71,8 +73,8 @@ describe('startServices', () => {
     }
   })
 
-  it('skips startup when skipServiceStartup is true', async () => {
-    const config = { ...baseConfig, skipServiceStartup: true }
+  it('skips startup when skipTargetSetup is true', async () => {
+    const config = { ...baseConfig, skipTargetSetup: true }
 
     await startServices(config, '/work')
 
