@@ -27044,8 +27044,9 @@ async function loadConfig(inputs) {
         if (first.runtimeDetails?.serverStartCommand) {
           targetSetupCommand = first.runtimeDetails.serverStartCommand;
         }
-        if (first.runtimeDetails?.serverTeardownCommand) {
-          targetTeardownCommand = first.runtimeDetails.serverTeardownCommand;
+        const teardown = first.runtimeDetails?.serverTeardownCommand;
+        if (typeof teardown === "string") {
+          targetTeardownCommand = teardown;
         }
       }
     } catch (err) {
