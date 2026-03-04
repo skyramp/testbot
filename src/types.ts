@@ -92,7 +92,17 @@ export interface SummaryMetrics {
 export interface TestbotReport {
   businessCaseAnalysis: string
   newTestsCreated: { testType: string; endpoint: string; fileName: string }[]
-  testMaintenance: { description: string }[]
+  testMaintenance: (
+    | { description: string }
+    | {
+        fileName: string
+        description: string
+        beforeStatus: string
+        beforeDetails: string
+        afterStatus: string
+        afterDetails: string
+      }
+  )[]
   testResults: { testType: string; endpoint: string; status: string; details: string }[]
   issuesFound: { description: string }[]
   commitMessage?: string

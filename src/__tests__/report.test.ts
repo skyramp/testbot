@@ -139,6 +139,74 @@ describe('renderReport', () => {
     const md = renderReport(validReport, { collapsed: true, commitMessage: '' })
     expect(md).not.toContain('**Summary:**')
   })
+
+  it('renders before/after table when testMaintenance has new schema entries', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      testMaintenance: [
+        {
+          fileName: 'products_smoke_test.py',
+          description: 'Updated endpoint /products → /items',
+          beforeStatus: 'Fail',
+          beforeDetails: '404 Not Found (2.1s)',
+          afterStatus: 'Pass',
+          afterDetails: 'All assertions passed (3.4s)',
+        },
+      ],
+    }
+    const md = renderReport(report)
+    expect(md).toContain('| File | Change | Before | After |')
+    expect(md).toContain('|------|--------|--------|-------|')
+    expect(md).toContain('| `products_smoke_test.py` |')
+    expect(md).toContain('Fail (404 Not Found (2.1s))')
+    expect(md).toContain('Pass (All assertions passed (3.4s))')
+  })
+
+  it('renders mixed before/after and legacy entries in the same table', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      testMaintenance: [
+        {
+          fileName: 'orders_contract_test.py',
+          description: 'Fixed auth header',
+          beforeStatus: 'Fail',
+          beforeDetails: '401 Unauthorized',
+          afterStatus: 'Pass',
+          afterDetails: 'OK (1.2s)',
+        },
+        { description: 'Minor formatting fix in utils test' },
+      ],
+    }
+    const md = renderReport(report)
+    expect(md).toContain('| File | Change | Before | After |')
+    expect(md).toContain('| `orders_contract_test.py` |')
+    expect(md).toContain('| — | Minor formatting fix in utils test | — | — |')
+  })
+
+  it('escapes pipe characters and newlines in table cells', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      testMaintenance: [
+        {
+          fileName: 'test.py',
+          description: 'Fixed path|url',
+          beforeStatus: 'Fail',
+          beforeDetails: 'Error:\nline two',
+          afterStatus: 'Pass',
+          afterDetails: 'OK',
+        },
+      ],
+    }
+    const md = renderReport(report)
+    expect(md).toContain('Fixed path\\|url')
+    expect(md).toContain('Error:<br>line two')
+  })
+
+  it('falls back to bullet list for legacy-only testMaintenance', () => {
+    const md = renderReport(validReport)
+    expect(md).toContain('- Updated auth header in existing tests')
+    expect(md).not.toContain('| File | Change | Before | After |')
+  })
 })
 
 describe('readSummary', () => {

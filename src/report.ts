@@ -88,8 +88,26 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
   // Test Maintenance (omit if empty)
   if (report.testMaintenance.length > 0) {
     sectionStart('✅ Test Maintenance')
-    for (const m of report.testMaintenance) {
-      lines.push(`- ${m.description}`)
+    const escapeCell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, '<br>')
+    const hasBeforeAfter = report.testMaintenance.some(
+      m => typeof m === 'object' && m !== null && 'beforeStatus' in m,
+    )
+    if (hasBeforeAfter) {
+      lines.push('| File | Change | Before | After |')
+      lines.push('|------|--------|--------|-------|')
+      for (const m of report.testMaintenance) {
+        if (typeof m === 'object' && m !== null && 'beforeStatus' in m) {
+          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`
+          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`
+          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`)
+        } else {
+          lines.push(`| — | ${escapeCell(m.description)} | — | — |`)
+        }
+      }
+    } else {
+      for (const m of report.testMaintenance) {
+        lines.push(`- ${m.description}`)
+      }
     }
     sectionEnd()
   }
