@@ -1,12 +1,12 @@
 import * as core from '@actions/core'
-import type { ResolvedConfig, SetupOutput } from './types'
+import type { ResolvedConfig, TargetDeploymentDetails } from './types'
 import { exec, sleep, withGroup, secondsToMilliseconds } from './utils'
 
 /**
  * Parse structured JSON output from the last non-empty line of setup command stdout.
  * Convention: setup scripts emit log output freely, then output JSON as the last line.
  */
-export function parseSetupOutput(stdout: string): SetupOutput | null {
+export function parseTargetDeploymentDetails(stdout: string): TargetDeploymentDetails | null {
   const lines = stdout.split('\n')
   let lastLine = ''
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -22,7 +22,7 @@ export function parseSetupOutput(stdout: string): SetupOutput | null {
   try {
     const parsed = JSON.parse(lastLine)
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
-    return parsed as SetupOutput
+    return parsed as TargetDeploymentDetails
   } catch {
     return null
   }
@@ -32,7 +32,7 @@ export function parseSetupOutput(stdout: string): SetupOutput | null {
  * Start user-defined services (e.g., docker compose up).
  * Returns parsed JSON from the setup command's stdout (last line), or null.
  */
-export async function startServices(config: ResolvedConfig, workingDir: string): Promise<SetupOutput | null> {
+export async function startServices(config: ResolvedConfig, workingDir: string): Promise<TargetDeploymentDetails | null> {
   return await withGroup('Starting services', async () => {
     if (config.skipTargetSetup) {
       core.notice('Skipping service startup (skip_target_setup=true)')
@@ -69,7 +69,7 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
       })
       if (exitCode === 0) {
         core.notice(`Health check passed on attempt ${attempt}`)
-        return parseSetupOutput(setupStdout)
+        return parseTargetDeploymentDetails(setupStdout)
       }
       const elapsed = Math.round((Date.now() - startTime) / 1000)
       core.info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.targetReadyCheckTimeout}s), retrying in ${pollInterval}s...`)
@@ -90,7 +90,7 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
       core.warning(`Could not retrieve diagnostics: ${errMsg}`)
     }
 
-    return parseSetupOutput(setupStdout)
+    return parseTargetDeploymentDetails(setupStdout)
   })
 }
 

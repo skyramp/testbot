@@ -57,14 +57,14 @@ export interface ResolvedConfig extends SharedConfig {
   services: WorkspaceServiceInfo[]
 }
 
-/** Per-service overrides from setup command output. */
-export interface SetupServiceOutput {
+/** Per-service overrides from Target deployment details. */
+export interface TargetServiceDetails {
   baseUrl?: string
   [key: string]: unknown
 }
 
 /**
- * Structured JSON output from the target_setup_command.
+ * Target deployment details parsed from target_setup_command JSON output.
  * Supports both single-service and multi-service repos.
  *
  * Single service:  {"baseUrl": "http://52.11.18.47:8000"}
@@ -73,9 +73,9 @@ export interface SetupServiceOutput {
  *
  * Resolution order per service: services[serviceName].baseUrl → top-level baseUrl → original workspace value.
  */
-export interface SetupOutput {
+export interface TargetDeploymentDetails {
   baseUrl?: string
-  services?: Record<string, SetupServiceOutput>
+  services?: Record<string, TargetServiceDetails>
   [key: string]: unknown
 }
 

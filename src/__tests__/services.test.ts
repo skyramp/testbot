@@ -1,8 +1,8 @@
 import './mocks/core'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { startServices, teardownServices, parseSetupOutput } from '../services'
+import { startServices, teardownServices, parseTargetDeploymentDetails } from '../services'
 import { exec } from '../utils'
-import type { ResolvedConfig, SetupOutput } from '../types'
+import type { ResolvedConfig, TargetDeploymentDetails } from '../types'
 
 vi.mock('../utils', () => ({
   exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
@@ -129,14 +129,14 @@ describe('teardownServices', () => {
   })
 })
 
-describe('parseSetupOutput', () => {
+describe('parseTargetDeploymentDetails', () => {
   it('returns null when stdout is empty', () => {
-    expect(parseSetupOutput('')).toBeNull()
+    expect(parseTargetDeploymentDetails('')).toBeNull()
   })
 
   it('returns parsed JSON when last line has top-level baseUrl', () => {
     const stdout = 'Starting services...\nReady.\n{"baseUrl": "http://52.11.18.47:8000"}\n'
-    const result = parseSetupOutput(stdout)
+    const result = parseTargetDeploymentDetails(stdout)
     expect(result).toEqual({ baseUrl: 'http://52.11.18.47:8000' })
   })
 
@@ -147,7 +147,7 @@ describe('parseSetupOutput', () => {
         frontend: { baseUrl: 'http://52.11.18.47:5173' },
       },
     })
-    expect(parseSetupOutput(json)).toEqual({
+    expect(parseTargetDeploymentDetails(json)).toEqual({
       services: {
         backend: { baseUrl: 'http://52.11.18.47:8000' },
         frontend: { baseUrl: 'http://52.11.18.47:5173' },
@@ -156,11 +156,11 @@ describe('parseSetupOutput', () => {
   })
 
   it('returns null when stdout is not JSON', () => {
-    expect(parseSetupOutput('Services started successfully')).toBeNull()
+    expect(parseTargetDeploymentDetails('Services started successfully')).toBeNull()
   })
 
   it('returns null when JSON is an array', () => {
-    expect(parseSetupOutput('[1, 2, 3]')).toBeNull()
+    expect(parseTargetDeploymentDetails('[1, 2, 3]')).toBeNull()
   })
 
   it('ignores non-JSON log lines before final JSON line', () => {
@@ -170,12 +170,12 @@ describe('parseSetupOutput', () => {
       'Health check passed',
       '{"baseUrl": "http://10.0.0.1:3000"}',
     ].join('\n')
-    expect(parseSetupOutput(stdout)).toEqual({ baseUrl: 'http://10.0.0.1:3000' })
+    expect(parseTargetDeploymentDetails(stdout)).toEqual({ baseUrl: 'http://10.0.0.1:3000' })
   })
 
   it('handles trailing empty lines', () => {
     const stdout = '{"baseUrl": "http://localhost:8000"}\n\n\n'
-    expect(parseSetupOutput(stdout)).toEqual({ baseUrl: 'http://localhost:8000' })
+    expect(parseTargetDeploymentDetails(stdout)).toEqual({ baseUrl: 'http://localhost:8000' })
   })
 })
 
@@ -185,7 +185,7 @@ describe('setup output baseUrl overrides', () => {
       { serviceName: 'api', baseUrl: 'http://localhost:8000' },
       { serviceName: 'worker', baseUrl: 'http://localhost:9000' },
     ]
-    const setupOutput: SetupOutput = { baseUrl: 'http://52.11.18.47:8000' }
+    const setupOutput: TargetDeploymentDetails = { baseUrl: 'http://52.11.18.47:8000' }
 
     for (const svc of services) {
       const svcOverride = setupOutput.services?.[svc.serviceName]
@@ -202,7 +202,7 @@ describe('setup output baseUrl overrides', () => {
       { serviceName: 'backend', baseUrl: 'http://localhost:8000' },
       { serviceName: 'frontend', baseUrl: 'http://localhost:5173' },
     ]
-    const setupOutput: SetupOutput = {
+    const setupOutput: TargetDeploymentDetails = {
       services: {
         backend: { baseUrl: 'http://52.11.18.47:8000' },
       },
@@ -223,7 +223,7 @@ describe('setup output baseUrl overrides', () => {
       { serviceName: 'backend', baseUrl: 'http://localhost:8000' },
       { serviceName: 'frontend', baseUrl: 'http://localhost:5173' },
     ]
-    const setupOutput: SetupOutput = {
+    const setupOutput: TargetDeploymentDetails = {
       baseUrl: 'http://52.11.18.47:8000',
       services: {
         frontend: { baseUrl: 'http://52.11.18.47:5173' },
