@@ -99615,8 +99615,6 @@ async function checkSelfTrigger() {
 
 // src/progress.ts
 var fs8 = __toESM(require("fs"));
-var SKYRAMP_LOGO = '<img src="https://avatars.githubusercontent.com/u/93742274?s=200&v=4" alt="Skyramp" width="28" />';
-var SPINNER_GIF = '<img src="https://raw.githubusercontent.com/letsramp/testbot/main/assets/progress-spinner.gif" alt="In progress" width="16" />';
 var _githubToken = "";
 function setGitHubToken(token) {
   _githubToken = token;
@@ -99625,8 +99623,7 @@ function generateProgressBody(step, reportContent) {
   const check1 = step >= 1 ? "[x]" : "[ ]";
   const check2 = step >= 2 ? "[x]" : "[ ]";
   const check3 = step >= 3 ? "[x]" : "[ ]";
-  const spinner = step < 3 ? ` ${SPINNER_GIF}` : "";
-  let body2 = `### ${SKYRAMP_LOGO} Skyramp Testbot Plan${spinner}
+  let body2 = `### Skyramp Testbot Plan
 Reviewing the Pull Request for test recommendations.
 
 - ${check1} Analyzing code changes

@@ -2,9 +2,6 @@ import * as core from '@actions/core'
 import * as github from '@actions/github'
 import * as fs from 'fs'
 
-const SKYRAMP_LOGO = '<img src="https://avatars.githubusercontent.com/u/93742274?s=200&v=4" alt="Skyramp" width="28" />'
-const SPINNER_GIF = '<img src="https://raw.githubusercontent.com/letsramp/testbot/main/assets/progress-spinner.gif" alt="In progress" width="16" />'
-
 let _githubToken = ''
 
 /** Must be called before any other progress functions to provide the GitHub token. */
@@ -16,9 +13,8 @@ export function generateProgressBody(step: number, reportContent?: string): stri
   const check1 = step >= 1 ? '[x]' : '[ ]'
   const check2 = step >= 2 ? '[x]' : '[ ]'
   const check3 = step >= 3 ? '[x]' : '[ ]'
-  const spinner = step < 3 ? ` ${SPINNER_GIF}` : ''
 
-  let body = `### ${SKYRAMP_LOGO} Skyramp Testbot Plan${spinner}
+  let body = `### Skyramp Testbot Plan
 Reviewing the Pull Request for test recommendations.
 
 - ${check1} Analyzing code changes

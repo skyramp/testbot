@@ -3,12 +3,11 @@ import { describe, it, expect } from 'vitest'
 import { generateProgressBody } from '../progress'
 
 describe('generateProgressBody', () => {
-  it('step 0: all checkboxes unchecked, spinner shown', () => {
+  it('step 0: all checkboxes unchecked', () => {
     const body = generateProgressBody(0)
     expect(body).toContain('[ ] Analyzing code changes')
     expect(body).toContain('[ ] Running tests')
     expect(body).toContain('[ ] Generating report')
-    expect(body).toContain('progress-spinner.gif')
   })
 
   it('step 1: first checkbox checked', () => {
@@ -16,7 +15,6 @@ describe('generateProgressBody', () => {
     expect(body).toContain('[x] Analyzing code changes')
     expect(body).toContain('[ ] Running tests')
     expect(body).toContain('[ ] Generating report')
-    expect(body).toContain('progress-spinner.gif')
   })
 
   it('step 2: first two checkboxes checked', () => {
@@ -24,15 +22,13 @@ describe('generateProgressBody', () => {
     expect(body).toContain('[x] Analyzing code changes')
     expect(body).toContain('[x] Running tests')
     expect(body).toContain('[ ] Generating report')
-    expect(body).toContain('progress-spinner.gif')
   })
 
-  it('step 3: all checkboxes checked, no spinner', () => {
+  it('step 3: all checkboxes checked', () => {
     const body = generateProgressBody(3)
     expect(body).toContain('[x] Analyzing code changes')
     expect(body).toContain('[x] Running tests')
     expect(body).toContain('[x] Generating report')
-    expect(body).not.toContain('progress-spinner.gif')
   })
 
   it('appends report content when provided', () => {
