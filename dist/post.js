@@ -27041,11 +27041,11 @@ async function loadConfig(inputs) {
         if (first.outputDir) {
           testDirectory = first.outputDir;
         }
-        if (first.runtimeDetails?.serverStartCommand) {
+        if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
           targetSetupCommand = first.runtimeDetails.serverStartCommand;
         }
         const teardown = first.runtimeDetails?.serverTeardownCommand;
-        if (typeof teardown === "string") {
+        if (!targetTeardownCommand && typeof teardown === "string") {
           targetTeardownCommand = teardown;
         }
       }
