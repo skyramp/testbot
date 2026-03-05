@@ -47,17 +47,19 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
         })
       }
 
-      // Use first service for operational defaults
+      // Use first service for operational defaults.
+      // Action inputs take precedence over workspace for setup/teardown commands
+      // (workspace values are for local dev; action inputs are for CI).
       const first = (wsConfig.services ?? [])[0]
       if (first) {
         if (first.outputDir) {
           testDirectory = first.outputDir
         }
-        if (first.runtimeDetails?.serverStartCommand) {
+        if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
           targetSetupCommand = first.runtimeDetails.serverStartCommand
         }
         const teardown = (first.runtimeDetails as { serverTeardownCommand?: unknown })?.serverTeardownCommand
-        if (typeof teardown === 'string') {
+        if (!targetTeardownCommand && typeof teardown === 'string') {
           targetTeardownCommand = teardown
         }
       }

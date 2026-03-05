@@ -96,7 +96,8 @@ describe('loadConfig', () => {
 
     // First service used for operational defaults
     expect(config.testDirectory).toBe('tests/python')
-    expect(config.targetSetupCommand).toBe('docker compose up -d api')
+    // Action input takes precedence over workspace serverStartCommand
+    expect(config.targetSetupCommand).toBe('docker compose up -d')
     expect(config.skyrampExecutorVersion).toBe('v2.0.0')
     expect(config.skyrampMcpVersion).toBe('0.1.0')
     // All services collected
@@ -148,6 +149,21 @@ describe('loadConfig', () => {
 
     expect(config.testDirectory).toBe('custom-tests')
     expect(config.targetSetupCommand).toBe('docker compose up -d')
+  })
+
+  it('falls back to workspace serverStartCommand when action input is empty', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{
+        serviceName: 'api',
+        outputDir: 'tests/python',
+        runtimeDetails: { serverStartCommand: 'docker compose up -d api', runtime: 'docker' },
+      }],
+    })
+
+    const config = await loadConfig(makeInputs({ targetSetupCommand: '' }))
+
+    expect(config.targetSetupCommand).toBe('docker compose up -d api')
   })
 
   it('uses serverTeardownCommand from workspace.yml when present', async () => {
