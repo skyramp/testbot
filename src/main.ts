@@ -191,12 +191,28 @@ async function run(): Promise<void> {
   try {
     const setupOutput = await startServices(config, workingDir)
     if (setupOutput) {
-      for (const svc of config.services) {
-        const svcOverride = setupOutput.services?.[svc.serviceName]
-        const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl
-        if (newBaseUrl && svc.baseUrl) {
-          debug(`Overrode service '${svc.serviceName}' baseUrl: ${svc.baseUrl} -> ${newBaseUrl}`)
-          svc.baseUrl = newBaseUrl
+      if (config.services.length === 0) {
+        // No workspace.yml — create service entries from setup output
+        if (setupOutput.services) {
+          for (const [name, details] of Object.entries(setupOutput.services)) {
+            if (details.baseUrl) {
+              debug(`Created service '${name}' from setup output: baseUrl=${details.baseUrl}`)
+              config.services.push({ serviceName: name, baseUrl: details.baseUrl })
+            }
+          }
+        } else if (setupOutput.baseUrl) {
+          debug(`Created default service from setup output: baseUrl=${setupOutput.baseUrl}`)
+          config.services.push({ serviceName: 'default', baseUrl: setupOutput.baseUrl })
+        }
+      } else {
+        // Override existing service baseUrls from setup output
+        for (const svc of config.services) {
+          const svcOverride = setupOutput.services?.[svc.serviceName]
+          const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl
+          if (newBaseUrl && svc.baseUrl) {
+            debug(`Overrode service '${svc.serviceName}' baseUrl: ${svc.baseUrl} -> ${newBaseUrl}`)
+            svc.baseUrl = newBaseUrl
+          }
         }
       }
     }
