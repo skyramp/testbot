@@ -189,7 +189,17 @@ async function run(): Promise<void> {
 
   // ── 13. Start services & generate auth token ───────────────────────
   try {
-    await startServices(config, workingDir)
+    const setupOutput = await startServices(config, workingDir)
+    if (setupOutput) {
+      for (const svc of config.services) {
+        const svcOverride = setupOutput.services?.[svc.serviceName]
+        const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl
+        if (newBaseUrl && svc.baseUrl) {
+          debug(`Overrode service '${svc.serviceName}' baseUrl: ${svc.baseUrl} -> ${newBaseUrl}`)
+          svc.baseUrl = newBaseUrl
+        }
+      }
+    }
   } catch (err) {
     const errMsg = (err as Error).message
     if (prNumber) {

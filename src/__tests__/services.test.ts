@@ -1,8 +1,8 @@
 import './mocks/core'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { startServices, teardownServices } from '../services'
+import { startServices, teardownServices, parseSetupOutput } from '../services'
 import { exec } from '../utils'
-import type { ResolvedConfig } from '../types'
+import type { ResolvedConfig, SetupOutput } from '../types'
 
 vi.mock('../utils', () => ({
   exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
@@ -85,7 +85,7 @@ describe('startServices', () => {
     // startup command succeeds, health check succeeds
     mockExec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
 
-    await expect(startServices(baseConfig, '/work')).resolves.toBeUndefined()
+    await expect(startServices(baseConfig, '/work')).resolves.toBeNull()
   })
 })
 
@@ -126,5 +126,117 @@ describe('teardownServices', () => {
     mockExec.mockRejectedValueOnce(new Error('exit code 1'))
 
     await expect(teardownServices(config, '/work')).resolves.toBeUndefined()
+  })
+})
+
+describe('parseSetupOutput', () => {
+  it('returns null when stdout is empty', () => {
+    expect(parseSetupOutput('')).toBeNull()
+  })
+
+  it('returns parsed JSON when last line has top-level baseUrl', () => {
+    const stdout = 'Starting services...\nReady.\n{"baseUrl": "http://52.11.18.47:8000"}\n'
+    const result = parseSetupOutput(stdout)
+    expect(result).toEqual({ baseUrl: 'http://52.11.18.47:8000' })
+  })
+
+  it('returns parsed JSON with services map for multi-service output', () => {
+    const json = JSON.stringify({
+      services: {
+        backend: { baseUrl: 'http://52.11.18.47:8000' },
+        frontend: { baseUrl: 'http://52.11.18.47:5173' },
+      },
+    })
+    expect(parseSetupOutput(json)).toEqual({
+      services: {
+        backend: { baseUrl: 'http://52.11.18.47:8000' },
+        frontend: { baseUrl: 'http://52.11.18.47:5173' },
+      },
+    })
+  })
+
+  it('returns null when stdout is not JSON', () => {
+    expect(parseSetupOutput('Services started successfully')).toBeNull()
+  })
+
+  it('returns null when JSON is an array', () => {
+    expect(parseSetupOutput('[1, 2, 3]')).toBeNull()
+  })
+
+  it('ignores non-JSON log lines before final JSON line', () => {
+    const stdout = [
+      'Pulling images...',
+      'Container api started',
+      'Health check passed',
+      '{"baseUrl": "http://10.0.0.1:3000"}',
+    ].join('\n')
+    expect(parseSetupOutput(stdout)).toEqual({ baseUrl: 'http://10.0.0.1:3000' })
+  })
+
+  it('handles trailing empty lines', () => {
+    const stdout = '{"baseUrl": "http://localhost:8000"}\n\n\n'
+    expect(parseSetupOutput(stdout)).toEqual({ baseUrl: 'http://localhost:8000' })
+  })
+})
+
+describe('setup output baseUrl overrides', () => {
+  it('top-level baseUrl applies to all services', () => {
+    const services = [
+      { serviceName: 'api', baseUrl: 'http://localhost:8000' },
+      { serviceName: 'worker', baseUrl: 'http://localhost:9000' },
+    ]
+    const setupOutput: SetupOutput = { baseUrl: 'http://52.11.18.47:8000' }
+
+    for (const svc of services) {
+      const svcOverride = setupOutput.services?.[svc.serviceName]
+      const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl
+      if (newBaseUrl && svc.baseUrl) svc.baseUrl = newBaseUrl
+    }
+
+    expect(services[0].baseUrl).toBe('http://52.11.18.47:8000')
+    expect(services[1].baseUrl).toBe('http://52.11.18.47:8000')
+  })
+
+  it('per-service override applies only to matching service', () => {
+    const services = [
+      { serviceName: 'backend', baseUrl: 'http://localhost:8000' },
+      { serviceName: 'frontend', baseUrl: 'http://localhost:5173' },
+    ]
+    const setupOutput: SetupOutput = {
+      services: {
+        backend: { baseUrl: 'http://52.11.18.47:8000' },
+      },
+    }
+
+    for (const svc of services) {
+      const svcOverride = setupOutput.services?.[svc.serviceName]
+      const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl
+      if (newBaseUrl && svc.baseUrl) svc.baseUrl = newBaseUrl
+    }
+
+    expect(services[0].baseUrl).toBe('http://52.11.18.47:8000')
+    expect(services[1].baseUrl).toBe('http://localhost:5173')
+  })
+
+  it('per-service takes priority over top-level baseUrl', () => {
+    const services = [
+      { serviceName: 'backend', baseUrl: 'http://localhost:8000' },
+      { serviceName: 'frontend', baseUrl: 'http://localhost:5173' },
+    ]
+    const setupOutput: SetupOutput = {
+      baseUrl: 'http://52.11.18.47:8000',
+      services: {
+        frontend: { baseUrl: 'http://52.11.18.47:5173' },
+      },
+    }
+
+    for (const svc of services) {
+      const svcOverride = setupOutput.services?.[svc.serviceName]
+      const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl
+      if (newBaseUrl && svc.baseUrl) svc.baseUrl = newBaseUrl
+    }
+
+    expect(services[0].baseUrl).toBe('http://52.11.18.47:8000')
+    expect(services[1].baseUrl).toBe('http://52.11.18.47:5173')
   })
 })

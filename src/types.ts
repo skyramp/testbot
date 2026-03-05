@@ -57,6 +57,28 @@ export interface ResolvedConfig extends SharedConfig {
   services: WorkspaceServiceInfo[]
 }
 
+/** Per-service overrides from setup command output. */
+export interface SetupServiceOutput {
+  baseUrl?: string
+  [key: string]: unknown
+}
+
+/**
+ * Structured JSON output from the target_setup_command.
+ * Supports both single-service and multi-service repos.
+ *
+ * Single service:  {"baseUrl": "http://52.11.18.47:8000"}
+ * Multi service:   {"services": {"backend": {"baseUrl": "..."}, "frontend": {"baseUrl": "..."}}}
+ * Mixed:           {"baseUrl": "http://52.11.18.47:8000", "services": {"frontend": {"baseUrl": "..."}}}
+ *
+ * Resolution order per service: services[serviceName].baseUrl → top-level baseUrl → original workspace value.
+ */
+export interface SetupOutput {
+  baseUrl?: string
+  services?: Record<string, SetupServiceOutput>
+  [key: string]: unknown
+}
+
 export interface AgentCommand {
   command: string
   args: string[]

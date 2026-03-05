@@ -215,6 +215,27 @@ with:
 - Use `skip_target_setup: true` if not needed
 - See `target_ready_check_command` for controlling readiness polling after startup
 
+**Setup Output (JSON):**
+
+The setup command can optionally emit a JSON object as its **last line of stdout** to override workspace configuration at runtime. This is useful when services are started on a remote host (e.g., via Buildkite) and the base URL isn't known until runtime.
+
+Supported formats:
+
+```json
+// Single service — applies baseUrl to all services
+{"baseUrl": "http://52.11.18.47:8000"}
+
+// Multi service — per-service overrides
+{"services": {"backend": {"baseUrl": "http://52.11.18.47:8000"}, "frontend": {"baseUrl": "http://52.11.18.47:5173"}}}
+
+// Mixed — top-level default with per-service overrides
+{"baseUrl": "http://52.11.18.47:8000", "services": {"frontend": {"baseUrl": "http://52.11.18.47:5173"}}}
+```
+
+Resolution order per service: `services[serviceName].baseUrl` → top-level `baseUrl` → original workspace value.
+
+Non-JSON output is ignored — the command can freely emit log lines before the final JSON line
+
 #### `target_teardown_command`
 
 **Description:** Command to tear down services after test execution. Runs in the GitHub Actions `post` step, which is guaranteed to execute even on failure or cancellation.

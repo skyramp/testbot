@@ -1,20 +1,49 @@
 import * as core from '@actions/core'
-import type { ResolvedConfig } from './types'
+import type { ResolvedConfig, SetupOutput } from './types'
 import { exec, sleep, withGroup, secondsToMilliseconds } from './utils'
 
 /**
- * Start user-defined services (e.g., docker compose up).
+ * Parse structured JSON output from the last non-empty line of setup command stdout.
+ * Convention: setup scripts emit log output freely, then output JSON as the last line.
  */
-export async function startServices(config: ResolvedConfig, workingDir: string): Promise<void> {
-  await withGroup('Starting services', async () => {
+export function parseSetupOutput(stdout: string): SetupOutput | null {
+  const lines = stdout.split('\n')
+  let lastLine = ''
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const trimmed = lines[i].trim()
+    if (trimmed) {
+      lastLine = trimmed
+      break
+    }
+  }
+
+  if (!lastLine.startsWith('{')) return null
+
+  try {
+    const parsed = JSON.parse(lastLine)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null
+    return parsed as SetupOutput
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Start user-defined services (e.g., docker compose up).
+ * Returns parsed JSON from the setup command's stdout (last line), or null.
+ */
+export async function startServices(config: ResolvedConfig, workingDir: string): Promise<SetupOutput | null> {
+  return await withGroup('Starting services', async () => {
     if (config.skipTargetSetup) {
       core.notice('Skipping service startup (skip_target_setup=true)')
-      return
+      return null
     }
 
+    let setupStdout = ''
     core.info(`Running command: ${config.targetSetupCommand}`)
     try {
-      await exec('bash', ['-c', config.targetSetupCommand], { cwd: workingDir })
+      const { stdout } = await exec('bash', ['-c', config.targetSetupCommand], { cwd: workingDir })
+      setupStdout = stdout
       core.notice('Services started successfully')
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
@@ -40,7 +69,7 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
       })
       if (exitCode === 0) {
         core.notice(`Health check passed on attempt ${attempt}`)
-        return
+        return parseSetupOutput(setupStdout)
       }
       const elapsed = Math.round((Date.now() - startTime) / 1000)
       core.info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.targetReadyCheckTimeout}s), retrying in ${pollInterval}s...`)
@@ -60,6 +89,8 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
       const errMsg = err instanceof Error ? err.message : String(err)
       core.warning(`Could not retrieve diagnostics: ${errMsg}`)
     }
+
+    return parseSetupOutput(setupStdout)
   })
 }
 

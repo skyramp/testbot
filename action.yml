@@ -33,7 +33,7 @@ inputs:
     required: false
     default: 'tests'
   target_setup_command:
-    description: 'Command to start services before test maintenance'
+    description: 'Command to start services before test maintenance. Can optionally emit a JSON object as its last stdout line to override workspace baseUrl at runtime (e.g., {"baseUrl": "http://remote-host:8000"}).'
     required: false
     default: 'docker compose up -d'
   auth_token_command:
