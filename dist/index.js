@@ -100346,12 +100346,26 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   try {
     const setupOutput = await startServices(config, workingDir);
     if (setupOutput) {
-      for (const svc of config.services) {
-        const svcOverride = setupOutput.services?.[svc.serviceName];
-        const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl;
-        if (newBaseUrl && svc.baseUrl) {
-          debug2(`Overrode service '${svc.serviceName}' baseUrl: ${svc.baseUrl} -> ${newBaseUrl}`);
-          svc.baseUrl = newBaseUrl;
+      if (config.services.length === 0) {
+        if (setupOutput.services) {
+          for (const [name, details] of Object.entries(setupOutput.services)) {
+            if (details.baseUrl) {
+              debug2(`Created service '${name}' from setup output: baseUrl=${details.baseUrl}`);
+              config.services.push({ serviceName: name, baseUrl: details.baseUrl });
+            }
+          }
+        } else if (setupOutput.baseUrl) {
+          debug2(`Created default service from setup output: baseUrl=${setupOutput.baseUrl}`);
+          config.services.push({ serviceName: "default", baseUrl: setupOutput.baseUrl });
+        }
+      } else {
+        for (const svc of config.services) {
+          const svcOverride = setupOutput.services?.[svc.serviceName];
+          const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl;
+          if (newBaseUrl && svc.baseUrl) {
+            debug2(`Overrode service '${svc.serviceName}' baseUrl: ${svc.baseUrl} -> ${newBaseUrl}`);
+            svc.baseUrl = newBaseUrl;
+          }
         }
       }
     }
