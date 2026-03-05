@@ -99896,7 +99896,7 @@ async function runAgentWithRetry(agentCmd, prompt, config, opts = {}) {
 }
 
 // src/services.ts
-function parseSetupOutput(stdout) {
+function parseTargetDeploymentDetails(stdout) {
   const lines = stdout.split("\n");
   let lastLine = "";
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -99948,7 +99948,7 @@ async function startServices(config, workingDir) {
       });
       if (exitCode === 0) {
         notice(`Health check passed on attempt ${attempt}`);
-        return parseSetupOutput(setupStdout);
+        return parseTargetDeploymentDetails(setupStdout);
       }
       const elapsed = Math.round((Date.now() - startTime) / 1e3);
       info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.targetReadyCheckTimeout}s), retrying in ${pollInterval}s...`);
@@ -99965,7 +99965,7 @@ async function startServices(config, workingDir) {
       const errMsg = err instanceof Error ? err.message : String(err);
       warning(`Could not retrieve diagnostics: ${errMsg}`);
     }
-    return parseSetupOutput(setupStdout);
+    return parseTargetDeploymentDetails(setupStdout);
   });
 }
 async function generateAuthToken(config, workingDir) {
