@@ -99896,15 +99896,36 @@ async function runAgentWithRetry(agentCmd, prompt, config, opts = {}) {
 }
 
 // src/services.ts
+function parseSetupOutput(stdout) {
+  const lines = stdout.split("\n");
+  let lastLine = "";
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const trimmed = lines[i].trim();
+    if (trimmed) {
+      lastLine = trimmed;
+      break;
+    }
+  }
+  if (!lastLine.startsWith("{")) return null;
+  try {
+    const parsed = JSON.parse(lastLine);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 async function startServices(config, workingDir) {
-  await withGroup("Starting services", async () => {
+  return await withGroup("Starting services", async () => {
     if (config.skipTargetSetup) {
       notice("Skipping service startup (skip_target_setup=true)");
-      return;
+      return null;
     }
+    let setupStdout = "";
     info(`Running command: ${config.targetSetupCommand}`);
     try {
-      await exec2("bash", ["-c", config.targetSetupCommand], { cwd: workingDir });
+      const { stdout } = await exec2("bash", ["-c", config.targetSetupCommand], { cwd: workingDir });
+      setupStdout = stdout;
       notice("Services started successfully");
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -99927,7 +99948,7 @@ async function startServices(config, workingDir) {
       });
       if (exitCode === 0) {
         notice(`Health check passed on attempt ${attempt}`);
-        return;
+        return parseSetupOutput(setupStdout);
       }
       const elapsed = Math.round((Date.now() - startTime) / 1e3);
       info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.targetReadyCheckTimeout}s), retrying in ${pollInterval}s...`);
@@ -99944,6 +99965,7 @@ async function startServices(config, workingDir) {
       const errMsg = err instanceof Error ? err.message : String(err);
       warning(`Could not retrieve diagnostics: ${errMsg}`);
     }
+    return parseSetupOutput(setupStdout);
   });
 }
 async function generateAuthToken(config, workingDir) {
@@ -100322,7 +100344,17 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   await initializeAgent(agent);
   const agentCmd = buildAgentCommand(agent, config.enableDebug);
   try {
-    await startServices(config, workingDir);
+    const setupOutput = await startServices(config, workingDir);
+    if (setupOutput) {
+      for (const svc of config.services) {
+        const svcOverride = setupOutput.services?.[svc.serviceName];
+        const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl;
+        if (newBaseUrl && svc.baseUrl) {
+          debug2(`Overrode service '${svc.serviceName}' baseUrl: ${svc.baseUrl} -> ${newBaseUrl}`);
+          svc.baseUrl = newBaseUrl;
+        }
+      }
+    }
   } catch (err) {
     const errMsg = err.message;
     if (prNumber) {
