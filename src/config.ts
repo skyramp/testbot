@@ -15,7 +15,8 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
   const manager = new WorkspaceConfigManager(workingDir)
 
   const services: WorkspaceServiceInfo[] = []
-  let serviceStartupCommand = inputs.serviceStartupCommand
+  let targetSetupCommand = inputs.targetSetupCommand
+  let targetTeardownCommand = inputs.targetTeardownCommand
   let testDirectory = inputs.testDirectory
   let executorVersion = inputs.skyrampExecutorVersion
   let mcpVersion = inputs.skyrampMcpVersion
@@ -46,14 +47,20 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
         })
       }
 
-      // Use first service for operational defaults
+      // Use first service for operational defaults.
+      // Action inputs take precedence over workspace for setup/teardown commands
+      // (workspace values are for local dev; action inputs are for CI).
       const first = (wsConfig.services ?? [])[0]
       if (first) {
         if (first.outputDir) {
           testDirectory = first.outputDir
         }
-        if (first.runtimeDetails?.serverStartCommand) {
-          serviceStartupCommand = first.runtimeDetails.serverStartCommand
+        if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
+          targetSetupCommand = first.runtimeDetails.serverStartCommand
+        }
+        const teardown = (first.runtimeDetails as { serverTeardownCommand?: unknown })?.serverTeardownCommand
+        if (!targetTeardownCommand && typeof teardown === 'string') {
+          targetTeardownCommand = teardown
         }
       }
     } catch (err) {
@@ -65,17 +72,19 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
 
   const config: ResolvedConfig = {
     testDirectory,
-    serviceStartupCommand,
+    targetSetupCommand,
     authTokenCommand: inputs.authTokenCommand,
+    targetTeardownCommand,
+    skipTargetTeardown: inputs.skipTargetTeardown,
     skyrampExecutorVersion: executorVersion,
     skyrampMcpVersion: mcpVersion,
     skyrampMcpSource: inputs.skyrampMcpSource,
     skyrampMcpGithubRef: inputs.skyrampMcpGithubRef,
     nodeVersion: inputs.nodeVersion,
-    skipServiceStartup: inputs.skipServiceStartup,
-    healthCheckCommand: inputs.healthCheckCommand,
-    healthCheckTimeout: inputs.healthCheckTimeout,
-    healthCheckDiagnosticsCommand: inputs.healthCheckDiagnosticsCommand,
+    skipTargetSetup: inputs.skipTargetSetup,
+    targetReadyCheckCommand: inputs.targetReadyCheckCommand,
+    targetReadyCheckTimeout: inputs.targetReadyCheckTimeout,
+    targetReadyCheckDiagnosticsCommand: inputs.targetReadyCheckDiagnosticsCommand,
     autoCommit: inputs.autoCommit,
     commitMessage: inputs.commitMessage,
     postPrComment: inputs.postPrComment,

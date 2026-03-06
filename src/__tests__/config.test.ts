@@ -26,18 +26,20 @@ function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
     copilotApiKey: '',
     anthropicApiKey: '',
     testDirectory: 'tests',
-    serviceStartupCommand: 'docker compose up -d',
+    targetSetupCommand: 'docker compose up -d',
     authTokenCommand: '',
+    targetTeardownCommand: '',
+    skipTargetTeardown: false,
     skyrampExecutorVersion: 'v1.3.3',
     skyrampMcpVersion: 'latest',
     skyrampMcpSource: 'npm',
     skyrampMcpGithubToken: '',
     skyrampMcpGithubRef: 'main',
     nodeVersion: 'lts/*',
-    skipServiceStartup: false,
-    healthCheckCommand: '',
-    healthCheckTimeout: 30,
-    healthCheckDiagnosticsCommand: '',
+    skipTargetSetup: false,
+    targetReadyCheckCommand: '',
+    targetReadyCheckTimeout: 30,
+    targetReadyCheckDiagnosticsCommand: '',
     workingDirectory: '.',
     autoCommit: true,
     commitMessage: 'test commit',
@@ -64,7 +66,7 @@ describe('loadConfig', () => {
     const config = await loadConfig(makeInputs())
 
     expect(config.testDirectory).toBe('tests')
-    expect(config.serviceStartupCommand).toBe('docker compose up -d')
+    expect(config.targetSetupCommand).toBe('docker compose up -d')
     expect(config.skyrampExecutorVersion).toBe('v1.3.3')
     expect(config.skyrampMcpVersion).toBe('latest')
     expect(config.services).toEqual([])
@@ -94,7 +96,8 @@ describe('loadConfig', () => {
 
     // First service used for operational defaults
     expect(config.testDirectory).toBe('tests/python')
-    expect(config.serviceStartupCommand).toBe('docker compose up -d api')
+    // Action input takes precedence over workspace serverStartCommand
+    expect(config.targetSetupCommand).toBe('docker compose up -d')
     expect(config.skyrampExecutorVersion).toBe('v2.0.0')
     expect(config.skyrampMcpVersion).toBe('0.1.0')
     // All services collected
@@ -145,7 +148,55 @@ describe('loadConfig', () => {
     const config = await loadConfig(makeInputs({ testDirectory: 'custom-tests' }))
 
     expect(config.testDirectory).toBe('custom-tests')
-    expect(config.serviceStartupCommand).toBe('docker compose up -d')
+    expect(config.targetSetupCommand).toBe('docker compose up -d')
+  })
+
+  it('falls back to workspace serverStartCommand when action input is empty', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{
+        serviceName: 'api',
+        outputDir: 'tests/python',
+        runtimeDetails: { serverStartCommand: 'docker compose up -d api', runtime: 'docker' },
+      }],
+    })
+
+    const config = await loadConfig(makeInputs({ targetSetupCommand: '' }))
+
+    expect(config.targetSetupCommand).toBe('docker compose up -d api')
+  })
+
+  it('uses serverTeardownCommand from workspace.yml when present', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{
+        serviceName: 'api',
+        outputDir: 'tests/python',
+        runtimeDetails: Object.assign(
+          { serverStartCommand: 'docker compose up -d', runtime: 'docker' as const },
+          { serverTeardownCommand: 'docker compose down -v' },
+        ),
+      }],
+    })
+
+    const config = await loadConfig(makeInputs())
+
+    expect(config.targetTeardownCommand).toBe('docker compose down -v')
+  })
+
+  it('falls back to input default when serverTeardownCommand is absent', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{
+        serviceName: 'api',
+        outputDir: 'tests/python',
+        runtimeDetails: { serverStartCommand: 'docker compose up -d', runtime: 'docker' },
+      }],
+    })
+
+    const config = await loadConfig(makeInputs({ targetTeardownCommand: 'npm run teardown' }))
+
+    expect(config.targetTeardownCommand).toBe('npm run teardown')
   })
 
   it('testbot-specific fields always come from inputs', async () => {

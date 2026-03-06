@@ -29,8 +29,8 @@ jobs:
           test_directory: tests
 
           # Service configuration
-          service_startup_command: docker compose up -d
-          skip_service_startup: false
+          target_setup_command: docker compose up -d
+          skip_target_setup: false
 
           # Skyramp configuration
           skyramp_executor_version: v1.3.3

@@ -6,7 +6,7 @@ Skyramp Testbot is a reusable GitHub Action (Node.js/TypeScript) that uses an AI
 
 ## Key Commands
 
-- `npm run build` — bundle TypeScript to `dist/index.js` via `esbuild`
+- `npm run build` — bundle TypeScript to `dist/index.js` + `dist/post.js` via `esbuild`
 - `npm run typecheck` — run `tsc --noEmit` for type checking
 - Test by pushing to a branch referenced by a calling workflow (e.g., api-insight's `.github/workflows/`)
 
@@ -33,7 +33,8 @@ src/
   self-trigger.ts       # checkSelfTrigger() — PR head SHA aware
   progress.ts           # PR progress comment CRUD via Octokit
   mcp.ts                # installMcp() (npm/github source) + configureMcp()
-  services.ts           # startServices() + generateAuthToken()
+  services.ts           # startServices() + teardownServices() + generateAuthToken()
+  post.ts               # Post-step entry point — runs teardownServices() (guaranteed by GHA)
   report.ts             # readSummary(), parseMetrics()
   git.ts                # generateGitDiff(), configureGitIdentity(), autoCommit()
   utils.ts              # exec(), sleep(), withRetry(), withGroup(), debug()/setDebugEnabled()
@@ -45,7 +46,7 @@ assets/
 
 ### Action Type
 
-This is a `runs.using: node24` action. The `action.yml` is a thin declarative wrapper — all logic lives in TypeScript, bundled to `dist/index.js` via esbuild. The `dist/` directory is auto-built and committed by `.github/workflows/build.yml` on every push.
+This is a `runs.using: node24` action. The `action.yml` is a thin declarative wrapper — all logic lives in TypeScript, bundled to `dist/index.js` (main) and `dist/post.js` (post step) via esbuild. The `dist/` directory is auto-built and committed by `.github/workflows/build.yml` on every push.
 
 ### Execution Flow (src/main.ts)
 

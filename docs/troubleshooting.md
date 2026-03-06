@@ -88,7 +88,7 @@ Skyramp MCP returns license validation error
    ```yaml
    - uses: skyramp/testbot@v1
      with:
-       service_startup_command: 'docker compose -f ./docker-compose.yml up -d'
+       target_setup_command: 'docker compose -f ./docker-compose.yml up -d'
    ```
 
 3. **Check Docker daemon:**
@@ -114,14 +114,14 @@ Service startup command returns non-zero exit code
    ```yaml
    - uses: skyramp/testbot@v1
      with:
-       service_startup_command: 'npm run start:services || echo "Services failed but continuing"'
+       target_setup_command: 'npm run start:services || echo "Services failed but continuing"'
    ```
 
 3. **Skip service startup if not needed:**
    ```yaml
    - uses: skyramp/testbot@v1
      with:
-       skip_service_startup: true
+       skip_target_setup: true
    ```
 
 ## Agent Issues

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+- Renamed `service_startup_command` → `target_setup_command`
+- Renamed `skip_service_startup` → `skip_target_setup`
+- Renamed `health_check_command` → `target_ready_check_command`
+- Renamed `health_check_timeout` → `target_ready_check_timeout`
+- Renamed `health_check_diagnostics_command` → `target_ready_check_diagnostics_command`
+
+### Added
+- `target_teardown_command` input for guaranteed service cleanup via GitHub Actions `post` step
+- `skip_target_teardown` input to disable teardown without removing the command
+- `dist/post.js` post-step entry point for teardown execution
+
 ### Planned
 - Caching for Cursor CLI installation
 - Enhanced test execution reporting

@@ -7,25 +7,22 @@ export type McpSource = 'npm' | 'github'
 /** Name used to register and reference the Skyramp MCP server across all agent types. */
 export const SKYRAMP_MCP_SERVER_NAME = 'skyramp'
 
-export interface ActionInputs {
-  skyrampLicenseFile: string
-  cursorApiKey: string
-  copilotApiKey: string
-  anthropicApiKey: string
+/** Fields shared between action inputs and resolved config. */
+export interface SharedConfig {
   testDirectory: string
-  serviceStartupCommand: string
+  targetSetupCommand: string
   authTokenCommand: string
+  targetTeardownCommand: string
+  skipTargetTeardown: boolean
   skyrampExecutorVersion: string
   skyrampMcpVersion: string
   skyrampMcpSource: McpSource
-  skyrampMcpGithubToken: string
   skyrampMcpGithubRef: string
   nodeVersion: string
-  skipServiceStartup: boolean
-  healthCheckCommand: string
-  healthCheckTimeout: number
-  healthCheckDiagnosticsCommand: string
-  workingDirectory: string
+  skipTargetSetup: boolean
+  targetReadyCheckCommand: string
+  targetReadyCheckTimeout: number
+  targetReadyCheckDiagnosticsCommand: string
   autoCommit: boolean
   commitMessage: string
   postPrComment: boolean
@@ -35,6 +32,15 @@ export interface ActionInputs {
   testbotTimeout: number
   reportCollapsed: boolean
   enableDebug: boolean
+}
+
+export interface ActionInputs extends SharedConfig {
+  skyrampLicenseFile: string
+  cursorApiKey: string
+  copilotApiKey: string
+  anthropicApiKey: string
+  skyrampMcpGithubToken: string
+  workingDirectory: string
 }
 
 /** Workspace-derived service information passed to the agent prompt. */
@@ -47,29 +53,30 @@ export interface WorkspaceServiceInfo {
 }
 
 /** Configuration resolved from .skyramp/workspace.yml merged with action inputs. */
-export interface ResolvedConfig {
-  testDirectory: string
-  serviceStartupCommand: string
-  authTokenCommand: string
-  skyrampExecutorVersion: string
-  skyrampMcpVersion: string
-  skyrampMcpSource: McpSource
-  skyrampMcpGithubRef: string
-  nodeVersion: string
-  skipServiceStartup: boolean
-  healthCheckCommand: string
-  healthCheckTimeout: number
-  healthCheckDiagnosticsCommand: string
-  autoCommit: boolean
-  commitMessage: string
-  postPrComment: boolean
-  testExecutionTimeout: number
-  testbotMaxRetries: number
-  testbotRetryDelay: number
-  testbotTimeout: number
-  reportCollapsed: boolean
-  enableDebug: boolean
+export interface ResolvedConfig extends SharedConfig {
   services: WorkspaceServiceInfo[]
+}
+
+/** Per-service overrides from Target deployment details. */
+export interface TargetServiceDetails {
+  baseUrl?: string
+  [key: string]: unknown
+}
+
+/**
+ * Target deployment details parsed from target_setup_command JSON output.
+ * Supports both single-service and multi-service repos.
+ *
+ * Single service:  {"baseUrl": "http://52.11.18.47:8000"}
+ * Multi service:   {"services": {"backend": {"baseUrl": "..."}, "frontend": {"baseUrl": "..."}}}
+ * Mixed:           {"baseUrl": "http://52.11.18.47:8000", "services": {"frontend": {"baseUrl": "..."}}}
+ *
+ * Resolution order per service: services[serviceName].baseUrl → top-level baseUrl → original workspace value.
+ */
+export interface TargetDeploymentDetails {
+  baseUrl?: string
+  services?: Record<string, TargetServiceDetails>
+  [key: string]: unknown
 }
 
 export interface AgentCommand {

@@ -126,7 +126,7 @@ If you don't use `docker compose up -d`:
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    service_startup_command: 'npm run start:services'
+    target_setup_command: 'npm run start:services'
 ```
 
 ### Disable Auto-commit
@@ -159,7 +159,7 @@ If you want to review changes before committing:
 
 - Verify your `docker-compose.yml` exists
 - Check Docker is available on the runner
-- Try `skip_service_startup: true` if services aren't needed
+- Try `skip_target_setup: true` if services aren't needed
 
 ### "No tests modified or created"
 

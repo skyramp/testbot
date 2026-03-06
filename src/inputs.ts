@@ -8,25 +8,27 @@ export function getInputs(): ActionInputs {
     copilotApiKey: core.getInput('copilot_api_key'),
     anthropicApiKey: core.getInput('anthropic_api_key'),
     testDirectory: core.getInput('test_directory'),
-    serviceStartupCommand: core.getInput('service_startup_command'),
+    targetSetupCommand: core.getInput('target_setup_command'),
     authTokenCommand: core.getInput('auth_token_command'),
+    targetTeardownCommand: core.getInput('target_teardown_command'),
+    skipTargetTeardown: core.getBooleanInput('skip_target_teardown'),
     skyrampExecutorVersion: core.getInput('skyramp_executor_version'),
     skyrampMcpVersion: core.getInput('skyramp_mcp_version'),
     skyrampMcpSource: core.getInput('skyramp_mcp_source') as ActionInputs['skyrampMcpSource'],
     skyrampMcpGithubToken: core.getInput('skyramp_mcp_github_token'),
     skyrampMcpGithubRef: core.getInput('skyramp_mcp_github_ref'),
     nodeVersion: core.getInput('node_version'),
-    skipServiceStartup: core.getBooleanInput('skip_service_startup'),
-    healthCheckCommand: core.getInput('health_check_command'),
-    healthCheckTimeout: (() => {
-      const raw = parseInt(core.getInput('health_check_timeout'), 10) || 30
+    skipTargetSetup: core.getBooleanInput('skip_target_setup'),
+    targetReadyCheckCommand: core.getInput('target_ready_check_command'),
+    targetReadyCheckTimeout: (() => {
+      const raw = parseInt(core.getInput('target_ready_check_timeout'), 10) || 30
       if (raw < 1) {
-        core.warning(`health_check_timeout must be at least 1 second, got ${raw}. Using 1s.`)
+        core.warning(`target_ready_check_timeout must be at least 1 second, got ${raw}. Using 1s.`)
         return 1
       }
       return raw
     })(),
-    healthCheckDiagnosticsCommand: core.getInput('health_check_diagnostics_command'),
+    targetReadyCheckDiagnosticsCommand: core.getInput('target_ready_check_diagnostics_command'),
     workingDirectory: core.getInput('working_directory'),
     autoCommit: core.getBooleanInput('auto_commit'),
     commitMessage: core.getInput('commit_message'),

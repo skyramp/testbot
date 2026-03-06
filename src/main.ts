@@ -51,12 +51,12 @@ async function run(): Promise<void> {
 
   debug(`Resolved config: ${JSON.stringify({
     testDirectory: config.testDirectory,
-    serviceStartupCommand: config.serviceStartupCommand,
+    targetSetupCommand: config.targetSetupCommand,
     authTokenCommand: config.authTokenCommand ? '<set>' : '<empty>',
     skyrampExecutorVersion: config.skyrampExecutorVersion,
     skyrampMcpVersion: config.skyrampMcpVersion,
     skyrampMcpSource: config.skyrampMcpSource,
-    skipServiceStartup: config.skipServiceStartup,
+    skipTargetSetup: config.skipTargetSetup,
     autoCommit: config.autoCommit,
     commitMessage: config.commitMessage,
     postPrComment: config.postPrComment,
@@ -189,7 +189,33 @@ async function run(): Promise<void> {
 
   // ── 13. Start services & generate auth token ───────────────────────
   try {
-    await startServices(config, workingDir)
+    const setupOutput = await startServices(config, workingDir)
+    if (setupOutput) {
+      if (config.services.length === 0) {
+        // No workspace.yml — create service entries from setup output
+        if (setupOutput.services) {
+          for (const [name, details] of Object.entries(setupOutput.services)) {
+            if (details.baseUrl) {
+              debug(`Created service '${name}' from setup output: baseUrl=${details.baseUrl}`)
+              config.services.push({ serviceName: name, baseUrl: details.baseUrl })
+            }
+          }
+        } else if (setupOutput.baseUrl) {
+          debug(`Created default service from setup output: baseUrl=${setupOutput.baseUrl}`)
+          config.services.push({ serviceName: 'default', baseUrl: setupOutput.baseUrl })
+        }
+      } else {
+        // Override existing service baseUrls from setup output
+        for (const svc of config.services) {
+          const svcOverride = setupOutput.services?.[svc.serviceName]
+          const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl
+          if (newBaseUrl && svc.baseUrl) {
+            debug(`Overrode service '${svc.serviceName}' baseUrl: ${svc.baseUrl} -> ${newBaseUrl}`)
+            svc.baseUrl = newBaseUrl
+          }
+        }
+      }
+    }
   } catch (err) {
     const errMsg = (err as Error).message
     if (prNumber) {
@@ -199,12 +225,12 @@ async function run(): Promise<void> {
         `**Error:** ${errMsg}`,
         '',
         '**How to fix:**',
-        `- Check that your \`service_startup_command\` is correct: \`${config.serviceStartupCommand}\``,
+        `- Check that your \`target_setup_command\` is correct: \`${config.targetSetupCommand}\``,
         '- Verify the service names in your `docker-compose.yml` (or equivalent) match the command',
         '- Ensure all referenced Docker images exist and can be pulled',
         '- You can test locally by running the command manually',
         '',
-        'This setting can be configured in your workflow file (`service_startup_command` input) or in `.skyramp/workspace.yml`.',
+        'This setting can be configured in your workflow file (`target_setup_command` input) or in `.skyramp/workspace.yml`.',
       ].join('\n'))
     }
     throw err

@@ -4,7 +4,7 @@
   "description": "Github Action for using Skyramp's Testbot for AI-Powered Deterministic Testing",
   "main": "dist/index.js",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --sourcemap --format=cjs",
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --sourcemap --format=cjs && esbuild src/post.ts --bundle --platform=node --target=node24 --outfile=dist/post.js --sourcemap --format=cjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

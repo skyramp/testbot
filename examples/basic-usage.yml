@@ -23,6 +23,6 @@ jobs:
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
           # Optional: Customize behavior
           # test_directory: 'tests'
-          # service_startup_command: 'docker compose up -d'
+          # target_setup_command: 'docker compose up -d'
           # auto_commit: true
           # post_pr_comment: true
