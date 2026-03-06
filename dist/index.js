@@ -99171,25 +99171,27 @@ function getInputs() {
     copilotApiKey: getInput("copilot_api_key"),
     anthropicApiKey: getInput("anthropic_api_key"),
     testDirectory: getInput("test_directory"),
-    serviceStartupCommand: getInput("service_startup_command"),
+    targetSetupCommand: getInput("target_setup_command"),
     authTokenCommand: getInput("auth_token_command"),
+    targetTeardownCommand: getInput("target_teardown_command"),
+    skipTargetTeardown: getBooleanInput("skip_target_teardown"),
     skyrampExecutorVersion: getInput("skyramp_executor_version"),
     skyrampMcpVersion: getInput("skyramp_mcp_version"),
     skyrampMcpSource: getInput("skyramp_mcp_source"),
     skyrampMcpGithubToken: getInput("skyramp_mcp_github_token"),
     skyrampMcpGithubRef: getInput("skyramp_mcp_github_ref"),
     nodeVersion: getInput("node_version"),
-    skipServiceStartup: getBooleanInput("skip_service_startup"),
-    healthCheckCommand: getInput("health_check_command"),
-    healthCheckTimeout: (() => {
-      const raw = parseInt(getInput("health_check_timeout"), 10) || 30;
+    skipTargetSetup: getBooleanInput("skip_target_setup"),
+    targetReadyCheckCommand: getInput("target_ready_check_command"),
+    targetReadyCheckTimeout: (() => {
+      const raw = parseInt(getInput("target_ready_check_timeout"), 10) || 30;
       if (raw < 1) {
-        warning(`health_check_timeout must be at least 1 second, got ${raw}. Using 1s.`);
+        warning(`target_ready_check_timeout must be at least 1 second, got ${raw}. Using 1s.`);
         return 1;
       }
       return raw;
     })(),
-    healthCheckDiagnosticsCommand: getInput("health_check_diagnostics_command"),
+    targetReadyCheckDiagnosticsCommand: getInput("target_ready_check_diagnostics_command"),
     workingDirectory: getInput("working_directory"),
     autoCommit: getBooleanInput("auto_commit"),
     commitMessage: getInput("commit_message"),
@@ -99499,7 +99501,8 @@ async function loadConfig(inputs) {
   const workingDir = path8.resolve(inputs.workingDirectory);
   const manager = new import_workspace.WorkspaceConfigManager(workingDir);
   const services = [];
-  let serviceStartupCommand = inputs.serviceStartupCommand;
+  let targetSetupCommand = inputs.targetSetupCommand;
+  let targetTeardownCommand = inputs.targetTeardownCommand;
   let testDirectory = inputs.testDirectory;
   let executorVersion = inputs.skyrampExecutorVersion;
   let mcpVersion = inputs.skyrampMcpVersion;
@@ -99529,8 +99532,12 @@ async function loadConfig(inputs) {
         if (first.outputDir) {
           testDirectory = first.outputDir;
         }
-        if (first.runtimeDetails?.serverStartCommand) {
-          serviceStartupCommand = first.runtimeDetails.serverStartCommand;
+        if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
+          targetSetupCommand = first.runtimeDetails.serverStartCommand;
+        }
+        const teardown = first.runtimeDetails?.serverTeardownCommand;
+        if (!targetTeardownCommand && typeof teardown === "string") {
+          targetTeardownCommand = teardown;
         }
       }
     } catch (err) {
@@ -99541,17 +99548,19 @@ async function loadConfig(inputs) {
   }
   const config = {
     testDirectory,
-    serviceStartupCommand,
+    targetSetupCommand,
     authTokenCommand: inputs.authTokenCommand,
+    targetTeardownCommand,
+    skipTargetTeardown: inputs.skipTargetTeardown,
     skyrampExecutorVersion: executorVersion,
     skyrampMcpVersion: mcpVersion,
     skyrampMcpSource: inputs.skyrampMcpSource,
     skyrampMcpGithubRef: inputs.skyrampMcpGithubRef,
     nodeVersion: inputs.nodeVersion,
-    skipServiceStartup: inputs.skipServiceStartup,
-    healthCheckCommand: inputs.healthCheckCommand,
-    healthCheckTimeout: inputs.healthCheckTimeout,
-    healthCheckDiagnosticsCommand: inputs.healthCheckDiagnosticsCommand,
+    skipTargetSetup: inputs.skipTargetSetup,
+    targetReadyCheckCommand: inputs.targetReadyCheckCommand,
+    targetReadyCheckTimeout: inputs.targetReadyCheckTimeout,
+    targetReadyCheckDiagnosticsCommand: inputs.targetReadyCheckDiagnosticsCommand,
     autoCommit: inputs.autoCommit,
     commitMessage: inputs.commitMessage,
     postPrComment: inputs.postPrComment,
@@ -99615,8 +99624,6 @@ async function checkSelfTrigger() {
 
 // src/progress.ts
 var fs8 = __toESM(require("fs"));
-var SKYRAMP_LOGO = '<img src="https://avatars.githubusercontent.com/u/93742274?s=200&v=4" alt="Skyramp" width="28" />';
-var SPINNER_GIF = '<img src="https://raw.githubusercontent.com/letsramp/testbot/main/assets/progress-spinner.gif" alt="In progress" width="16" />';
 var _githubToken = "";
 function setGitHubToken(token) {
   _githubToken = token;
@@ -99625,8 +99632,7 @@ function generateProgressBody(step, reportContent) {
   const check1 = step >= 1 ? "[x]" : "[ ]";
   const check2 = step >= 2 ? "[x]" : "[ ]";
   const check3 = step >= 3 ? "[x]" : "[ ]";
-  const spinner = step < 3 ? ` ${SPINNER_GIF}` : "";
-  let body2 = `### ${SKYRAMP_LOGO} Skyramp Testbot Plan${spinner}
+  let body2 = `### Skyramp Testbot Plan
 Reviewing the Pull Request for test recommendations.
 
 - ${check1} Analyzing code changes
@@ -99826,8 +99832,10 @@ ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
 AUTHENTICATION:
-When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${opts.authToken}
-If the token is empty, pass an empty string for the token parameter.`;
+When executing any tests using the Skyramp MCP execute tool, pass this authentication token to the tool's authToken parameter: ${opts.authToken}
+If the token is empty, pass an empty string for the token parameter.
+CRITICAL \u2014 GENERATED TEST FILE INTEGRITY:
+When the CLI generates a test file, preserve it exactly as-is. The ONLY permitted edit is fixing chaining \u2014 replacing literal/hardcoded IDs in path params and request bodies with dynamic response IDs. Do NOT add, remove, or modify auth headers, cookies, tokens, env vars, imports, assertions, or request bodies (other than chaining IDs).`;
 }
 function buildServiceContext(services) {
   const blocks2 = services.map((svc) => {
@@ -99890,47 +99898,68 @@ async function runAgentWithRetry(agentCmd, prompt, config, opts = {}) {
 }
 
 // src/services.ts
-async function startServices(config, workingDir) {
-  await withGroup("Starting services", async () => {
-    if (config.skipServiceStartup) {
-      notice("Skipping service startup (skip_service_startup=true)");
-      return;
+function parseTargetDeploymentDetails(stdout) {
+  const lines = stdout.split("\n");
+  let lastLine = "";
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const trimmed = lines[i].trim();
+    if (trimmed) {
+      lastLine = trimmed;
+      break;
     }
-    info(`Running command: ${config.serviceStartupCommand}`);
+  }
+  if (!lastLine.startsWith("{")) return null;
+  try {
+    const parsed = JSON.parse(lastLine);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+async function startServices(config, workingDir) {
+  return await withGroup("Starting services", async () => {
+    if (config.skipTargetSetup) {
+      notice("Skipping service startup (skip_target_setup=true)");
+      return null;
+    }
+    let setupStdout = "";
+    info(`Running command: ${config.targetSetupCommand}`);
     try {
-      await exec2("bash", ["-c", config.serviceStartupCommand], { cwd: workingDir });
+      const { stdout } = await exec2("bash", ["-c", config.targetSetupCommand], { cwd: workingDir });
+      setupStdout = stdout;
       notice("Services started successfully");
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       error(`Service startup command failed: ${errMsg}`);
       throw new Error(
-        `Service startup failed \u2014 all subsequent tests will likely fail. Command: ${config.serviceStartupCommand}`,
+        `Service startup failed \u2014 all subsequent tests will likely fail. Command: ${config.targetSetupCommand}`,
         { cause: err }
       );
     }
-    info(`Running health check: ${config.healthCheckCommand}`);
+    info(`Running health check: ${config.targetReadyCheckCommand}`);
     const startTime = Date.now();
-    const timeoutMs = secondsToMilliseconds(config.healthCheckTimeout);
+    const timeoutMs = secondsToMilliseconds(config.targetReadyCheckTimeout);
     const pollInterval = 2;
     let attempt = 0;
     while (Date.now() - startTime < timeoutMs) {
       attempt++;
-      const { exitCode } = await exec2("bash", ["-c", config.healthCheckCommand], {
+      const { exitCode } = await exec2("bash", ["-c", config.targetReadyCheckCommand], {
         cwd: workingDir,
         ignoreReturnCode: true
       });
       if (exitCode === 0) {
         notice(`Health check passed on attempt ${attempt}`);
-        return;
+        return parseTargetDeploymentDetails(setupStdout);
       }
       const elapsed = Math.round((Date.now() - startTime) / 1e3);
-      info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.healthCheckTimeout}s), retrying in ${pollInterval}s...`);
+      info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.targetReadyCheckTimeout}s), retrying in ${pollInterval}s...`);
       await sleep(pollInterval);
     }
-    warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`);
+    warning(`Health check timed out after ${config.targetReadyCheckTimeout}s, continuing anyway...`);
     try {
       info("--- Diagnostics ---");
-      await exec2("bash", ["-c", config.healthCheckDiagnosticsCommand], {
+      await exec2("bash", ["-c", config.targetReadyCheckDiagnosticsCommand], {
         cwd: workingDir,
         ignoreReturnCode: true
       });
@@ -99938,6 +99967,7 @@ async function startServices(config, workingDir) {
       const errMsg = err instanceof Error ? err.message : String(err);
       warning(`Could not retrieve diagnostics: ${errMsg}`);
     }
+    return parseTargetDeploymentDetails(setupStdout);
   });
 }
 async function generateAuthToken(config, workingDir) {
@@ -100085,11 +100115,67 @@ function renderReport(report, options = {}) {
     sectionStart("\u{1F4A1} New Tests Created");
     for (const t of report.newTestsCreated) {
       lines.push(`- **${t.testType}** for ${t.endpoint} \u2014 \`${t.fileName}\``);
+      if (t.description) {
+        lines.push(`  ${t.description}`);
+      }
+      const artifacts = [];
+      if (t.scenarioFile) artifacts.push(`Scenario: \`${t.scenarioFile}\``);
+      if (t.traceFile) artifacts.push(`Trace: \`${t.traceFile}\``);
+      if (t.frontendTrace) artifacts.push(`UI Trace: \`${t.frontendTrace}\``);
+      if (artifacts.length > 0) {
+        lines.push(`  \u{1F4CE} ${artifacts.join(" | ")}`);
+      }
     }
     sectionEnd();
   }
+  if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
+    const recs = report.additionalRecommendations;
+    const count = recs.length;
+    sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
+    lines.push("<details>");
+    lines.push("<summary>Expand to see recommended tests not generated in this run</summary>");
+    lines.push("");
+    const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
+    const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
+    const grouped = /* @__PURE__ */ new Map();
+    for (const rec of sorted) {
+      const list = grouped.get(rec.testType) || [];
+      list.push(rec);
+      grouped.set(rec.testType, list);
+    }
+    for (const [testType, items] of grouped) {
+      lines.push(`#### ${testType}`);
+      lines.push("");
+      for (const rec of items) {
+        const priorityBadge = rec.priority === "high" ? "\u{1F534}" : rec.priority === "medium" ? "\u{1F7E1}" : "\u{1F7E2}";
+        lines.push(`${priorityBadge} **\`${rec.scenarioName}\`** (${rec.priority})`);
+        lines.push("");
+        lines.push(rec.description);
+        lines.push("");
+        if (rec.steps.length > 0) {
+          for (let i = 0; i < rec.steps.length; i++) {
+            const s = rec.steps[i];
+            const prefix2 = s.method && s.path ? `\`${s.method} ${s.path}\`` : "";
+            lines.push(`${i + 1}. ${prefix2}${prefix2 ? " \u2014 " : ""}${s.description}`);
+          }
+          lines.push("");
+        }
+        const artifacts = [];
+        if (rec.openApiSpec) artifacts.push(`OpenAPI: \`${rec.openApiSpec}\``);
+        if (rec.backendTrace) artifacts.push(`Backend trace: \`${rec.backendTrace}\``);
+        if (rec.frontendTrace) artifacts.push(`Frontend trace: \`${rec.frontendTrace}\``);
+        if (artifacts.length > 0) {
+          lines.push(`*Artifacts:* ${artifacts.join(" \xB7 ")}`);
+          lines.push("");
+        }
+      }
+    }
+    lines.push("");
+    lines.push("</details>");
+    sectionEnd();
+  }
+  sectionStart("\u2705 Test Maintenance");
   if (report.testMaintenance.length > 0) {
-    sectionStart("\u2705 Test Maintenance");
     const escapeCell = (s) => s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
     const hasBeforeAfter = report.testMaintenance.some(
       (m) => typeof m === "object" && m !== null && "beforeStatus" in m
@@ -100111,8 +100197,10 @@ function renderReport(report, options = {}) {
         lines.push(`- ${m.description}`);
       }
     }
-    sectionEnd();
+  } else {
+    lines.push("No existing Skyramp tests required maintenance for this PR.");
   }
+  sectionEnd();
   sectionStart("\u{1F9EA} Test Results");
   lines.push("| Test Type | Endpoint | Status | Details |");
   lines.push("|-----------|----------|--------|---------|");
@@ -100199,12 +100287,12 @@ async function run() {
   setDebugEnabled(config.enableDebug);
   debug2(`Resolved config: ${JSON.stringify({
     testDirectory: config.testDirectory,
-    serviceStartupCommand: config.serviceStartupCommand,
+    targetSetupCommand: config.targetSetupCommand,
     authTokenCommand: config.authTokenCommand ? "<set>" : "<empty>",
     skyrampExecutorVersion: config.skyrampExecutorVersion,
     skyrampMcpVersion: config.skyrampMcpVersion,
     skyrampMcpSource: config.skyrampMcpSource,
-    skipServiceStartup: config.skipServiceStartup,
+    skipTargetSetup: config.skipTargetSetup,
     autoCommit: config.autoCommit,
     commitMessage: config.commitMessage,
     postPrComment: config.postPrComment,
@@ -100316,7 +100404,31 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   await initializeAgent(agent);
   const agentCmd = buildAgentCommand(agent, config.enableDebug);
   try {
-    await startServices(config, workingDir);
+    const setupOutput = await startServices(config, workingDir);
+    if (setupOutput) {
+      if (config.services.length === 0) {
+        if (setupOutput.services) {
+          for (const [name, details] of Object.entries(setupOutput.services)) {
+            if (details.baseUrl) {
+              debug2(`Created service '${name}' from setup output: baseUrl=${details.baseUrl}`);
+              config.services.push({ serviceName: name, baseUrl: details.baseUrl });
+            }
+          }
+        } else if (setupOutput.baseUrl) {
+          debug2(`Created default service from setup output: baseUrl=${setupOutput.baseUrl}`);
+          config.services.push({ serviceName: "default", baseUrl: setupOutput.baseUrl });
+        }
+      } else {
+        for (const svc of config.services) {
+          const svcOverride = setupOutput.services?.[svc.serviceName];
+          const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl;
+          if (newBaseUrl && svc.baseUrl) {
+            debug2(`Overrode service '${svc.serviceName}' baseUrl: ${svc.baseUrl} -> ${newBaseUrl}`);
+            svc.baseUrl = newBaseUrl;
+          }
+        }
+      }
+    }
   } catch (err) {
     const errMsg = err.message;
     if (prNumber) {
@@ -100326,12 +100438,12 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
         `**Error:** ${errMsg}`,
         "",
         "**How to fix:**",
-        `- Check that your \`service_startup_command\` is correct: \`${config.serviceStartupCommand}\``,
+        `- Check that your \`target_setup_command\` is correct: \`${config.targetSetupCommand}\``,
         "- Verify the service names in your `docker-compose.yml` (or equivalent) match the command",
         "- Ensure all referenced Docker images exist and can be pulled",
         "- You can test locally by running the command manually",
         "",
-        "This setting can be configured in your workflow file (`service_startup_command` input) or in `.skyramp/workspace.yml`."
+        "This setting can be configured in your workflow file (`target_setup_command` input) or in `.skyramp/workspace.yml`."
       ].join("\n"));
     }
     throw err;
