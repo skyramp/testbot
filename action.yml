@@ -32,14 +32,22 @@ inputs:
     description: 'Directory containing Skyramp tests'
     required: false
     default: 'tests'
-  service_startup_command:
-    description: 'Command to start services before test maintenance'
+  target_setup_command:
+    description: 'Command to start services before test maintenance. Can optionally emit a JSON object as its last stdout line to override workspace baseUrl at runtime (e.g., {"baseUrl": "http://remote-host:8000"}).'
     required: false
     default: 'docker compose up -d'
   auth_token_command:
     description: 'Shell command to generate an authentication token. Runs after services start; stdout is captured and set as SKYRAMP_TEST_TOKEN for test execution.'
     required: false
     default: ''
+  target_teardown_command:
+    description: 'Command to tear down services after test execution (runs in post step, guaranteed even on failure/cancellation)'
+    required: false
+    default: ''
+  skip_target_teardown:
+    description: 'Skip running service teardown command'
+    required: false
+    default: 'false'
 
   # Medium priority optional inputs
   skyramp_executor_version:
@@ -65,20 +73,20 @@ inputs:
     description: 'Node.js version to use'
     required: false
     default: 'lts/*'
-  skip_service_startup:
-    description: 'Skip running service startup command'
+  skip_target_setup:
+    description: 'Skip running target setup command'
     required: false
     default: 'false'
-  health_check_command:
+  target_ready_check_command:
     description: 'Shell command to verify services are ready (retried until success or timeout)'
     required: false
     default: 'sleep 5'
-  health_check_timeout:
-    description: 'Maximum seconds to wait for health check command to succeed'
+  target_ready_check_timeout:
+    description: 'Maximum seconds to wait for ready check command to succeed'
     required: false
     default: '30'
-  health_check_diagnostics_command:
-    description: 'Shell command to collect diagnostics on health check timeout. Runs when health_check_command times out.'
+  target_ready_check_diagnostics_command:
+    description: 'Shell command to collect diagnostics on ready check timeout. Runs when target_ready_check_command times out.'
     required: false
     default: "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' && docker ps -a --format '{{.Names}}' | while read name; do [ -n \"$name\" ] && echo \"--- logs $name (last 30) ---\" && docker logs --tail 30 \"$name\"; done"
   working_directory:
@@ -138,3 +146,4 @@ outputs:
 runs:
   using: 'node24'
   main: 'dist/index.js'
+  post: 'dist/post.js'
