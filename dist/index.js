@@ -74112,7 +74112,7 @@ function validateAttributeString(attrStr, options) {
     if (!validateAttrName(attrName)) {
       return getErrorObject("InvalidAttr", "Attribute '" + attrName + "' is an invalid name.", getPositionFromMatch(matches[i]));
     }
-    if (!attrNames.hasOwnProperty(attrName)) {
+    if (!Object.prototype.hasOwnProperty.call(attrNames, attrName)) {
       attrNames[attrName] = 1;
     } else {
       return getErrorObject("InvalidAttr", "Attribute '" + attrName + "' is repeated.", getPositionFromMatch(matches[i]));
@@ -74224,7 +74224,9 @@ var defaultOptions2 = {
     return tagName;
   },
   // skipEmptyListItem: false
-  captureMetaData: false
+  captureMetaData: false,
+  maxNestedTags: 100,
+  strictReservedNames: true
 };
 function normalizeProcessEntities(value) {
   if (typeof value === "boolean") {
@@ -74270,7 +74272,7 @@ var XmlNode = class {
   constructor(tagname) {
     this.tagname = tagname;
     this.child = [];
-    this[":@"] = {};
+    this[":@"] = /* @__PURE__ */ Object.create(null);
   }
   add(key, val) {
     if (key === "__proto__") key = "#__proto__";
@@ -74300,7 +74302,7 @@ var DocTypeReader = class {
     this.options = options;
   }
   readDocType(xmlData, i) {
-    const entities = {};
+    const entities = /* @__PURE__ */ Object.create(null);
     if (xmlData[i + 3] === "O" && xmlData[i + 4] === "C" && xmlData[i + 5] === "T" && xmlData[i + 6] === "Y" && xmlData[i + 7] === "P" && xmlData[i + 8] === "E") {
       i = i + 9;
       let angleBracketsCount = 1;
@@ -74934,6 +74936,9 @@ var parseXml = function(xmlData) {
           }
           tagName = newTagName;
         }
+        if (this.options.strictReservedNames && (tagName === this.options.commentPropName || tagName === this.options.cdataPropName)) {
+          throw new Error(`Invalid tag name: ${tagName}`);
+        }
         if (currentNode && textData) {
           if (currentNode.tagname !== "!xml") {
             textData = this.saveTextToParentTag(textData, currentNode, jPath, false);
@@ -74999,8 +75004,20 @@ var parseXml = function(xmlData) {
             }
             this.addChild(currentNode, childNode, jPath, startIndex);
             jPath = jPath.substr(0, jPath.lastIndexOf("."));
+          } else if (this.options.unpairedTags.indexOf(tagName) !== -1) {
+            const childNode = new XmlNode(tagName);
+            if (tagName !== tagExp && attrExpPresent) {
+              childNode[":@"] = this.buildAttributesMap(tagExp, jPath);
+            }
+            this.addChild(currentNode, childNode, jPath, startIndex);
+            jPath = jPath.substr(0, jPath.lastIndexOf("."));
+            i = result.closeIndex;
+            continue;
           } else {
             const childNode = new XmlNode(tagName);
+            if (this.tagsNodeStack.length > this.options.maxNestedTags) {
+              throw new Error("Maximum nested tags exceeded");
+            }
             this.tagsNodeStack.push(currentNode);
             if (tagName !== tagExp && attrExpPresent) {
               childNode[":@"] = this.buildAttributesMap(tagExp, jPath, tagName);
@@ -75084,19 +75101,19 @@ var replaceEntitiesValue = function(val, tagName, jPath) {
   val = val.replace(this.ampEntity.regex, this.ampEntity.val);
   return val;
 };
-function saveTextToParentTag(textData, currentNode, jPath, isLeafNode) {
+function saveTextToParentTag(textData, parentNode, jPath, isLeafNode) {
   if (textData) {
-    if (isLeafNode === void 0) isLeafNode = currentNode.child.length === 0;
+    if (isLeafNode === void 0) isLeafNode = parentNode.child.length === 0;
     textData = this.parseTextData(
       textData,
-      currentNode.tagname,
+      parentNode.tagname,
       jPath,
       false,
-      currentNode[":@"] ? Object.keys(currentNode[":@"]).length !== 0 : false,
+      parentNode[":@"] ? Object.keys(parentNode[":@"]).length !== 0 : false,
       isLeafNode
     );
     if (textData !== void 0 && textData !== "")
-      currentNode.add(this.options.textNodeName, textData);
+      parentNode.add(this.options.textNodeName, textData);
     textData = "";
   }
   return textData;
@@ -75256,9 +75273,6 @@ function compress(arr, options, jPath) {
     } else if (tagObj[property]) {
       let val = compress(tagObj[property], options, newJpath);
       const isLeaf = isLeafTag(val, options);
-      if (tagObj[METADATA_SYMBOL2] !== void 0) {
-        val[METADATA_SYMBOL2] = tagObj[METADATA_SYMBOL2];
-      }
       if (tagObj[":@"]) {
         assignAttributes(val, tagObj[":@"], newJpath, options);
       } else if (Object.keys(val).length === 1 && val[options.textNodeName] !== void 0 && !options.alwaysCreateTextNode) {
@@ -75267,7 +75281,10 @@ function compress(arr, options, jPath) {
         if (options.alwaysCreateTextNode) val[options.textNodeName] = "";
         else val = "";
       }
-      if (compressedObj[property] !== void 0 && compressedObj.hasOwnProperty(property)) {
+      if (tagObj[METADATA_SYMBOL2] !== void 0 && typeof val === "object" && val !== null) {
+        val[METADATA_SYMBOL2] = tagObj[METADATA_SYMBOL2];
+      }
+      if (compressedObj[property] !== void 0 && Object.prototype.hasOwnProperty.call(compressedObj, property)) {
         if (!Array.isArray(compressedObj[property])) {
           compressedObj[property] = [compressedObj[property]];
         }
@@ -75380,7 +75397,7 @@ var XMLParser = class {
   }
 };
 
-// node_modules/fast-xml-parser/src/xmlbuilder/orderedJs2Xml.js
+// node_modules/fast-xml-builder/src/orderedJs2Xml.js
 var EOL8 = "\n";
 function toXml(jArray, options) {
   let indentation = "";
@@ -75392,6 +75409,14 @@ function toXml(jArray, options) {
 function arrToStr(arr, options, jPath, indentation) {
   let xmlStr = "";
   let isPreviousElementTag = false;
+  if (!Array.isArray(arr)) {
+    if (arr !== void 0 && arr !== null) {
+      let text = arr.toString();
+      text = replaceEntitiesValue2(text, options);
+      return text;
+    }
+    return "";
+  }
   for (let i = 0; i < arr.length; i++) {
     const tagObj = arr[i];
     const tagName = propName2(tagObj);
@@ -75462,7 +75487,7 @@ function propName2(obj) {
   const keys = Object.keys(obj);
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
-    if (!obj.hasOwnProperty(key)) continue;
+    if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
     if (key !== ":@") return key;
   }
 }
@@ -75470,7 +75495,7 @@ function attr_to_str(attrMap, options) {
   let attrStr = "";
   if (attrMap && !options.ignoreAttributes) {
     for (let attr in attrMap) {
-      if (!attrMap.hasOwnProperty(attr)) continue;
+      if (!Object.prototype.hasOwnProperty.call(attrMap, attr)) continue;
       let attrVal = options.attributeValueProcessor(attr, attrMap[attr]);
       attrVal = replaceEntitiesValue2(attrVal, options);
       if (attrVal === true && options.suppressBooleanAttributes) {
@@ -75500,7 +75525,27 @@ function replaceEntitiesValue2(textValue, options) {
   return textValue;
 }
 
-// node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js
+// node_modules/fast-xml-builder/src/ignoreAttributes.js
+function getIgnoreAttributesFn2(ignoreAttributes) {
+  if (typeof ignoreAttributes === "function") {
+    return ignoreAttributes;
+  }
+  if (Array.isArray(ignoreAttributes)) {
+    return (attrName) => {
+      for (const pattern of ignoreAttributes) {
+        if (typeof pattern === "string" && attrName === pattern) {
+          return true;
+        }
+        if (pattern instanceof RegExp && pattern.test(attrName)) {
+          return true;
+        }
+      }
+    };
+  }
+  return () => false;
+}
+
+// node_modules/fast-xml-builder/src/fxb.js
 var defaultOptions3 = {
   attributeNamePrefix: "@_",
   attributesGroupName: false,
@@ -75542,7 +75587,7 @@ function Builder(options) {
       return false;
     };
   } else {
-    this.ignoreAttributesFn = getIgnoreAttributesFn(this.options.ignoreAttributes);
+    this.ignoreAttributesFn = getIgnoreAttributesFn2(this.options.ignoreAttributes);
     this.attrPrefixLen = this.options.attributeNamePrefix.length;
     this.isAttribute = isAttribute;
   }
@@ -75738,6 +75783,9 @@ function isAttribute(name) {
   }
 }
 
+// node_modules/fast-xml-parser/src/xmlbuilder/json2xml.js
+var json2xml_default = Builder;
+
 // node_modules/fast-xml-parser/src/fxp.js
 var XMLValidator = {
   validate
@@ -75766,7 +75814,7 @@ function getParserOptions(options = {}) {
 }
 function stringifyXML(obj, opts = {}) {
   const parserOptions = getSerializerOptions(opts);
-  const j2x = new Builder(parserOptions);
+  const j2x = new json2xml_default(parserOptions);
   const node = { [parserOptions.rootNodeName]: obj };
   const xmlData = j2x.build(node);
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>${xmlData}`.replace(/\n/g, "");
@@ -99171,25 +99219,27 @@ function getInputs() {
     copilotApiKey: getInput("copilot_api_key"),
     anthropicApiKey: getInput("anthropic_api_key"),
     testDirectory: getInput("test_directory"),
-    serviceStartupCommand: getInput("service_startup_command"),
+    targetSetupCommand: getInput("target_setup_command"),
     authTokenCommand: getInput("auth_token_command"),
+    targetTeardownCommand: getInput("target_teardown_command"),
+    skipTargetTeardown: getBooleanInput("skip_target_teardown"),
     skyrampExecutorVersion: getInput("skyramp_executor_version"),
     skyrampMcpVersion: getInput("skyramp_mcp_version"),
     skyrampMcpSource: getInput("skyramp_mcp_source"),
     skyrampMcpGithubToken: getInput("skyramp_mcp_github_token"),
     skyrampMcpGithubRef: getInput("skyramp_mcp_github_ref"),
     nodeVersion: getInput("node_version"),
-    skipServiceStartup: getBooleanInput("skip_service_startup"),
-    healthCheckCommand: getInput("health_check_command"),
-    healthCheckTimeout: (() => {
-      const raw = parseInt(getInput("health_check_timeout"), 10) || 30;
+    skipTargetSetup: getBooleanInput("skip_target_setup"),
+    targetReadyCheckCommand: getInput("target_ready_check_command"),
+    targetReadyCheckTimeout: (() => {
+      const raw = parseInt(getInput("target_ready_check_timeout"), 10) || 30;
       if (raw < 1) {
-        warning(`health_check_timeout must be at least 1 second, got ${raw}. Using 1s.`);
+        warning(`target_ready_check_timeout must be at least 1 second, got ${raw}. Using 1s.`);
         return 1;
       }
       return raw;
     })(),
-    healthCheckDiagnosticsCommand: getInput("health_check_diagnostics_command"),
+    targetReadyCheckDiagnosticsCommand: getInput("target_ready_check_diagnostics_command"),
     workingDirectory: getInput("working_directory"),
     autoCommit: getBooleanInput("auto_commit"),
     commitMessage: getInput("commit_message"),
@@ -99499,7 +99549,8 @@ async function loadConfig(inputs) {
   const workingDir = path8.resolve(inputs.workingDirectory);
   const manager = new import_workspace.WorkspaceConfigManager(workingDir);
   const services = [];
-  let serviceStartupCommand = inputs.serviceStartupCommand;
+  let targetSetupCommand = inputs.targetSetupCommand;
+  let targetTeardownCommand = inputs.targetTeardownCommand;
   let testDirectory = inputs.testDirectory;
   let executorVersion = inputs.skyrampExecutorVersion;
   let mcpVersion = inputs.skyrampMcpVersion;
@@ -99529,8 +99580,12 @@ async function loadConfig(inputs) {
         if (first.outputDir) {
           testDirectory = first.outputDir;
         }
-        if (first.runtimeDetails?.serverStartCommand) {
-          serviceStartupCommand = first.runtimeDetails.serverStartCommand;
+        if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
+          targetSetupCommand = first.runtimeDetails.serverStartCommand;
+        }
+        const teardown = first.runtimeDetails?.serverTeardownCommand;
+        if (!targetTeardownCommand && typeof teardown === "string") {
+          targetTeardownCommand = teardown;
         }
       }
     } catch (err) {
@@ -99541,17 +99596,19 @@ async function loadConfig(inputs) {
   }
   const config = {
     testDirectory,
-    serviceStartupCommand,
+    targetSetupCommand,
     authTokenCommand: inputs.authTokenCommand,
+    targetTeardownCommand,
+    skipTargetTeardown: inputs.skipTargetTeardown,
     skyrampExecutorVersion: executorVersion,
     skyrampMcpVersion: mcpVersion,
     skyrampMcpSource: inputs.skyrampMcpSource,
     skyrampMcpGithubRef: inputs.skyrampMcpGithubRef,
     nodeVersion: inputs.nodeVersion,
-    skipServiceStartup: inputs.skipServiceStartup,
-    healthCheckCommand: inputs.healthCheckCommand,
-    healthCheckTimeout: inputs.healthCheckTimeout,
-    healthCheckDiagnosticsCommand: inputs.healthCheckDiagnosticsCommand,
+    skipTargetSetup: inputs.skipTargetSetup,
+    targetReadyCheckCommand: inputs.targetReadyCheckCommand,
+    targetReadyCheckTimeout: inputs.targetReadyCheckTimeout,
+    targetReadyCheckDiagnosticsCommand: inputs.targetReadyCheckDiagnosticsCommand,
     autoCommit: inputs.autoCommit,
     commitMessage: inputs.commitMessage,
     postPrComment: inputs.postPrComment,
@@ -99615,8 +99672,6 @@ async function checkSelfTrigger() {
 
 // src/progress.ts
 var fs8 = __toESM(require("fs"));
-var SKYRAMP_LOGO = '<img src="https://avatars.githubusercontent.com/u/93742274?s=200&v=4" alt="Skyramp" width="28" />';
-var SPINNER_GIF = '<img src="https://raw.githubusercontent.com/letsramp/testbot/main/assets/progress-spinner.gif" alt="In progress" width="16" />';
 var _githubToken = "";
 function setGitHubToken(token) {
   _githubToken = token;
@@ -99625,8 +99680,7 @@ function generateProgressBody(step, reportContent) {
   const check1 = step >= 1 ? "[x]" : "[ ]";
   const check2 = step >= 2 ? "[x]" : "[ ]";
   const check3 = step >= 3 ? "[x]" : "[ ]";
-  const spinner = step < 3 ? ` ${SPINNER_GIF}` : "";
-  let body2 = `### ${SKYRAMP_LOGO} Skyramp Testbot Plan${spinner}
+  let body2 = `### Skyramp Testbot Plan
 Reviewing the Pull Request for test recommendations.
 
 - ${check1} Analyzing code changes
@@ -99890,47 +99944,68 @@ async function runAgentWithRetry(agentCmd, prompt, config, opts = {}) {
 }
 
 // src/services.ts
-async function startServices(config, workingDir) {
-  await withGroup("Starting services", async () => {
-    if (config.skipServiceStartup) {
-      notice("Skipping service startup (skip_service_startup=true)");
-      return;
+function parseTargetDeploymentDetails(stdout) {
+  const lines = stdout.split("\n");
+  let lastLine = "";
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const trimmed = lines[i].trim();
+    if (trimmed) {
+      lastLine = trimmed;
+      break;
     }
-    info(`Running command: ${config.serviceStartupCommand}`);
+  }
+  if (!lastLine.startsWith("{")) return null;
+  try {
+    const parsed = JSON.parse(lastLine);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+async function startServices(config, workingDir) {
+  return await withGroup("Starting services", async () => {
+    if (config.skipTargetSetup) {
+      notice("Skipping service startup (skip_target_setup=true)");
+      return null;
+    }
+    let setupStdout = "";
+    info(`Running command: ${config.targetSetupCommand}`);
     try {
-      await exec2("bash", ["-c", config.serviceStartupCommand], { cwd: workingDir });
+      const { stdout } = await exec2("bash", ["-c", config.targetSetupCommand], { cwd: workingDir });
+      setupStdout = stdout;
       notice("Services started successfully");
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       error(`Service startup command failed: ${errMsg}`);
       throw new Error(
-        `Service startup failed \u2014 all subsequent tests will likely fail. Command: ${config.serviceStartupCommand}`,
+        `Service startup failed \u2014 all subsequent tests will likely fail. Command: ${config.targetSetupCommand}`,
         { cause: err }
       );
     }
-    info(`Running health check: ${config.healthCheckCommand}`);
+    info(`Running health check: ${config.targetReadyCheckCommand}`);
     const startTime = Date.now();
-    const timeoutMs = secondsToMilliseconds(config.healthCheckTimeout);
+    const timeoutMs = secondsToMilliseconds(config.targetReadyCheckTimeout);
     const pollInterval = 2;
     let attempt = 0;
     while (Date.now() - startTime < timeoutMs) {
       attempt++;
-      const { exitCode } = await exec2("bash", ["-c", config.healthCheckCommand], {
+      const { exitCode } = await exec2("bash", ["-c", config.targetReadyCheckCommand], {
         cwd: workingDir,
         ignoreReturnCode: true
       });
       if (exitCode === 0) {
         notice(`Health check passed on attempt ${attempt}`);
-        return;
+        return parseTargetDeploymentDetails(setupStdout);
       }
       const elapsed = Math.round((Date.now() - startTime) / 1e3);
-      info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.healthCheckTimeout}s), retrying in ${pollInterval}s...`);
+      info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.targetReadyCheckTimeout}s), retrying in ${pollInterval}s...`);
       await sleep(pollInterval);
     }
-    warning(`Health check timed out after ${config.healthCheckTimeout}s, continuing anyway...`);
+    warning(`Health check timed out after ${config.targetReadyCheckTimeout}s, continuing anyway...`);
     try {
       info("--- Diagnostics ---");
-      await exec2("bash", ["-c", config.healthCheckDiagnosticsCommand], {
+      await exec2("bash", ["-c", config.targetReadyCheckDiagnosticsCommand], {
         cwd: workingDir,
         ignoreReturnCode: true
       });
@@ -99938,6 +100013,7 @@ async function startServices(config, workingDir) {
       const errMsg = err instanceof Error ? err.message : String(err);
       warning(`Could not retrieve diagnostics: ${errMsg}`);
     }
+    return parseTargetDeploymentDetails(setupStdout);
   });
 }
 async function generateAuthToken(config, workingDir) {
@@ -100199,12 +100275,12 @@ async function run() {
   setDebugEnabled(config.enableDebug);
   debug2(`Resolved config: ${JSON.stringify({
     testDirectory: config.testDirectory,
-    serviceStartupCommand: config.serviceStartupCommand,
+    targetSetupCommand: config.targetSetupCommand,
     authTokenCommand: config.authTokenCommand ? "<set>" : "<empty>",
     skyrampExecutorVersion: config.skyrampExecutorVersion,
     skyrampMcpVersion: config.skyrampMcpVersion,
     skyrampMcpSource: config.skyrampMcpSource,
-    skipServiceStartup: config.skipServiceStartup,
+    skipTargetSetup: config.skipTargetSetup,
     autoCommit: config.autoCommit,
     commitMessage: config.commitMessage,
     postPrComment: config.postPrComment,
@@ -100316,7 +100392,31 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   await initializeAgent(agent);
   const agentCmd = buildAgentCommand(agent, config.enableDebug);
   try {
-    await startServices(config, workingDir);
+    const setupOutput = await startServices(config, workingDir);
+    if (setupOutput) {
+      if (config.services.length === 0) {
+        if (setupOutput.services) {
+          for (const [name, details] of Object.entries(setupOutput.services)) {
+            if (details.baseUrl) {
+              debug2(`Created service '${name}' from setup output: baseUrl=${details.baseUrl}`);
+              config.services.push({ serviceName: name, baseUrl: details.baseUrl });
+            }
+          }
+        } else if (setupOutput.baseUrl) {
+          debug2(`Created default service from setup output: baseUrl=${setupOutput.baseUrl}`);
+          config.services.push({ serviceName: "default", baseUrl: setupOutput.baseUrl });
+        }
+      } else {
+        for (const svc of config.services) {
+          const svcOverride = setupOutput.services?.[svc.serviceName];
+          const newBaseUrl = svcOverride?.baseUrl ?? setupOutput.baseUrl;
+          if (newBaseUrl && svc.baseUrl) {
+            debug2(`Overrode service '${svc.serviceName}' baseUrl: ${svc.baseUrl} -> ${newBaseUrl}`);
+            svc.baseUrl = newBaseUrl;
+          }
+        }
+      }
+    }
   } catch (err) {
     const errMsg = err.message;
     if (prNumber) {
@@ -100326,12 +100426,12 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
         `**Error:** ${errMsg}`,
         "",
         "**How to fix:**",
-        `- Check that your \`service_startup_command\` is correct: \`${config.serviceStartupCommand}\``,
+        `- Check that your \`target_setup_command\` is correct: \`${config.targetSetupCommand}\``,
         "- Verify the service names in your `docker-compose.yml` (or equivalent) match the command",
         "- Ensure all referenced Docker images exist and can be pulled",
         "- You can test locally by running the command manually",
         "",
-        "This setting can be configured in your workflow file (`service_startup_command` input) or in `.skyramp/workspace.yml`."
+        "This setting can be configured in your workflow file (`target_setup_command` input) or in `.skyramp/workspace.yml`."
       ].join("\n"));
     }
     throw err;
