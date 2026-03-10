@@ -18,11 +18,17 @@ const NPM_INSTALL_TIMEOUT_MS = secondsToMilliseconds(180)
 export async function installMcp(
   config: ResolvedConfig,
   inputs: ActionInputs,
-  workingDir: string
+  tempDir: string
 ): Promise<McpPaths> {
   return withGroup('Installing Skyramp MCP', async () => {
     let command: string
     let args: string
+
+    // Install into an isolated directory under tempDir so npm never
+    // interacts with the target repo's package manager config (e.g.
+    // pnpm catalog: protocol, yarn workspaces, etc.).
+    const mcpInstallDir = path.join(tempDir, 'mcp')
+    fs.mkdirSync(mcpInstallDir, { recursive: true })
 
     if (config.skyrampMcpSource === 'github') {
       // Validate github token
@@ -32,7 +38,7 @@ export async function installMcp(
 
       core.setSecret(inputs.skyrampMcpGithubToken)
 
-      const mcpPkgDir = path.join(workingDir, 'node_modules', '@skyramp', 'mcp')
+      const mcpPkgDir = path.join(mcpInstallDir, 'node_modules', '@skyramp', 'mcp')
       fs.mkdirSync(path.dirname(mcpPkgDir), { recursive: true })
 
       const repoUrl = `https://x-access-token:${inputs.skyrampMcpGithubToken}@github.com/letsramp/mcp.git`
@@ -69,17 +75,21 @@ export async function installMcp(
       // Expose mcp's dependencies to top-level node resolution
       core.exportVariable('NODE_PATH', path.join(mcpPkgDir, 'node_modules'))
     } else {
-      // npm source (default)
+      // npm source (default) — install in isolated temp dir to avoid
+      // conflicts with the repo's package manager (pnpm catalog:, etc.)
       const pkg = config.skyrampMcpVersion === 'latest'
         ? '@skyramp/mcp'
         : `@skyramp/mcp@${config.skyrampMcpVersion}`
 
-      await exec('npm', ['install', pkg], { cwd: workingDir, timeout: NPM_INSTALL_TIMEOUT_MS })
+      await exec('npm', ['install', pkg], { cwd: mcpInstallDir, timeout: NPM_INSTALL_TIMEOUT_MS })
 
-      command = 'npx'
-      args = config.skyrampMcpVersion === 'latest'
-        ? '-y @skyramp/mcp'
-        : `-y @skyramp/mcp@${config.skyrampMcpVersion}`
+      const mcpPkgDir = path.join(mcpInstallDir, 'node_modules', '@skyramp', 'mcp')
+      command = 'node'
+      args = path.join(mcpPkgDir, 'build', 'index.js')
+
+      // Expose installed packages to top-level node resolution (needed by
+      // license validation and any other code that require()s @skyramp/*)
+      core.exportVariable('NODE_PATH', path.join(mcpInstallDir, 'node_modules'))
     }
 
     core.notice(`Skyramp MCP installed successfully (source: ${config.skyrampMcpSource})`)

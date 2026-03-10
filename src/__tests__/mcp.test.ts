@@ -109,6 +109,18 @@ describe('installMcp', () => {
     expect(npmInstallCall![2]).toMatchObject({ timeout: 3 * 60 * 1000 })
   })
 
+  it('installs npm packages in isolated temp dir, not repo working dir', async () => {
+    const config = { ...baseConfig, skyrampMcpSource: 'npm' as const }
+
+    await installMcp(config, baseInputs, '/tmp/skyramp')
+
+    const npmInstallCall = mockExec.mock.calls.find(
+      ([cmd, args]) => cmd === 'npm' && args?.[0] === 'install'
+    )
+    expect(npmInstallCall).toBeDefined()
+    expect(npmInstallCall![2]).toMatchObject({ cwd: '/tmp/skyramp/mcp' })
+  })
+
   it('passes 3-minute timeout to npm install for github source', async () => {
     const config = {
       ...baseConfig,
@@ -147,13 +159,13 @@ describe('installMcp', () => {
       .rejects.toThrow('Command timed out after 3m: npm')
   })
 
-  it('returns npx command for npm source', async () => {
+  it('returns node command for npm source', async () => {
     const config = { ...baseConfig, skyrampMcpSource: 'npm' as const }
 
     const result = await installMcp(config, baseInputs, '/work')
 
-    expect(result.command).toBe('npx')
-    expect(result.args).toContain('@skyramp/mcp')
+    expect(result.command).toBe('node')
+    expect(result.args).toContain('build/index.js')
   })
 
   it('returns node command for github source', async () => {

@@ -121,7 +121,7 @@ async function run(): Promise<void> {
   })
 
   // ── 8. Install Skyramp MCP ─────────────────────────────────────────
-  const mcp = await installMcp(config, inputs, workingDir)
+  const mcp = await installMcp(config, inputs, tempDir)
   mcp.licensePath = paths.licensePath
 
   // ── 9. Validate license via MCP/Skyramp ────────────────────────────
