@@ -83,6 +83,7 @@ jobs:
         run: |
           mkdir -p public-testbot/dist
           cp dist/index.js public-testbot/dist/index.js
+          cp dist/post.js public-testbot/dist/post.js
           cp action.yml public-testbot/action.yml
           cp README.md public-testbot/README.md
 
@@ -92,7 +93,7 @@ jobs:
           cd public-testbot
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add dist/index.js action.yml README.md
+          git add dist/index.js dist/post.js action.yml README.md
           if git diff --cached --quiet; then
             echo "No changes to commit — artifacts are identical to the last release"
             exit 0
@@ -126,7 +127,7 @@ jobs:
           echo "Release name: ${{ steps.version.outputs.release_name }}"
           echo ""
           echo "Artifacts that would be published:"
-          ls -la public-testbot/dist/index.js public-testbot/action.yml public-testbot/README.md
+          ls -la public-testbot/dist/index.js public-testbot/dist/post.js public-testbot/action.yml public-testbot/README.md
           echo ""
           echo "Diff in public repo:"
           cd public-testbot && git diff
