@@ -87,9 +87,9 @@ Before using this action, ensure you have:
 | `target_ready_check_command` | Command to verify services are ready (retried until success or timeout) | `sleep 5` |
 | `target_ready_check_timeout` | Max seconds to wait for ready check to succeed | `30` |
 | `target_ready_check_diagnostics_command` | Command to collect diagnostics on ready check timeout | Docker container status/logs |
-| `target_teardown_command` | Command to tear down services after tests (runs in post step, non-fatal) | `''` |
+| `target_teardown_command` | Command to tear down services after tests (runs in post step, guaranteed even on failure/cancellation) | `''` |
 | `skip_target_teardown` | Skip running service teardown command | `false` |
-| `auth_token_command` | Shell command to generate an authentication token (stdout is captured) | `''` |
+| `auth_token_command` | Shell command to generate an authentication token (stdout is captured and set as `SKYRAMP_TEST_TOKEN`) | `''` |
 
 ### Optional - Other
 
@@ -98,13 +98,16 @@ Before using this action, ensure you have:
 | `test_directory` | Directory containing Skyramp tests | `tests` |
 | `skyramp_executor_version` | Skyramp Executor Docker image version | `v1.3.3` |
 | `skyramp_mcp_version` | Skyramp MCP package version | `latest` |
-| `node_version` | Node.js version to use | `lts` |
+| `node_version` | Node.js version to use | `lts/*` |
 | `working_directory` | Working directory for the action | `.` |
 | `auto_commit` | Automatically commit test changes | `true` |
 | `commit_message` | Commit message for test changes | `Skyramp Testbot: test maintenance suggestions` |
 | `post_pr_comment` | Post summary as PR comment | `true` |
 | `testbot_max_retries` | Maximum number of retries for transient agent CLI errors | `3` |
 | `testbot_retry_delay` | Delay in seconds between agent retry attempts | `10` |
+| `test_execution_timeout` | Timeout in seconds for individual MCP tool calls (e.g., test execution) | `300` |
+| `testbot_timeout` | Timeout in minutes for the agent execution | `10` |
+| `report_collapsed` | Wrap report sections in collapsible `<details>` blocks | `false` |
 | `enable_debug` | Enable debug logging | `true` |
 
 ## Outputs
@@ -115,6 +118,8 @@ Before using this action, ensure you have:
 | `tests_modified` | Number of tests modified |
 | `tests_created` | Number of tests created |
 | `tests_executed` | Number of tests executed |
+| `skipped_self_trigger` | Whether execution was skipped due to detecting own commit |
+| `commit_sha` | SHA of the commit made by testbot (empty if no commit) |
 
 ## Usage Examples
 
