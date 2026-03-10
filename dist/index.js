@@ -99783,16 +99783,18 @@ Please check your workflow configuration and ensure all required secrets are set
 var fs9 = __toESM(require("fs"));
 var path9 = __toESM(require("path"));
 var NPM_INSTALL_TIMEOUT_MS = secondsToMilliseconds(180);
-async function installMcp(config, inputs, workingDir) {
+async function installMcp(config, inputs, tempDir) {
   return withGroup("Installing Skyramp MCP", async () => {
     let command;
     let args;
+    const mcpInstallDir = path9.join(tempDir, "mcp");
+    fs9.mkdirSync(mcpInstallDir, { recursive: true });
     if (config.skyrampMcpSource === "github") {
       if (!inputs.skyrampMcpGithubToken) {
         throw new Error("skyramp_mcp_github_token is required when skyramp_mcp_source is 'github'");
       }
       setSecret(inputs.skyrampMcpGithubToken);
-      const mcpPkgDir = path9.join(workingDir, "node_modules", "@skyramp", "mcp");
+      const mcpPkgDir = path9.join(mcpInstallDir, "node_modules", "@skyramp", "mcp");
       fs9.mkdirSync(path9.dirname(mcpPkgDir), { recursive: true });
       const repoUrl = `https://x-access-token:${inputs.skyrampMcpGithubToken}@github.com/letsramp/mcp.git`;
       const ref = config.skyrampMcpGithubRef;
@@ -99818,9 +99820,11 @@ async function installMcp(config, inputs, workingDir) {
       exportVariable("NODE_PATH", path9.join(mcpPkgDir, "node_modules"));
     } else {
       const pkg = config.skyrampMcpVersion === "latest" ? "@skyramp/mcp" : `@skyramp/mcp@${config.skyrampMcpVersion}`;
-      await exec2("npm", ["install", pkg], { cwd: workingDir, timeout: NPM_INSTALL_TIMEOUT_MS });
-      command = "npx";
-      args = config.skyrampMcpVersion === "latest" ? "-y @skyramp/mcp" : `-y @skyramp/mcp@${config.skyrampMcpVersion}`;
+      await exec2("npm", ["install", pkg], { cwd: mcpInstallDir, timeout: NPM_INSTALL_TIMEOUT_MS });
+      const mcpPkgDir = path9.join(mcpInstallDir, "node_modules", "@skyramp", "mcp");
+      command = "node";
+      args = path9.join(mcpPkgDir, "build", "index.js");
+      exportVariable("NODE_PATH", path9.join(mcpInstallDir, "node_modules"));
     }
     notice(`Skyramp MCP installed successfully (source: ${config.skyrampMcpSource})`);
     return { command, args, licensePath: "" };
@@ -100334,7 +100338,7 @@ Please ensure your \`skyramp_license_file\` secret is configured correctly.`
     }
     notice("License file created successfully");
   });
-  const mcp = await installMcp(config, inputs, workingDir);
+  const mcp = await installMcp(config, inputs, tempDir);
   mcp.licensePath = paths.licensePath;
   await withGroup("Validating Skyramp license", async () => {
     try {
