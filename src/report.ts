@@ -112,14 +112,16 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     sectionEnd()
   }
 
-  // Test Results (always present)
-  sectionStart('🧪 Test Results')
-  lines.push('| Test Type | Endpoint | Status | Details |')
-  lines.push('|-----------|----------|--------|---------|')
-  for (const r of report.testResults) {
-    lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`)
+  // Test Results (omit if empty)
+  if (report.testResults.length > 0) {
+    sectionStart('🧪 Test Results')
+    lines.push('| Test Type | Endpoint | Status | Details |')
+    lines.push('|-----------|----------|--------|---------|')
+    for (const r of report.testResults) {
+      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`)
+    }
+    sectionEnd()
   }
-  sectionEnd()
 
   // Issues Found (omit if empty)
   if (report.issuesFound.length > 0) {

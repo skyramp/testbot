@@ -116,6 +116,21 @@ describe('renderReport', () => {
     expect(md).not.toContain('⚠️ Issues Found')
   })
 
+  it('omits Test Results section when testResults is empty', () => {
+    const report: TestbotReport = {
+      businessCaseAnalysis: 'Setup PR with no tests.',
+      newTestsCreated: [],
+      testMaintenance: [],
+      testResults: [],
+      issuesFound: [],
+    }
+    const md = renderReport(report)
+
+    expect(md).toContain('### 📋 Business Case Analysis')
+    expect(md).not.toContain('🧪 Test Results')
+    expect(md).not.toContain('| Test Type |')
+  })
+
   it('renders the test results table with headers', () => {
     const md = renderReport(validReport)
     expect(md).toContain('| Test Type | Endpoint | Status | Details |')

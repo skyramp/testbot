@@ -100193,13 +100193,15 @@ function renderReport(report, options = {}) {
     }
     sectionEnd();
   }
-  sectionStart("\u{1F9EA} Test Results");
-  lines.push("| Test Type | Endpoint | Status | Details |");
-  lines.push("|-----------|----------|--------|---------|");
-  for (const r of report.testResults) {
-    lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
+  if (report.testResults.length > 0) {
+    sectionStart("\u{1F9EA} Test Results");
+    lines.push("| Test Type | Endpoint | Status | Details |");
+    lines.push("|-----------|----------|--------|---------|");
+    for (const r of report.testResults) {
+      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
+    }
+    sectionEnd();
   }
-  sectionEnd();
   if (report.issuesFound.length > 0) {
     sectionStart("\u26A0\uFE0F Issues Found");
     for (const issue2 of report.issuesFound) {
