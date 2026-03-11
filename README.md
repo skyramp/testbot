@@ -106,7 +106,7 @@ Before using this action, ensure you have:
 | `testbot_max_retries` | Maximum number of retries for transient agent CLI errors | `3` |
 | `testbot_retry_delay` | Delay in seconds between agent retry attempts | `10` |
 | `test_execution_timeout` | Timeout in seconds for individual MCP tool calls (e.g., test execution) | `300` |
-| `testbot_timeout` | Timeout in minutes for the agent execution | `10` |
+| `testbot_timeout` | Timeout in minutes for the agent execution | `60` |
 | `report_collapsed` | Wrap report sections in collapsible `<details>` blocks | `false` |
 | `enable_debug` | Enable debug logging | `true` |
 

@@ -112,7 +112,7 @@ No changes to `agent.ts`, `mcp.ts`, or `main.ts` are needed — they delegate to
 - **Stdout fallback**: Agent may print summary to stdout instead of writing to the output file. `agent-stdout.txt` is captured and used as fallback in `readSummary()`
 - **Debug mode**: When `enable_debug=true`, agents with `supportsNdjsonLog` (Cursor and Claude Code) produce NDJSON output — routed to log file, not used as text fallback. Debug messages use `core.info('[debug]')` because `core.debug()` requires `ACTIONS_STEP_DEBUG` set before the step starts.
 - **Graceful failure**: If the agent fails, the action continues to post partial results before calling `core.setFailed()`
-- **Agent timeout**: `testbot_timeout` (default 10 min) uses `Promise.race` as a safety net. Note: the child process is NOT killed on timeout (limitation of `@actions/exec`); it's cleaned up when the runner tears down the job.
+- **Agent timeout**: `testbot_timeout` (default 60 min) uses `Promise.race` as a safety net. Note: the child process is NOT killed on timeout (limitation of `@actions/exec`); it's cleaned up when the runner tears down the job.
 - **GitHub token**: Must be read from `core.getInput('github_token')`, not `process.env.GITHUB_TOKEN` — node24 actions don't inherit env vars like composite actions do.
 
 ## Common Gotchas
