@@ -26997,7 +26997,7 @@ function getInputs() {
     testExecutionTimeout: parseInt(getInput("test_execution_timeout"), 10) || 300,
     testbotMaxRetries: parseInt(getInput("testbot_max_retries"), 10) || 3,
     testbotRetryDelay: parseInt(getInput("testbot_retry_delay"), 10) || 10,
-    testbotTimeout: parseInt(getInput("testbot_timeout"), 10) || 10,
+    testbotTimeout: parseInt(getInput("testbot_timeout"), 10) || 60,
     reportCollapsed: getBooleanInput("report_collapsed"),
     enableDebug: getBooleanInput("enable_debug")
   };

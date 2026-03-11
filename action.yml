@@ -120,7 +120,7 @@ inputs:
   testbot_timeout:
     description: 'Timeout in minutes for the agent execution (safety net; does not kill the child process)'
     required: false
-    default: '10'
+    default: '60'
   report_collapsed:
     description: 'Wrap report sections in collapsible <details> blocks with a summary line'
     required: false
