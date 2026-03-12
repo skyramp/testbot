@@ -53,7 +53,7 @@ inputs:
   skyramp_executor_version:
     description: 'Skyramp Executor Docker image version'
     required: false
-    default: 'v1.3.3'
+    default: 'v1.3.12'
   skyramp_mcp_version:
     description: 'Skyramp MCP package version'
     required: false
