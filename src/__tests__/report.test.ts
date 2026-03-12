@@ -112,7 +112,8 @@ describe('renderReport', () => {
     expect(md).toContain('### 📋 Business Case Analysis')
     expect(md).toContain('### 🧪 Test Results')
     expect(md).not.toContain('💡 New Tests Created')
-    expect(md).not.toContain('✅ Test Maintenance')
+    expect(md).toContain('✅ Test Maintenance')
+    expect(md).toContain('No existing Skyramp tests required maintenance')
     expect(md).not.toContain('⚠️ Issues Found')
   })
 

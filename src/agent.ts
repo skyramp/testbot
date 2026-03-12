@@ -75,8 +75,10 @@ ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
 AUTHENTICATION:
-When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${opts.authToken}
-If the token is empty, pass an empty string for the token parameter.`
+When executing any tests using the Skyramp MCP execute tool, pass this authentication token to the tool's authToken parameter: ${opts.authToken}
+If the token is empty, pass an empty string for the token parameter.
+CRITICAL — GENERATED TEST FILE INTEGRITY:
+When the CLI generates a test file, preserve it exactly as-is. The ONLY permitted edit is fixing chaining — replacing literal/hardcoded IDs in path params and request bodies with dynamic response IDs. Do NOT add, remove, or modify auth headers, cookies, tokens, env vars, imports, assertions, or request bodies (other than chaining IDs).`
 }
 
 function buildServiceContext(services: WorkspaceServiceInfo[]): string {

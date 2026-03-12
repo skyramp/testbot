@@ -81,6 +81,16 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     sectionStart('💡 New Tests Created')
     for (const t of report.newTestsCreated) {
       lines.push(`- **${t.testType}** for ${t.endpoint} — \`${t.fileName}\``)
+      if (t.description) {
+        lines.push(`  ${t.description}`)
+      }
+      const artifacts: string[] = []
+      if (t.scenarioFile) artifacts.push(`Scenario: \`${t.scenarioFile}\``)
+      if (t.traceFile) artifacts.push(`Trace: \`${t.traceFile}\``)
+      if (t.frontendTrace) artifacts.push(`UI Trace: \`${t.frontendTrace}\``)
+      if (artifacts.length > 0) {
+        lines.push(`  📎 ${artifacts.join(' | ')}`)
+      }
     }
     sectionEnd()
   }
@@ -120,6 +130,57 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     for (const r of report.testResults) {
       lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`)
     }
+    sectionEnd()
+  }
+
+  // Additional Recommendations (omit if empty) — collapsible details, consistent heading
+  if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
+    const recs = report.additionalRecommendations
+    const count = recs.length
+    sectionStart(`📌 Additional Recommendations (${count})`)
+    lines.push('<details>')
+    lines.push('<summary>Expand to see recommended tests not generated in this run</summary>')
+    lines.push('')
+
+    const priorityOrder = (p: string) => p === 'high' ? 0 : p === 'medium' ? 1 : 2
+    const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority))
+
+    const grouped = new Map<string, typeof recs>()
+    for (const rec of sorted) {
+      const list = grouped.get(rec.testType) || []
+      list.push(rec)
+      grouped.set(rec.testType, list)
+    }
+
+    for (const [testType, items] of grouped) {
+      lines.push(`#### ${testType}`)
+      lines.push('')
+      for (const rec of items) {
+        lines.push(`**\`${rec.scenarioName}\`**`)
+        lines.push('')
+        lines.push(rec.description)
+        lines.push('')
+        if (rec.steps.length > 0) {
+          for (let i = 0; i < rec.steps.length; i++) {
+            const s = rec.steps[i]
+            const prefix = s.method && s.path ? `\`${s.method} ${s.path}\`` : ''
+            lines.push(`${i + 1}. ${prefix}${prefix ? ' — ' : ''}${s.description}`)
+          }
+          lines.push('')
+        }
+        const artifacts: string[] = []
+        if (rec.openApiSpec) artifacts.push(`OpenAPI: \`${rec.openApiSpec}\``)
+        if (rec.backendTrace) artifacts.push(`Backend trace: \`${rec.backendTrace}\``)
+        if (rec.frontendTrace) artifacts.push(`Frontend trace: \`${rec.frontendTrace}\``)
+        if (artifacts.length > 0) {
+          lines.push(`*Artifacts:* ${artifacts.join(' · ')}`)
+          lines.push('')
+        }
+      }
+    }
+
+    lines.push('')
+    lines.push('</details>')
     sectionEnd()
   }
 

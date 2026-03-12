@@ -99884,8 +99884,10 @@ ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
 AUTHENTICATION:
-When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${opts.authToken}
-If the token is empty, pass an empty string for the token parameter.`;
+When executing any tests using the Skyramp MCP execute tool, pass this authentication token to the tool's authToken parameter: ${opts.authToken}
+If the token is empty, pass an empty string for the token parameter.
+CRITICAL \u2014 GENERATED TEST FILE INTEGRITY:
+When the CLI generates a test file, preserve it exactly as-is. The ONLY permitted edit is fixing chaining \u2014 replacing literal/hardcoded IDs in path params and request bodies with dynamic response IDs. Do NOT add, remove, or modify auth headers, cookies, tokens, env vars, imports, assertions, or request bodies (other than chaining IDs).`;
 }
 function buildServiceContext(services) {
   const blocks2 = services.map((svc) => {
@@ -100165,6 +100167,16 @@ function renderReport(report, options = {}) {
     sectionStart("\u{1F4A1} New Tests Created");
     for (const t of report.newTestsCreated) {
       lines.push(`- **${t.testType}** for ${t.endpoint} \u2014 \`${t.fileName}\``);
+      if (t.description) {
+        lines.push(`  ${t.description}`);
+      }
+      const artifacts = [];
+      if (t.scenarioFile) artifacts.push(`Scenario: \`${t.scenarioFile}\``);
+      if (t.traceFile) artifacts.push(`Trace: \`${t.traceFile}\``);
+      if (t.frontendTrace) artifacts.push(`UI Trace: \`${t.frontendTrace}\``);
+      if (artifacts.length > 0) {
+        lines.push(`  \u{1F4CE} ${artifacts.join(" | ")}`);
+      }
     }
     sectionEnd();
   }
@@ -100200,6 +100212,51 @@ function renderReport(report, options = {}) {
     for (const r of report.testResults) {
       lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
     }
+    sectionEnd();
+  }
+  if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
+    const recs = report.additionalRecommendations;
+    const count = recs.length;
+    sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
+    lines.push("<details>");
+    lines.push("<summary>Expand to see recommended tests not generated in this run</summary>");
+    lines.push("");
+    const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
+    const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
+    const grouped = /* @__PURE__ */ new Map();
+    for (const rec of sorted) {
+      const list = grouped.get(rec.testType) || [];
+      list.push(rec);
+      grouped.set(rec.testType, list);
+    }
+    for (const [testType, items] of grouped) {
+      lines.push(`#### ${testType}`);
+      lines.push("");
+      for (const rec of items) {
+        lines.push(`**\`${rec.scenarioName}\`**`);
+        lines.push("");
+        lines.push(rec.description);
+        lines.push("");
+        if (rec.steps.length > 0) {
+          for (let i = 0; i < rec.steps.length; i++) {
+            const s = rec.steps[i];
+            const prefix2 = s.method && s.path ? `\`${s.method} ${s.path}\`` : "";
+            lines.push(`${i + 1}. ${prefix2}${prefix2 ? " \u2014 " : ""}${s.description}`);
+          }
+          lines.push("");
+        }
+        const artifacts = [];
+        if (rec.openApiSpec) artifacts.push(`OpenAPI: \`${rec.openApiSpec}\``);
+        if (rec.backendTrace) artifacts.push(`Backend trace: \`${rec.backendTrace}\``);
+        if (rec.frontendTrace) artifacts.push(`Frontend trace: \`${rec.frontendTrace}\``);
+        if (artifacts.length > 0) {
+          lines.push(`*Artifacts:* ${artifacts.join(" \xB7 ")}`);
+          lines.push("");
+        }
+      }
+    }
+    lines.push("");
+    lines.push("</details>");
     sectionEnd();
   }
   if (report.issuesFound.length > 0) {
