@@ -99884,8 +99884,10 @@ ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
 AUTHENTICATION:
-When executing any tests using the Skyramp MCP execute tool, use this authentication token: ${opts.authToken}
-If the token is empty, pass an empty string for the token parameter.`;
+When executing any tests using the Skyramp MCP execute tool, pass this authentication token to the tool's authToken parameter: ${opts.authToken}
+If the token is empty, pass an empty string for the token parameter.
+CRITICAL \u2014 GENERATED TEST FILE INTEGRITY:
+When the CLI generates a test file, preserve it exactly as-is. The ONLY permitted edit is fixing chaining \u2014 replacing literal/hardcoded IDs in path params and request bodies with dynamic response IDs. Do NOT add, remove, or modify auth headers, cookies, tokens, env vars, imports, assertions, or request bodies (other than chaining IDs).`;
 }
 function buildServiceContext(services) {
   const blocks2 = services.map((svc) => {
@@ -99948,6 +99950,7 @@ async function runAgentWithRetry(agentCmd, prompt, config, opts = {}) {
 }
 
 // src/services.ts
+var NAIVE_HEALTH_CHECK = "sleep 5";
 function parseTargetDeploymentDetails(stdout) {
   const lines = stdout.split("\n");
   let lastLine = "";
@@ -99966,6 +99969,12 @@ function parseTargetDeploymentDetails(stdout) {
   } catch {
     return null;
   }
+}
+function buildDefaultHealthCheckCommand(services) {
+  const urls = services.map((svc) => svc.baseUrl).filter((url2) => !!url2);
+  if (urls.length === 0) return NAIVE_HEALTH_CHECK;
+  const unique = [...new Set(urls)];
+  return unique.map((url2) => `curl -sf ${url2}`).join(" && ");
 }
 async function startServices(config, workingDir) {
   return await withGroup("Starting services", async () => {
@@ -99987,14 +99996,15 @@ async function startServices(config, workingDir) {
         { cause: err }
       );
     }
-    info(`Running health check: ${config.targetReadyCheckCommand}`);
+    const healthCheckCommand = config.targetReadyCheckCommand || buildDefaultHealthCheckCommand(config.services);
+    info(`Running health check: ${healthCheckCommand}`);
     const startTime = Date.now();
     const timeoutMs = secondsToMilliseconds(config.targetReadyCheckTimeout);
     const pollInterval = 2;
     let attempt = 0;
     while (Date.now() - startTime < timeoutMs) {
       attempt++;
-      const { exitCode } = await exec2("bash", ["-c", config.targetReadyCheckCommand], {
+      const { exitCode } = await exec2("bash", ["-c", healthCheckCommand], {
         cwd: workingDir,
         ignoreReturnCode: true
       });
@@ -100019,6 +100029,23 @@ async function startServices(config, workingDir) {
     }
     return parseTargetDeploymentDetails(setupStdout);
   });
+}
+function exportServiceBaseUrlEnvVars(services) {
+  const withUrl = services.filter((svc) => svc.baseUrl);
+  if (withUrl.length === 0) return;
+  const sanitize = (name) => name.toUpperCase().replace(/[-.:\/]/g, "_");
+  const uniqueUrls = new Set(withUrl.map((svc) => svc.baseUrl));
+  if (uniqueUrls.size <= 1) {
+    exportVariable("SKYRAMP_TEST_BASE_URL", withUrl[0].baseUrl);
+    notice(`Target URL: ${withUrl[0].baseUrl}`);
+  } else {
+    for (const svc of withUrl) {
+      const envVar = `SKYRAMP_TEST_SERVICE_URL_${sanitize(svc.serviceName)}`;
+      exportVariable(envVar, svc.baseUrl);
+      debug2(`Exported ${envVar}=${svc.baseUrl}`);
+    }
+    notice(`Target URLs exported for ${withUrl.length} services`);
+  }
 }
 async function generateAuthToken(config, workingDir) {
   if (!config.authTokenCommand) return "";
@@ -100165,6 +100192,16 @@ function renderReport(report, options = {}) {
     sectionStart("\u{1F4A1} New Tests Created");
     for (const t of report.newTestsCreated) {
       lines.push(`- **${t.testType}** for ${t.endpoint} \u2014 \`${t.fileName}\``);
+      if (t.description) {
+        lines.push(`  ${t.description}`);
+      }
+      const artifacts = [];
+      if (t.scenarioFile) artifacts.push(`Scenario: \`${t.scenarioFile}\``);
+      if (t.traceFile) artifacts.push(`Trace: \`${t.traceFile}\``);
+      if (t.frontendTrace) artifacts.push(`UI Trace: \`${t.frontendTrace}\``);
+      if (artifacts.length > 0) {
+        lines.push(`  \u{1F4CE} ${artifacts.join(" | ")}`);
+      }
     }
     sectionEnd();
   }
@@ -100193,13 +100230,60 @@ function renderReport(report, options = {}) {
     }
     sectionEnd();
   }
-  sectionStart("\u{1F9EA} Test Results");
-  lines.push("| Test Type | Endpoint | Status | Details |");
-  lines.push("|-----------|----------|--------|---------|");
-  for (const r of report.testResults) {
-    lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
+  if (report.testResults.length > 0) {
+    sectionStart("\u{1F9EA} Test Results");
+    lines.push("| Test Type | Endpoint | Status | Details |");
+    lines.push("|-----------|----------|--------|---------|");
+    for (const r of report.testResults) {
+      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
+    }
+    sectionEnd();
   }
-  sectionEnd();
+  if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
+    const recs = report.additionalRecommendations;
+    const count = recs.length;
+    sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
+    lines.push("<details>");
+    lines.push("<summary>Expand to see recommended tests not generated in this run</summary>");
+    lines.push("");
+    const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
+    const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
+    const grouped = /* @__PURE__ */ new Map();
+    for (const rec of sorted) {
+      const list = grouped.get(rec.testType) || [];
+      list.push(rec);
+      grouped.set(rec.testType, list);
+    }
+    for (const [testType, items] of grouped) {
+      lines.push(`#### ${testType}`);
+      lines.push("");
+      for (const rec of items) {
+        lines.push(`**\`${rec.scenarioName}\`**`);
+        lines.push("");
+        lines.push(rec.description);
+        lines.push("");
+        if (rec.steps.length > 0) {
+          for (let i = 0; i < rec.steps.length; i++) {
+            const s = rec.steps[i];
+            const prefix2 = s.method && s.path ? `\`${s.method} ${s.path}\`` : "";
+            lines.push(`${i + 1}. ${prefix2}${prefix2 ? " \u2014 " : ""}${s.description}`);
+          }
+          lines.push("");
+        }
+        const artifacts = [];
+        if (rec.openApiSpec) artifacts.push(`OpenAPI: \`${rec.openApiSpec}\``);
+        if (rec.backendTrace) artifacts.push(`Backend trace: \`${rec.backendTrace}\``);
+        if (rec.frontendTrace) artifacts.push(`Frontend trace: \`${rec.frontendTrace}\``);
+        if (artifacts.length > 0) {
+          lines.push(`*Artifacts:* ${artifacts.join(" \xB7 ")}`);
+          lines.push("");
+        }
+      }
+    }
+    lines.push("");
+    lines.push("</details>");
+    sectionEnd();
+  }
   if (report.issuesFound.length > 0) {
     sectionStart("\u26A0\uFE0F Issues Found");
     for (const issue2 of report.issuesFound) {
@@ -100440,6 +100524,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     }
     throw err;
   }
+  exportServiceBaseUrlEnvVars(config.services);
   const dynamicToken = await generateAuthToken(config, workingDir);
   const authToken = dynamicToken || process.env.SKYRAMP_TEST_TOKEN || "";
   const tokenSource = dynamicToken ? "auth_token_command" : process.env.SKYRAMP_TEST_TOKEN ? "SKYRAMP_TEST_TOKEN env var" : "none";
