@@ -11,7 +11,7 @@ import { checkSelfTrigger } from './self-trigger'
 import { setGitHubToken, postInitialProgress, updateProgress, appendReportToProgress, postStandaloneComment, postValidationError } from './progress'
 import { installMcp, configureMcp } from './mcp'
 import { installAgentCli, initializeAgent, buildAgentCommand, buildPrompt, runAgentWithRetry } from './agent'
-import { startServices, generateAuthToken } from './services'
+import { startServices, exportServiceBaseUrlEnvVars, generateAuthToken } from './services'
 import { generateGitDiff, configureGitIdentity, autoCommit } from './git'
 import { readSummary, parseMetrics } from './report'
 import { exec, withRetry, withGroup, setDebugEnabled, debug } from './utils'
@@ -235,6 +235,10 @@ async function run(): Promise<void> {
     }
     throw err
   }
+
+  // ── 13b. Export base URL env vars for test execution ─────────────────
+  exportServiceBaseUrlEnvVars(config.services)
+
   // Dynamic token (from auth_token_command) takes priority, then fall back
   // to the static SKYRAMP_TEST_TOKEN env var set at the workflow level.
   const dynamicToken = await generateAuthToken(config, workingDir)

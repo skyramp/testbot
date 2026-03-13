@@ -99950,6 +99950,7 @@ async function runAgentWithRetry(agentCmd, prompt, config, opts = {}) {
 }
 
 // src/services.ts
+var NAIVE_HEALTH_CHECK = "sleep 5";
 function parseTargetDeploymentDetails(stdout) {
   const lines = stdout.split("\n");
   let lastLine = "";
@@ -99968,6 +99969,12 @@ function parseTargetDeploymentDetails(stdout) {
   } catch {
     return null;
   }
+}
+function buildDefaultHealthCheckCommand(services) {
+  const urls = services.map((svc) => svc.baseUrl).filter((url2) => !!url2);
+  if (urls.length === 0) return NAIVE_HEALTH_CHECK;
+  const unique = [...new Set(urls)];
+  return unique.map((url2) => `curl -sf ${url2}`).join(" && ");
 }
 async function startServices(config, workingDir) {
   return await withGroup("Starting services", async () => {
@@ -99989,14 +99996,15 @@ async function startServices(config, workingDir) {
         { cause: err }
       );
     }
-    info(`Running health check: ${config.targetReadyCheckCommand}`);
+    const healthCheckCommand = config.targetReadyCheckCommand || buildDefaultHealthCheckCommand(config.services);
+    info(`Running health check: ${healthCheckCommand}`);
     const startTime = Date.now();
     const timeoutMs = secondsToMilliseconds(config.targetReadyCheckTimeout);
     const pollInterval = 2;
     let attempt = 0;
     while (Date.now() - startTime < timeoutMs) {
       attempt++;
-      const { exitCode } = await exec2("bash", ["-c", config.targetReadyCheckCommand], {
+      const { exitCode } = await exec2("bash", ["-c", healthCheckCommand], {
         cwd: workingDir,
         ignoreReturnCode: true
       });
@@ -100021,6 +100029,23 @@ async function startServices(config, workingDir) {
     }
     return parseTargetDeploymentDetails(setupStdout);
   });
+}
+function exportServiceBaseUrlEnvVars(services) {
+  const withUrl = services.filter((svc) => svc.baseUrl);
+  if (withUrl.length === 0) return;
+  const sanitize = (name) => name.toUpperCase().replace(/[-.:\/]/g, "_");
+  const uniqueUrls = new Set(withUrl.map((svc) => svc.baseUrl));
+  if (uniqueUrls.size <= 1) {
+    exportVariable("SKYRAMP_TEST_BASE_URL", withUrl[0].baseUrl);
+    notice(`Target URL: ${withUrl[0].baseUrl}`);
+  } else {
+    for (const svc of withUrl) {
+      const envVar = `SKYRAMP_TEST_SERVICE_URL_${sanitize(svc.serviceName)}`;
+      exportVariable(envVar, svc.baseUrl);
+      debug2(`Exported ${envVar}=${svc.baseUrl}`);
+    }
+    notice(`Target URLs exported for ${withUrl.length} services`);
+  }
 }
 async function generateAuthToken(config, workingDir) {
   if (!config.authTokenCommand) return "";
@@ -100499,6 +100524,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     }
     throw err;
   }
+  exportServiceBaseUrlEnvVars(config.services);
   const dynamicToken = await generateAuthToken(config, workingDir);
   const authToken = dynamicToken || process.env.SKYRAMP_TEST_TOKEN || "";
   const tokenSource = dynamicToken ? "auth_token_command" : process.env.SKYRAMP_TEST_TOKEN ? "SKYRAMP_TEST_TOKEN env var" : "none";

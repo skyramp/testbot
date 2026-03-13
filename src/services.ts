@@ -1,6 +1,9 @@
 import * as core from '@actions/core'
-import type { ResolvedConfig, TargetDeploymentDetails } from './types'
-import { exec, sleep, withGroup, secondsToMilliseconds } from './utils'
+import type { ResolvedConfig, TargetDeploymentDetails, WorkspaceServiceInfo } from './types'
+import { exec, sleep, withGroup, secondsToMilliseconds, debug } from './utils'
+
+/** Fallback health check when no service base URLs are available. */
+const NAIVE_HEALTH_CHECK = 'sleep 5'
 
 /**
  * Parse structured JSON output from the last non-empty line of setup command stdout.
@@ -29,6 +32,23 @@ export function parseTargetDeploymentDetails(stdout: string): TargetDeploymentDe
 }
 
 /**
+ * Build a default health check command from service base URLs.
+ * Generates `curl -sf <url>` for each service; joins with `&&` so all must pass.
+ * Returns 'sleep 5' as fallback if no base URLs are available.
+ */
+export function buildDefaultHealthCheckCommand(services: WorkspaceServiceInfo[]): string {
+  const urls = services
+    .map(svc => svc.baseUrl)
+    .filter((url): url is string => !!url)
+
+  if (urls.length === 0) return NAIVE_HEALTH_CHECK
+
+  // Use unique URLs only (multiple services may share the same base URL)
+  const unique = [...new Set(urls)]
+  return unique.map(url => `curl -sf ${url}`).join(' && ')
+}
+
+/**
  * Start user-defined services (e.g., docker compose up).
  * Returns parsed JSON from the setup command's stdout (last line), or null.
  */
@@ -54,8 +74,11 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
       )
     }
 
+    // Resolve health check command: use explicit config, or auto-generate from service URLs
+    const healthCheckCommand = config.targetReadyCheckCommand || buildDefaultHealthCheckCommand(config.services)
+
     // Wait for services to be ready
-    core.info(`Running health check: ${config.targetReadyCheckCommand}`)
+    core.info(`Running health check: ${healthCheckCommand}`)
     const startTime = Date.now()
     const timeoutMs = secondsToMilliseconds(config.targetReadyCheckTimeout)
     const pollInterval = 2
@@ -63,7 +86,7 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
 
     while (Date.now() - startTime < timeoutMs) {
       attempt++
-      const { exitCode } = await exec('bash', ['-c', config.targetReadyCheckCommand], {
+      const { exitCode } = await exec('bash', ['-c', healthCheckCommand], {
         cwd: workingDir,
         ignoreReturnCode: true,
       })
@@ -119,6 +142,38 @@ export async function teardownServices(config: ResolvedConfig, workingDir: strin
       core.warning(`Service teardown command failed (non-fatal): ${errMsg}`)
     }
   })
+}
+
+/**
+ * Export SKYRAMP_TEST_BASE_URL / SKYRAMP_TEST_SERVICE_URL_<NAME> env vars
+ * so generated tests can resolve their endpoint URLs at runtime.
+ *
+ * Single service (or all services share the same URL):
+ *   exports SKYRAMP_TEST_BASE_URL=<url>
+ *
+ * Multiple services with distinct URLs:
+ *   exports SKYRAMP_TEST_SERVICE_URL_<NAME>=<url> for each service
+ */
+export function exportServiceBaseUrlEnvVars(services: WorkspaceServiceInfo[]): void {
+  const withUrl = services.filter(svc => svc.baseUrl)
+  if (withUrl.length === 0) return
+
+  const sanitize = (name: string) => name.toUpperCase().replace(/[-.:\/]/g, '_')
+
+  // Check if all services share the same URL
+  const uniqueUrls = new Set(withUrl.map(svc => svc.baseUrl))
+
+  if (uniqueUrls.size <= 1) {
+    core.exportVariable('SKYRAMP_TEST_BASE_URL', withUrl[0].baseUrl!)
+    core.notice(`Target URL: ${withUrl[0].baseUrl}`)
+  } else {
+    for (const svc of withUrl) {
+      const envVar = `SKYRAMP_TEST_SERVICE_URL_${sanitize(svc.serviceName)}`
+      core.exportVariable(envVar, svc.baseUrl!)
+      debug(`Exported ${envVar}=${svc.baseUrl}`)
+    }
+    core.notice(`Target URLs exported for ${withUrl.length} services`)
+  }
 }
 
 /**

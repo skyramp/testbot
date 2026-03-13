@@ -1,6 +1,7 @@
 import './mocks/core'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { startServices, teardownServices, parseTargetDeploymentDetails } from '../services'
+import * as core from '@actions/core'
+import { startServices, teardownServices, parseTargetDeploymentDetails, exportServiceBaseUrlEnvVars, buildDefaultHealthCheckCommand } from '../services'
 import { exec } from '../utils'
 import type { ResolvedConfig, TargetDeploymentDetails } from '../types'
 
@@ -9,6 +10,7 @@ vi.mock('../utils', () => ({
   sleep: vi.fn(),
   withGroup: vi.fn(async (_name: string, fn: () => Promise<void>) => fn()),
   secondsToMilliseconds: (s: number) => s * 1000,
+  debug: vi.fn(),
 }))
 
 const baseConfig: ResolvedConfig = {
@@ -238,5 +240,108 @@ describe('setup output baseUrl overrides', () => {
 
     expect(services[0].baseUrl).toBe('http://52.11.18.47:8000')
     expect(services[1].baseUrl).toBe('http://52.11.18.47:5173')
+  })
+})
+
+describe('exportServiceBaseUrlEnvVars', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('is a no-op when no services have baseUrl', () => {
+    exportServiceBaseUrlEnvVars([{ serviceName: 'api' }])
+
+    expect(core.exportVariable).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op for empty services array', () => {
+    exportServiceBaseUrlEnvVars([])
+
+    expect(core.exportVariable).not.toHaveBeenCalled()
+  })
+
+  it('exports SKYRAMP_TEST_BASE_URL for single service', () => {
+    exportServiceBaseUrlEnvVars([
+      { serviceName: 'api', baseUrl: 'http://52.11.18.47:8000' },
+    ])
+
+    expect(core.exportVariable).toHaveBeenCalledWith('SKYRAMP_TEST_BASE_URL', 'http://52.11.18.47:8000')
+  })
+
+  it('exports SKYRAMP_TEST_BASE_URL when all services share the same URL', () => {
+    exportServiceBaseUrlEnvVars([
+      { serviceName: 'api', baseUrl: 'http://52.11.18.47:8000' },
+      { serviceName: 'worker', baseUrl: 'http://52.11.18.47:8000' },
+    ])
+
+    expect(core.exportVariable).toHaveBeenCalledTimes(1)
+    expect(core.exportVariable).toHaveBeenCalledWith('SKYRAMP_TEST_BASE_URL', 'http://52.11.18.47:8000')
+  })
+
+  it('exports per-service env vars when services have distinct URLs', () => {
+    exportServiceBaseUrlEnvVars([
+      { serviceName: 'backend', baseUrl: 'http://52.11.18.47:8000' },
+      { serviceName: 'frontend', baseUrl: 'http://52.11.18.47:5173' },
+    ])
+
+    expect(core.exportVariable).toHaveBeenCalledWith('SKYRAMP_TEST_SERVICE_URL_BACKEND', 'http://52.11.18.47:8000')
+    expect(core.exportVariable).toHaveBeenCalledWith('SKYRAMP_TEST_SERVICE_URL_FRONTEND', 'http://52.11.18.47:5173')
+  })
+
+  it('sanitizes service names in env var keys', () => {
+    exportServiceBaseUrlEnvVars([
+      { serviceName: 'my-api.v2', baseUrl: 'http://host1:8000' },
+      { serviceName: 'my-worker', baseUrl: 'http://host2:9000' },
+    ])
+
+    expect(core.exportVariable).toHaveBeenCalledWith('SKYRAMP_TEST_SERVICE_URL_MY_API_V2', 'http://host1:8000')
+    expect(core.exportVariable).toHaveBeenCalledWith('SKYRAMP_TEST_SERVICE_URL_MY_WORKER', 'http://host2:9000')
+  })
+
+  it('skips services without baseUrl in multi-service setup', () => {
+    exportServiceBaseUrlEnvVars([
+      { serviceName: 'backend', baseUrl: 'http://52.11.18.47:8000' },
+      { serviceName: 'frontend' },
+    ])
+
+    expect(core.exportVariable).toHaveBeenCalledTimes(1)
+    expect(core.exportVariable).toHaveBeenCalledWith('SKYRAMP_TEST_BASE_URL', 'http://52.11.18.47:8000')
+  })
+})
+
+describe('buildDefaultHealthCheckCommand', () => {
+  it('returns sleep 5 when no services have baseUrl', () => {
+    expect(buildDefaultHealthCheckCommand([{ serviceName: 'api' }])).toBe('sleep 5')
+  })
+
+  it('returns sleep 5 for empty services array', () => {
+    expect(buildDefaultHealthCheckCommand([])).toBe('sleep 5')
+  })
+
+  it('returns curl for single service', () => {
+    expect(buildDefaultHealthCheckCommand([
+      { serviceName: 'api', baseUrl: 'http://localhost:8000' },
+    ])).toBe('curl -sf http://localhost:8000')
+  })
+
+  it('returns curl && curl for multiple services with distinct URLs', () => {
+    expect(buildDefaultHealthCheckCommand([
+      { serviceName: 'backend', baseUrl: 'http://localhost:8000' },
+      { serviceName: 'frontend', baseUrl: 'http://localhost:5173' },
+    ])).toBe('curl -sf http://localhost:8000 && curl -sf http://localhost:5173')
+  })
+
+  it('deduplicates when services share the same URL', () => {
+    expect(buildDefaultHealthCheckCommand([
+      { serviceName: 'api', baseUrl: 'http://localhost:8000' },
+      { serviceName: 'worker', baseUrl: 'http://localhost:8000' },
+    ])).toBe('curl -sf http://localhost:8000')
+  })
+
+  it('skips services without baseUrl', () => {
+    expect(buildDefaultHealthCheckCommand([
+      { serviceName: 'backend', baseUrl: 'http://localhost:8000' },
+      { serviceName: 'frontend' },
+    ])).toBe('curl -sf http://localhost:8000')
   })
 })

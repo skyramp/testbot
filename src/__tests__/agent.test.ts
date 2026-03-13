@@ -43,7 +43,7 @@ describe('buildPrompt', () => {
     })
 
     expect(prompt).toContain('AUTHENTICATION:')
-    expect(prompt).toContain('use this authentication token: tok-xyz')
+    expect(prompt).toContain('pass this authentication token to the tool\'s authToken parameter: tok-xyz')
   })
 
   it('handles empty auth token and empty description', () => {
