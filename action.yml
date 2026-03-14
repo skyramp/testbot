@@ -124,7 +124,7 @@ inputs:
   report_collapsed:
     description: 'Wrap report sections in collapsible <details> blocks with a summary line'
     required: false
-    default: 'false'
+    default: 'true'
   enable_debug:
     description: 'Enable debug logging'
     required: false
