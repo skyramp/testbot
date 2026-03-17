@@ -31,6 +31,13 @@ async function run(): Promise<void> {
   const githubToken = core.getInput('github_token')
   setGitHubToken(githubToken)
 
+  // Ensure GITHUB_TOKEN is in process.env so it propagates to the MCP
+  // subprocess (needed by gh CLI for PR comment parsing). node24 actions
+  // don't inherit GITHUB_TOKEN as an env var automatically.
+  if (githubToken && !process.env.GITHUB_TOKEN) {
+    process.env.GITHUB_TOKEN = githubToken
+  }
+
   let agent: ReturnType<typeof createAgent>
   try {
     const agentType = detectAgentType(inputs)
@@ -262,6 +269,7 @@ async function run(): Promise<void> {
       prTitle: github.context.payload.pull_request?.title ?? '',
       prBody: github.context.payload.pull_request?.body ?? '',
       baseBranch: github.context.payload.pull_request?.base?.ref ?? '',
+      prNumber,
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,

@@ -99731,9 +99731,11 @@ async function loadConfig(inputs) {
   return config;
 }
 
-// src/self-trigger.ts
+// src/constants.ts
 var BOT_NAME = "Skyramp Testbot";
 var BOT_EMAIL = "test-bot@skyramp.dev";
+
+// src/self-trigger.ts
 async function checkSelfTrigger() {
   startGroup("Checking for self-triggered execution");
   let commitAuthor = "";
@@ -99935,6 +99937,10 @@ async function configureMcp(agent, mcpCommand, mcpArgs, licensePath, testExecuti
       CI: "true",
       SKYRAMP_FEATURE_TESTBOT: "1"
     };
+    const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    if (ghToken) {
+      env.GITHUB_TOKEN = ghToken;
+    }
     await agent.configureMcp(mcpCommand, argsArray, env, testExecutionTimeout);
     debug2("MCP configuration written");
     notice(`MCP server configured for ${agent.label}`);
@@ -99975,8 +99981,9 @@ function buildAgentCommand(agent, enableDebug) {
 function buildPrompt(opts) {
   const serviceContext = opts.services?.length ? buildServiceContext(opts.services) : "";
   const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
+  const prNumberParam = opts.prNumber ? `&prNumber=${opts.prNumber}` : "";
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}
+${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${prNumberParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
@@ -100302,47 +100309,10 @@ function renderReport(report, options = {}) {
     }
     sectionEnd();
   }
-  if (report.testMaintenance.length > 0) {
-    sectionStart("\u2705 Test Maintenance");
-    const escapeCell = (s) => s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
-    const hasBeforeAfter = report.testMaintenance.some(
-      (m) => typeof m === "object" && m !== null && "beforeStatus" in m
-    );
-    if (hasBeforeAfter) {
-      lines.push("| File | Change | Before | After |");
-      lines.push("|------|--------|--------|-------|");
-      for (const m of report.testMaintenance) {
-        if (typeof m === "object" && m !== null && "beforeStatus" in m) {
-          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`;
-          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`;
-          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
-        } else {
-          lines.push(`| \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
-        }
-      }
-    } else {
-      for (const m of report.testMaintenance) {
-        lines.push(`- ${m.description}`);
-      }
-    }
-    sectionEnd();
-  }
-  if (report.testResults.length > 0) {
-    sectionStart("\u{1F9EA} Test Results");
-    lines.push("| Test Type | Endpoint | Status | Details |");
-    lines.push("|-----------|----------|--------|---------|");
-    for (const r of report.testResults) {
-      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
-    }
-    sectionEnd();
-  }
   if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
     const recs = report.additionalRecommendations;
     const count = recs.length;
     sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
-    lines.push("<details>");
-    lines.push("<summary>Expand to see recommended tests not generated in this run</summary>");
-    lines.push("");
     const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
     const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
     const grouped = /* @__PURE__ */ new Map();
@@ -100377,8 +100347,40 @@ function renderReport(report, options = {}) {
         }
       }
     }
-    lines.push("");
-    lines.push("</details>");
+    sectionEnd();
+  }
+  if (report.testMaintenance.length > 0) {
+    sectionStart("\u2705 Test Maintenance");
+    const escapeCell = (s) => s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
+    const hasBeforeAfter = report.testMaintenance.some(
+      (m) => typeof m === "object" && m !== null && "beforeStatus" in m
+    );
+    if (hasBeforeAfter) {
+      lines.push("| File | Change | Before | After |");
+      lines.push("|------|--------|--------|-------|");
+      for (const m of report.testMaintenance) {
+        if (typeof m === "object" && m !== null && "beforeStatus" in m) {
+          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`;
+          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`;
+          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
+        } else {
+          lines.push(`| \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
+        }
+      }
+    } else {
+      for (const m of report.testMaintenance) {
+        lines.push(`- ${m.description}`);
+      }
+    }
+    sectionEnd();
+  }
+  if (report.testResults.length > 0) {
+    sectionStart("\u{1F9EA} Test Results");
+    lines.push("| Test Type | Endpoint | Status | Details |");
+    lines.push("|-----------|----------|--------|---------|");
+    for (const r of report.testResults) {
+      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
+    }
     sectionEnd();
   }
   if (report.issuesFound.length > 0) {
@@ -100444,6 +100446,9 @@ async function run() {
   const prNumber = context2.payload.pull_request?.number;
   const githubToken = getInput("github_token");
   setGitHubToken(githubToken);
+  if (githubToken && !process.env.GITHUB_TOKEN) {
+    process.env.GITHUB_TOKEN = githubToken;
+  }
   let agent;
   try {
     const agentType = detectAgentType(inputs);
@@ -100636,6 +100641,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
       prTitle: context2.payload.pull_request?.title ?? "",
       prBody: context2.payload.pull_request?.body ?? "",
       baseBranch: context2.payload.pull_request?.base?.ref ?? "",
+      prNumber,
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,

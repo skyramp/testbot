@@ -1,8 +1,10 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import * as fs from 'fs'
+import * as path from 'path'
 import { exec, debug } from './utils'
 import type { ResolvedConfig } from './types'
+import { BOT_EMAIL } from './constants'
 
 /**
  * Generate a git diff between the PR base and HEAD, written to the given path.
@@ -27,6 +29,72 @@ export async function generateGitDiff(diffPath: string, workingDir: string): Pro
   debug(`Git diff path: ${diffPath}`)
 
   core.endGroup()
+}
+
+
+/**
+ * Remove test files committed by previous TestBot runs on this PR branch.
+ * Identifies bot commits between the PR base and HEAD, collects the files
+ * they introduced, and deletes them from the working tree so the next agent
+ * run starts with a clean slate. The deletions are picked up by autoCommit()
+ * when it stages the test directories.
+ */
+export async function cleanBotFiles(workingDir: string): Promise<string[]> {
+  core.startGroup('Cleaning previous TestBot files')
+
+  const baseSha = github.context.payload.pull_request?.base?.sha as string | undefined
+  if (!baseSha) {
+    core.info('Not a pull request context — skipping bot file cleanup')
+    core.endGroup()
+    return []
+  }
+
+  // Find all commits by the bot between PR base and HEAD
+  const { stdout: logOutput } = await exec(
+    'git', ['log', `--author=${BOT_EMAIL}`, '--format=%H', `${baseSha}..HEAD`],
+    { cwd: workingDir, silent: true }
+  )
+
+  const botShas = logOutput.trim().split('\n').filter(Boolean)
+  if (botShas.length === 0) {
+    core.info('No previous TestBot commits found on this branch')
+    core.endGroup()
+    return []
+  }
+
+  debug(`Found ${botShas.length} TestBot commit(s): ${botShas.join(', ')}`)
+
+  // Collect files from each bot commit
+  const filesToRemove = new Set<string>()
+  for (const sha of botShas) {
+    const { stdout: filesOutput } = await exec(
+      'git', ['diff-tree', '--no-commit-id', '--name-only', '--diff-filter=A', '-r', sha],
+      { cwd: workingDir, silent: true }
+    )
+    for (const file of filesOutput.trim().split('\n').filter(Boolean)) {
+      filesToRemove.add(file)
+    }
+  }
+
+  // Delete files that still exist on disk
+  const removed: string[] = []
+  for (const file of filesToRemove) {
+    const absPath = path.join(workingDir, file)
+    if (fs.existsSync(absPath)) {
+      fs.unlinkSync(absPath)
+      removed.push(file)
+      debug(`Removed: ${file}`)
+    }
+  }
+
+  if (removed.length > 0) {
+    core.notice(`Removed ${removed.length} file(s) from previous TestBot runs`)
+  } else {
+    core.info('No bot-generated files found on disk to remove')
+  }
+
+  core.endGroup()
+  return removed
 }
 
 /**

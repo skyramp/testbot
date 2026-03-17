@@ -115,6 +115,13 @@ export async function configureMcp(
       SKYRAMP_FEATURE_TESTBOT: '1',
     }
 
+    // Propagate GitHub token so the MCP server's gh CLI calls (PR comment
+    // parsing) can authenticate against the GitHub API.
+    const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+    if (ghToken) {
+      env.GITHUB_TOKEN = ghToken
+    }
+
     await agent.configureMcp(mcpCommand, argsArray, env, testExecutionTimeout)
 
     debug('MCP configuration written')

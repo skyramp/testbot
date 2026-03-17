@@ -95,52 +95,11 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     sectionEnd()
   }
 
-  // Test Maintenance (omit if empty)
-  if (report.testMaintenance.length > 0) {
-    sectionStart('✅ Test Maintenance')
-    const escapeCell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, '<br>')
-    const hasBeforeAfter = report.testMaintenance.some(
-      m => typeof m === 'object' && m !== null && 'beforeStatus' in m,
-    )
-    if (hasBeforeAfter) {
-      lines.push('| File | Change | Before | After |')
-      lines.push('|------|--------|--------|-------|')
-      for (const m of report.testMaintenance) {
-        if (typeof m === 'object' && m !== null && 'beforeStatus' in m) {
-          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`
-          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`
-          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`)
-        } else {
-          lines.push(`| — | ${escapeCell(m.description)} | — | — |`)
-        }
-      }
-    } else {
-      for (const m of report.testMaintenance) {
-        lines.push(`- ${m.description}`)
-      }
-    }
-    sectionEnd()
-  }
-
-  // Test Results (omit if empty)
-  if (report.testResults.length > 0) {
-    sectionStart('🧪 Test Results')
-    lines.push('| Test Type | Endpoint | Status | Details |')
-    lines.push('|-----------|----------|--------|---------|')
-    for (const r of report.testResults) {
-      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`)
-    }
-    sectionEnd()
-  }
-
-  // Additional Recommendations (omit if empty) — collapsible details, consistent heading
+  // Additional Recommendations (omit if empty)
   if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
     const recs = report.additionalRecommendations
     const count = recs.length
     sectionStart(`📌 Additional Recommendations (${count})`)
-    lines.push('<details>')
-    lines.push('<summary>Expand to see recommended tests not generated in this run</summary>')
-    lines.push('')
 
     const priorityOrder = (p: string) => p === 'high' ? 0 : p === 'medium' ? 1 : 2
     const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority))
@@ -179,10 +138,47 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
       }
     }
 
-    lines.push('')
-    lines.push('</details>')
     sectionEnd()
   }
+
+  // Test Maintenance (omit if empty)
+  if (report.testMaintenance.length > 0) {
+    sectionStart('✅ Test Maintenance')
+    const escapeCell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, '<br>')
+    const hasBeforeAfter = report.testMaintenance.some(
+      m => typeof m === 'object' && m !== null && 'beforeStatus' in m,
+    )
+    if (hasBeforeAfter) {
+      lines.push('| File | Change | Before | After |')
+      lines.push('|------|--------|--------|-------|')
+      for (const m of report.testMaintenance) {
+        if (typeof m === 'object' && m !== null && 'beforeStatus' in m) {
+          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`
+          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`
+          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`)
+        } else {
+          lines.push(`| — | ${escapeCell(m.description)} | — | — |`)
+        }
+      }
+    } else {
+      for (const m of report.testMaintenance) {
+        lines.push(`- ${m.description}`)
+      }
+    }
+    sectionEnd()
+  }
+
+  // Test Results (omit if empty)
+  if (report.testResults.length > 0) {
+    sectionStart('🧪 Test Results')
+    lines.push('| Test Type | Endpoint | Status | Details |')
+    lines.push('|-----------|----------|--------|---------|')
+    for (const r of report.testResults) {
+      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`)
+    }
+    sectionEnd()
+  }
+
 
   // Issues Found (omit if empty)
   if (report.issuesFound.length > 0) {

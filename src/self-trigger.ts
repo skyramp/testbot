@@ -1,9 +1,7 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import { exec } from './utils'
-
-const BOT_NAME = 'Skyramp Testbot'
-const BOT_EMAIL = 'test-bot@skyramp.dev'
+import { BOT_NAME, BOT_EMAIL } from './constants'
 
 export interface SelfTriggerResult {
   skip: boolean
