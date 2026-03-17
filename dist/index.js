@@ -100209,6 +100209,7 @@ async function autoCommit(config) {
     if (svc.outputDir) dirs.add(svc.outputDir);
   }
   if (dirs.size === 0) dirs.add(config.testDirectory);
+  dirs.add(".skyramp");
   for (const dir of dirs) {
     const { exitCode: addExitCode } = await exec2(
       "git",

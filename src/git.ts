@@ -123,6 +123,9 @@ export async function autoCommit(config: ResolvedConfig): Promise<string> {
   }
   if (dirs.size === 0) dirs.add(config.testDirectory)
 
+  // Always stage .skyramp/ — the agent may have created/updated workspace.yml
+  dirs.add('.skyramp')
+
   // Stage files from each directory
   for (const dir of dirs) {
     const { exitCode: addExitCode } = await exec(
