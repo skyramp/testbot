@@ -653,6 +653,21 @@ var require_errors = __commonJS({
       }
       [kSecureProxyConnectionError] = true;
     };
+    var kMessageSizeExceededError = Symbol.for("undici.error.UND_ERR_WS_MESSAGE_SIZE_EXCEEDED");
+    var MessageSizeExceededError = class extends UndiciError {
+      constructor(message) {
+        super(message);
+        this.name = "MessageSizeExceededError";
+        this.message = message || "Max decompressed message size exceeded";
+        this.code = "UND_ERR_WS_MESSAGE_SIZE_EXCEEDED";
+      }
+      static [Symbol.hasInstance](instance) {
+        return instance && instance[kMessageSizeExceededError] === true;
+      }
+      get [kMessageSizeExceededError]() {
+        return true;
+      }
+    };
     module2.exports = {
       AbortError: AbortError3,
       HTTPParserError,
@@ -676,7 +691,8 @@ var require_errors = __commonJS({
       ResponseExceededMaxSizeError,
       RequestRetryError,
       ResponseError,
-      SecureProxyConnectionError
+      SecureProxyConnectionError,
+      MessageSizeExceededError
     };
   }
 });
@@ -1686,6 +1702,9 @@ var require_request = __commonJS({
         if (upgrade && typeof upgrade !== "string") {
           throw new InvalidArgumentError("upgrade must be a string");
         }
+        if (upgrade && !isValidHeaderValue(upgrade)) {
+          throw new InvalidArgumentError("invalid upgrade header");
+        }
         if (headersTimeout != null && (!Number.isFinite(headersTimeout) || headersTimeout < 0)) {
           throw new InvalidArgumentError("invalid headersTimeout");
         }
@@ -1918,12 +1937,18 @@ var require_request = __commonJS({
       } else {
         val = `${val}`;
       }
-      if (request2.host === null && headerName === "host") {
+      if (headerName === "host") {
+        if (request2.host !== null) {
+          throw new InvalidArgumentError("duplicate host header");
+        }
         if (typeof val !== "string") {
           throw new InvalidArgumentError("invalid host header");
         }
         request2.host = val;
-      } else if (request2.contentLength === null && headerName === "content-length") {
+      } else if (headerName === "content-length") {
+        if (request2.contentLength !== null) {
+          throw new InvalidArgumentError("duplicate content-length header");
+        }
         request2.contentLength = parseInt(val, 10);
         if (!Number.isFinite(request2.contentLength)) {
           throw new InvalidArgumentError("invalid content-length header");
@@ -16695,13 +16720,17 @@ var require_util7 = __commonJS({
       return extensionList;
     }
     function isValidClientWindowBits(value) {
+      if (value.length === 0) {
+        return false;
+      }
       for (let i = 0; i < value.length; i++) {
         const byte = value.charCodeAt(i);
         if (byte < 48 || byte > 57) {
           return false;
         }
       }
-      return true;
+      const num = Number.parseInt(value, 10);
+      return num >= 8 && num <= 15;
     }
     var hasIntl = typeof process.versions.icu === "string";
     var fatalDecoder = hasIntl ? new TextDecoder("utf-8", { fatal: true }) : void 0;
@@ -17000,18 +17029,35 @@ var require_permessage_deflate = __commonJS({
     "use strict";
     var { createInflateRaw, Z_DEFAULT_WINDOWBITS } = require("node:zlib");
     var { isValidClientWindowBits } = require_util7();
+    var { MessageSizeExceededError } = require_errors();
     var tail = Buffer.from([0, 0, 255, 255]);
     var kBuffer = Symbol("kBuffer");
     var kLength = Symbol("kLength");
+    var kDefaultMaxDecompressedSize = 4 * 1024 * 1024;
     var PerMessageDeflate = class {
       /** @type {import('node:zlib').InflateRaw} */
       #inflate;
       #options = {};
-      constructor(extensions) {
+      /** @type {number} */
+      #maxDecompressedSize;
+      /** @type {boolean} */
+      #aborted = false;
+      /** @type {Function|null} */
+      #currentCallback = null;
+      /**
+       * @param {Map<string, string>} extensions
+       * @param {{ maxDecompressedMessageSize?: number }} [options]
+       */
+      constructor(extensions, options = {}) {
         this.#options.serverNoContextTakeover = extensions.has("server_no_context_takeover");
         this.#options.serverMaxWindowBits = extensions.get("server_max_window_bits");
+        this.#maxDecompressedSize = options.maxDecompressedMessageSize ?? kDefaultMaxDecompressedSize;
       }
       decompress(chunk, fin, callback) {
+        if (this.#aborted) {
+          callback(new MessageSizeExceededError());
+          return;
+        }
         if (!this.#inflate) {
           let windowBits = Z_DEFAULT_WINDOWBITS;
           if (this.#options.serverMaxWindowBits) {
@@ -17021,26 +17067,51 @@ var require_permessage_deflate = __commonJS({
             }
             windowBits = Number.parseInt(this.#options.serverMaxWindowBits);
           }
-          this.#inflate = createInflateRaw({ windowBits });
+          try {
+            this.#inflate = createInflateRaw({ windowBits });
+          } catch (err) {
+            callback(err);
+            return;
+          }
           this.#inflate[kBuffer] = [];
           this.#inflate[kLength] = 0;
           this.#inflate.on("data", (data) => {
-            this.#inflate[kBuffer].push(data);
+            if (this.#aborted) {
+              return;
+            }
             this.#inflate[kLength] += data.length;
+            if (this.#inflate[kLength] > this.#maxDecompressedSize) {
+              this.#aborted = true;
+              this.#inflate.removeAllListeners();
+              this.#inflate.destroy();
+              this.#inflate = null;
+              if (this.#currentCallback) {
+                const cb = this.#currentCallback;
+                this.#currentCallback = null;
+                cb(new MessageSizeExceededError());
+              }
+              return;
+            }
+            this.#inflate[kBuffer].push(data);
           });
           this.#inflate.on("error", (err) => {
             this.#inflate = null;
             callback(err);
           });
         }
+        this.#currentCallback = callback;
         this.#inflate.write(chunk);
         if (fin) {
           this.#inflate.write(tail);
         }
         this.#inflate.flush(() => {
+          if (this.#aborted || !this.#inflate) {
+            return;
+          }
           const full = Buffer.concat(this.#inflate[kBuffer], this.#inflate[kLength]);
           this.#inflate[kBuffer].length = 0;
           this.#inflate[kLength] = 0;
+          this.#currentCallback = null;
           callback(null, full);
         });
       }
@@ -17080,12 +17151,20 @@ var require_receiver = __commonJS({
       #fragments = [];
       /** @type {Map<string, PerMessageDeflate>} */
       #extensions;
-      constructor(ws, extensions) {
+      /** @type {{ maxDecompressedMessageSize?: number }} */
+      #options;
+      /**
+       * @param {import('./websocket').WebSocket} ws
+       * @param {Map<string, string>|null} extensions
+       * @param {{ maxDecompressedMessageSize?: number }} [options]
+       */
+      constructor(ws, extensions, options = {}) {
         super();
         this.ws = ws;
         this.#extensions = extensions == null ? /* @__PURE__ */ new Map() : extensions;
+        this.#options = options;
         if (this.#extensions.has("permessage-deflate")) {
-          this.#extensions.set("permessage-deflate", new PerMessageDeflate(extensions));
+          this.#extensions.set("permessage-deflate", new PerMessageDeflate(extensions, options));
         }
       }
       /**
@@ -17183,12 +17262,12 @@ var require_receiver = __commonJS({
             }
             const buffer2 = this.consume(8);
             const upper = buffer2.readUInt32BE(0);
-            if (upper > 2 ** 31 - 1) {
+            const lower = buffer2.readUInt32BE(4);
+            if (upper !== 0 || lower > 2 ** 31 - 1) {
               failWebsocketConnection(this.ws, "Received payload length > 2^31 bytes.");
               return;
             }
-            const lower = buffer2.readUInt32BE(4);
-            this.#info.payloadLength = (upper << 8) + lower;
+            this.#info.payloadLength = lower;
             this.#state = parserStates.READ_DATA;
           } else if (this.#state === parserStates.READ_DATA) {
             if (this.#byteOffset < this.#info.payloadLength) {
@@ -17210,7 +17289,7 @@ var require_receiver = __commonJS({
               } else {
                 this.#extensions.get("permessage-deflate").decompress(body2, this.#info.fin, (error2, data) => {
                   if (error2) {
-                    closeWebSocketConnection(this.ws, 1007, error2.message, error2.message.length);
+                    failWebsocketConnection(this.ws, error2.message);
                     return;
                   }
                   this.#fragments.push(data);
@@ -17479,6 +17558,8 @@ var require_websocket = __commonJS({
       #extensions = "";
       /** @type {SendQueue} */
       #sendQueue;
+      /** @type {{ maxDecompressedMessageSize?: number }} */
+      #options;
       /**
        * @param {string} url
        * @param {string|string[]} protocols
@@ -17522,6 +17603,9 @@ var require_websocket = __commonJS({
           throw new DOMException("Invalid Sec-WebSocket-Protocol value", "SyntaxError");
         }
         this[kWebSocketURL] = new URL(urlRecord.href);
+        this.#options = {
+          maxDecompressedMessageSize: options.maxDecompressedMessageSize
+        };
         const client2 = environmentSettingsObject.settingsObject;
         this[kController] = establishWebSocketConnection(
           urlRecord,
@@ -17705,7 +17789,7 @@ var require_websocket = __commonJS({
        */
       #onConnectionEstablished(response, parsedExtensions) {
         this[kResponse] = response;
-        const parser = new ByteParser(this, parsedExtensions);
+        const parser = new ByteParser(this, parsedExtensions, this.#options);
         parser.on("drain", onParserDrain);
         parser.on("error", onParserError.bind(this));
         response.socket.ws = this;
@@ -17780,6 +17864,19 @@ var require_websocket = __commonJS({
       {
         key: "headers",
         converter: webidl.nullableConverter(webidl.converters.HeadersInit)
+      },
+      {
+        key: "maxDecompressedMessageSize",
+        converter: webidl.nullableConverter((V) => {
+          V = webidl.converters["unsigned long long"](V);
+          if (V <= 0) {
+            throw webidl.errors.exception({
+              header: "WebSocket constructor",
+              message: "maxDecompressedMessageSize must be greater than 0"
+            });
+          }
+          return V;
+        })
       }
     ]);
     webidl.converters["DOMString or sequence<DOMString> or WebSocketInit"] = function(V) {
@@ -99559,10 +99656,10 @@ async function loadConfig(inputs) {
     try {
       const wsConfig = await manager.read();
       if (wsConfig.metadata) {
-        if (wsConfig.metadata.executorVersion) {
+        if (!executorVersion && wsConfig.metadata.executorVersion) {
           executorVersion = wsConfig.metadata.executorVersion;
         }
-        if (wsConfig.metadata.mcpVersion) {
+        if (!mcpVersion && wsConfig.metadata.mcpVersion) {
           mcpVersion = wsConfig.metadata.mcpVersion;
         }
       }
@@ -99577,7 +99674,7 @@ async function loadConfig(inputs) {
       }
       const first = (wsConfig.services ?? [])[0];
       if (first) {
-        if (first.outputDir) {
+        if (!testDirectory && first.outputDir) {
           testDirectory = first.outputDir;
         }
         if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
@@ -99594,6 +99691,9 @@ async function loadConfig(inputs) {
   } else {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
+  if (!testDirectory) testDirectory = "tests";
+  if (!executorVersion) executorVersion = "v1.3.12";
+  if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,
     targetSetupCommand,
@@ -99634,9 +99734,11 @@ async function loadConfig(inputs) {
   return config;
 }
 
-// src/self-trigger.ts
+// src/constants.ts
 var BOT_NAME = "Skyramp Testbot";
 var BOT_EMAIL = "test-bot@skyramp.dev";
+
+// src/self-trigger.ts
 async function checkSelfTrigger() {
   startGroup("Checking for self-triggered execution");
   let commitAuthor = "";
@@ -99838,6 +99940,10 @@ async function configureMcp(agent, mcpCommand, mcpArgs, licensePath, testExecuti
       CI: "true",
       SKYRAMP_FEATURE_TESTBOT: "1"
     };
+    const ghToken = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    if (ghToken) {
+      env.GITHUB_TOKEN = ghToken;
+    }
     await agent.configureMcp(mcpCommand, argsArray, env, testExecutionTimeout);
     debug2("MCP configuration written");
     notice(`MCP server configured for ${agent.label}`);
@@ -99878,8 +99984,9 @@ function buildAgentCommand(agent, enableDebug) {
 function buildPrompt(opts) {
   const serviceContext = opts.services?.length ? buildServiceContext(opts.services) : "";
   const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
+  const prNumberParam = opts.prNumber ? `&prNumber=${opts.prNumber}` : "";
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}
+${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${prNumberParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
@@ -100102,6 +100209,7 @@ async function autoCommit(config) {
     if (svc.outputDir) dirs.add(svc.outputDir);
   }
   if (dirs.size === 0) dirs.add(config.testDirectory);
+  dirs.add(".skyramp");
   for (const dir of dirs) {
     const { exitCode: addExitCode } = await exec2(
       "git",
@@ -100205,47 +100313,10 @@ function renderReport(report, options = {}) {
     }
     sectionEnd();
   }
-  if (report.testMaintenance.length > 0) {
-    sectionStart("\u2705 Test Maintenance");
-    const escapeCell = (s) => s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
-    const hasBeforeAfter = report.testMaintenance.some(
-      (m) => typeof m === "object" && m !== null && "beforeStatus" in m
-    );
-    if (hasBeforeAfter) {
-      lines.push("| File | Change | Before | After |");
-      lines.push("|------|--------|--------|-------|");
-      for (const m of report.testMaintenance) {
-        if (typeof m === "object" && m !== null && "beforeStatus" in m) {
-          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`;
-          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`;
-          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
-        } else {
-          lines.push(`| \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
-        }
-      }
-    } else {
-      for (const m of report.testMaintenance) {
-        lines.push(`- ${m.description}`);
-      }
-    }
-    sectionEnd();
-  }
-  if (report.testResults.length > 0) {
-    sectionStart("\u{1F9EA} Test Results");
-    lines.push("| Test Type | Endpoint | Status | Details |");
-    lines.push("|-----------|----------|--------|---------|");
-    for (const r of report.testResults) {
-      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
-    }
-    sectionEnd();
-  }
   if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
     const recs = report.additionalRecommendations;
     const count = recs.length;
     sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
-    lines.push("<details>");
-    lines.push("<summary>Expand to see recommended tests not generated in this run</summary>");
-    lines.push("");
     const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
     const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
     const grouped = /* @__PURE__ */ new Map();
@@ -100280,8 +100351,40 @@ function renderReport(report, options = {}) {
         }
       }
     }
-    lines.push("");
-    lines.push("</details>");
+    sectionEnd();
+  }
+  if (report.testMaintenance.length > 0) {
+    sectionStart("\u2705 Test Maintenance");
+    const escapeCell = (s) => s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
+    const hasBeforeAfter = report.testMaintenance.some(
+      (m) => typeof m === "object" && m !== null && "beforeStatus" in m
+    );
+    if (hasBeforeAfter) {
+      lines.push("| File | Change | Before | After |");
+      lines.push("|------|--------|--------|-------|");
+      for (const m of report.testMaintenance) {
+        if (typeof m === "object" && m !== null && "beforeStatus" in m) {
+          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`;
+          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`;
+          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
+        } else {
+          lines.push(`| \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
+        }
+      }
+    } else {
+      for (const m of report.testMaintenance) {
+        lines.push(`- ${m.description}`);
+      }
+    }
+    sectionEnd();
+  }
+  if (report.testResults.length > 0) {
+    sectionStart("\u{1F9EA} Test Results");
+    lines.push("| Test Type | Endpoint | Status | Details |");
+    lines.push("|-----------|----------|--------|---------|");
+    for (const r of report.testResults) {
+      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
+    }
     sectionEnd();
   }
   if (report.issuesFound.length > 0) {
@@ -100347,6 +100450,9 @@ async function run() {
   const prNumber = context2.payload.pull_request?.number;
   const githubToken = getInput("github_token");
   setGitHubToken(githubToken);
+  if (githubToken && !process.env.GITHUB_TOKEN) {
+    process.env.GITHUB_TOKEN = githubToken;
+  }
   let agent;
   try {
     const agentType = detectAgentType(inputs);
@@ -100539,6 +100645,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
       prTitle: context2.payload.pull_request?.title ?? "",
       prBody: context2.payload.pull_request?.body ?? "",
       baseBranch: context2.payload.pull_request?.base?.ref ?? "",
+      prNumber,
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,
