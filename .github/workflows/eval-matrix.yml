@@ -1,0 +1,147 @@
+name: Eval Matrix
+
+on:
+  workflow_call:
+    inputs:
+      repo:
+        description: "Repo number to evaluate (blank = all)"
+        type: string
+        required: false
+        default: ""
+      pr:
+        description: "PR name to evaluate (blank = all for selected repo)"
+        type: string
+        required: false
+        default: ""
+      rescore_only:
+        description: "Re-score stored reports without re-running testbot"
+        type: boolean
+        required: false
+        default: false
+      event_name:
+        description: "Triggering event name"
+        type: string
+        required: true
+      issue_number:
+        description: "PR number (for pull_request triggers)"
+        type: string
+        required: false
+        default: ""
+      testbot_ref:
+        description: "Testbot branch ref to use (overrides local branch resolution)"
+        type: string
+        required: false
+        default: ""
+
+jobs:
+  eval:
+    name: "Eval ${{ matrix.repo_num }} - ${{ matrix.repo_name }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repo_num: "11"
+            repo_name: parse-server-example
+          - repo_num: "12"
+            repo_name: flagsmith-testb
+          - repo_num: "13"
+            repo_name: prefect-testb
+          - repo_num: "14"
+            repo_name: directus
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.event_name == 'pull_request' && format('refs/pull/{0}/head', inputs.issue_number) || '' }}
+
+      - name: Checkout eval-framework
+        uses: actions/checkout@v4
+        with:
+          repository: letsramp/eval-framework
+          ref: roshinimichael/testbot-eval-setup  # TODO: remove once merged to main
+          path: eval-framework
+          token: ${{ secrets.GH_ORG_PRIVATE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify tools
+        run: |
+          echo "--- node ---"; node --version
+          echo "--- jq ---";   jq --version
+          echo "--- bc ---";   bc --version | head -1
+          echo "--- gh ---";   gh --version | head -1
+
+      - name: Resolve testbot ref
+        id: testbot-ref
+        run: |
+          # Use pre-built eval-dist ref if provided by the build job.
+          # Otherwise fall back to branch resolution (for standalone invocations).
+          REF="${{ inputs.testbot_ref }}"
+          if [[ -z "$REF" ]]; then
+            REF="${{ github.head_ref }}"
+            if [[ -z "$REF" && -n "${{ inputs.issue_number }}" ]]; then
+              REF=$(gh pr view "${{ inputs.issue_number }}" \
+                --repo "${{ github.repository }}" \
+                --json headRefName --jq '.headRefName' 2>/dev/null || true)
+            fi
+            REF="${REF:-${{ github.ref_name }}}"
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "Testbot ref: $REF"
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+
+      - name: Verify PR is not from a fork
+        if: inputs.event_name == 'pull_request' && inputs.issue_number != ''
+        run: |
+          head_repo=$(gh pr view "${{ inputs.issue_number }}" \
+            --repo "${{ github.repository }}" \
+            --json headRepository --jq '.headRepository.nameWithOwner')
+          if [[ "$head_repo" != "${{ github.repository }}" ]]; then
+            echo "ERROR: PR is from a fork ($head_repo). Eval with secrets is not permitted for forks."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+
+      - name: Run eval
+        env:
+          GH_PAT: ${{ secrets.PAT_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          TESTBOT_REPO: ${{ github.repository }}
+          TESTBOT_REF: ${{ steps.testbot-ref.outputs.ref }}
+          EVAL_WORK_ROOT: /tmp/eval-run
+          EVAL_FRAMEWORK_DIR: ${{ github.workspace }}/eval-framework
+          TESTBOT_WORKFLOW: skyramp-testbot.yml
+          TESTBOT_TIMEOUT: "1800"
+        run: |
+          chmod +x eval/scripts/*.sh
+          chmod +x eval/scripts/lib/*.sh 2>/dev/null || true
+
+          # Skip this job if the user filtered to a different repo number
+          FILTER_INPUT="${{ inputs.repo }}"
+          THIS_REPO="${{ matrix.repo_num }}"
+          if [[ -n "$FILTER_INPUT" && "${FILTER_INPUT#0}" != "${THIS_REPO#0}" ]]; then
+            echo "Skipping ${{ matrix.repo_name }} (filtered to repo $FILTER_INPUT)"
+            exit 0
+          fi
+
+          ARGS="--repo ${{ matrix.repo_num }}"
+          if [[ -n "${{ inputs.pr }}" ]]; then ARGS="$ARGS --pr ${{ inputs.pr }}"; fi
+          if [[ "${{ inputs.rescore_only }}" == "true" ]]; then ARGS="$ARGS --rescore-only"; fi
+
+          eval/scripts/run-eval.sh $ARGS
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ matrix.repo_num }}-${{ matrix.repo_name }}
+          path: eval/results/
+          retention-days: 1
+          if-no-files-found: ignore

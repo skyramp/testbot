@@ -1,0 +1,184 @@
+name: Business Case Eval
+
+on:
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Repo number to evaluate (blank = all)"
+        required: false
+        type: string
+      pr:
+        description: "PR name to evaluate (blank = all for selected repo)"
+        required: false
+        type: string
+      rescore_only:
+        description: "Re-score stored reports without re-running testbot"
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 7 * * 1"  # Weekly on Monday at 7am UTC
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  build:
+    name: Build dist for eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'schedule' ||
+      (
+        github.event_name == 'pull_request' &&
+        github.event.label.name == 'run-business-case-eval'
+      )
+    outputs:
+      eval_ref: ${{ steps.push.outputs.eval_ref }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || '' }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Cache node_modules
+        id: cache-deps
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ hashFiles('package-lock.json') }}
+
+      - if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - run: npm run build
+
+      - name: Push dist to eval-dist branch
+        id: push
+        run: |
+          EVAL_REF="eval-dist/${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$EVAL_REF"
+          git add -f dist/
+          git diff --cached --quiet \
+            && git commit --allow-empty -m "chore: eval dist [run ${{ github.run_id }}]" \
+            || git commit -m "chore: eval dist [run ${{ github.run_id }}]"
+          git push origin "$EVAL_REF"
+          echo "eval_ref=$EVAL_REF" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+
+  run-matrix:
+    name: Run Matrix
+    needs: build
+    uses: ./.github/workflows/eval-matrix.yml
+    with:
+      repo: ${{ inputs.repo || '' }}
+      pr: ${{ inputs.pr || '' }}
+      rescore_only: ${{ inputs.rescore_only || false }}
+      event_name: ${{ github.event_name }}
+      issue_number: ${{ github.event.pull_request.number || '' }}
+      testbot_ref: ${{ needs.build.outputs.eval_ref }}
+    secrets: inherit
+
+  aggregate:
+    name: Aggregate Results
+    needs: [build, run-matrix]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: always() && needs.build.result != 'skipped'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || '' }}
+
+      - name: Download all eval results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: eval-results-*
+          path: eval/results
+          merge-multiple: true
+
+      - name: Run aggregation
+        run: |
+          chmod +x eval/scripts/aggregate.sh
+          eval/scripts/aggregate.sh
+
+      - name: Write job summary
+        if: always()
+        run: |
+          if [[ -f eval/results/summary.md ]]; then
+            echo "## Business Case Eval Results" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            cat eval/results/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No summary generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload consolidated results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-consolidated-${{ github.run_number }}
+          path: eval/results/
+          retention-days: 1
+
+      - name: Post results to PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '## Business Case Eval Results\n\n';
+            const summaryPath = 'eval/results/summary.md';
+            if (fs.existsSync(summaryPath)) {
+              body += fs.readFileSync(summaryPath, 'utf8');
+            } else {
+              body += '_No summary generated._';
+            }
+            body += '\n\n---\n_Triggered by `run-business-case-eval` label_';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+      - name: Check pass rate
+        if: always()
+        run: |
+          if [[ ! -f eval/results/summary.md ]]; then
+            echo "No summary to check"
+            exit 0
+          fi
+          verdict=$(grep -oP 'Verdict: \K\w+' eval/results/summary.md || echo "UNKNOWN")
+          echo "Verdict: $verdict"
+          if [[ "$verdict" == "FAIL" ]]; then
+            echo "::warning::Eval verdict is FAIL — business case pass rate below 80%"
+          fi
+
+  cleanup:
+    name: Delete eval-dist branch
+    needs: [build, aggregate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always() && needs.build.outputs.eval_ref != ''
+    steps:
+      - name: Delete eval-dist branch
+        run: |
+          gh api -X DELETE \
+            "repos/${{ github.repository }}/git/refs/heads/${{ needs.build.outputs.eval_ref }}" \
+            2>/dev/null && echo "Deleted ${{ needs.build.outputs.eval_ref }}" \
+            || echo "Branch already gone or delete failed (ok)"
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
