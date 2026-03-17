@@ -19,10 +19,11 @@ Skyramp Testbot reads project-level configuration from `.skyramp/workspace.yml` 
 
 The configuration system follows this precedence order (highest to lowest):
 
-1. **`.skyramp/workspace.yml` values** — Service-level configuration (test directory, startup command, versions)
-2. **GitHub Action inputs** — Testbot-specific settings and fallback defaults
+1. **GitHub Action workflow inputs** — Explicitly set values in the workflow file
+2. **`.skyramp/workspace.yml` values** — Service-level configuration (test directory, startup command, versions)
+3. **Hardcoded defaults** — Built-in fallback values (e.g., `tests`, `v1.3.12`, `latest`)
 
-When `.skyramp/workspace.yml` exists, service-level fields (like `outputDir`, `serverStartCommand`, and metadata versions) take precedence over action inputs. Testbot-specific settings (timeouts, debug, auto-commit, retries, etc.) always come from action inputs.
+When a workflow input is explicitly provided, it always takes precedence over workspace values. When a workflow input is omitted, workspace values fill in the gap. If neither is set, hardcoded defaults are used. Testbot-specific settings (timeouts, debug, auto-commit, retries, etc.) always come from action inputs.
 
 ### File Location
 
@@ -61,14 +62,14 @@ services:
 
 | Workspace field | Testbot config field | Notes |
 |---|---|---|
-| `services[i].outputDir` | `testDirectory` | Overrides `test_directory` input |
-| `services[i].runtimeDetails.serverStartCommand` | `targetSetupCommand` | Overrides `target_setup_command` input |
-| `services[i].runtimeDetails.serverTeardownCommand` | `targetTeardownCommand` | Overrides `target_teardown_command` input |
+| `services[i].outputDir` | `testDirectory` | Fallback when `test_directory` input is empty |
+| `services[i].runtimeDetails.serverStartCommand` | `targetSetupCommand` | Fallback when `target_setup_command` input is empty |
+| `services[i].runtimeDetails.serverTeardownCommand` | `targetTeardownCommand` | Fallback when `target_teardown_command` input is empty |
 | `services[i].language` | (passed to agent prompt) | Helps LLM generate appropriate tests |
 | `services[i].framework` | (passed to agent prompt) | Helps LLM use correct test framework |
 | `services[i].api.baseUrl` | (passed to agent prompt) | Helps LLM target correct URL |
-| `metadata.executorVersion` | `skyrampExecutorVersion` | Overrides `skyramp_executor_version` input |
-| `metadata.mcpVersion` | `skyrampMcpVersion` | Overrides `skyramp_mcp_version` input |
+| `metadata.executorVersion` | `skyrampExecutorVersion` | Fallback when `skyramp_executor_version` input is empty |
+| `metadata.mcpVersion` | `skyrampMcpVersion` | Fallback when `skyramp_mcp_version` input is empty |
 
 ### Multi-Service Workspaces
 

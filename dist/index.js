@@ -99656,10 +99656,10 @@ async function loadConfig(inputs) {
     try {
       const wsConfig = await manager.read();
       if (wsConfig.metadata) {
-        if (wsConfig.metadata.executorVersion) {
+        if (!executorVersion && wsConfig.metadata.executorVersion) {
           executorVersion = wsConfig.metadata.executorVersion;
         }
-        if (wsConfig.metadata.mcpVersion) {
+        if (!mcpVersion && wsConfig.metadata.mcpVersion) {
           mcpVersion = wsConfig.metadata.mcpVersion;
         }
       }
@@ -99674,7 +99674,7 @@ async function loadConfig(inputs) {
       }
       const first = (wsConfig.services ?? [])[0];
       if (first) {
-        if (first.outputDir) {
+        if (!testDirectory && first.outputDir) {
           testDirectory = first.outputDir;
         }
         if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
@@ -99691,6 +99691,9 @@ async function loadConfig(inputs) {
   } else {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
+  if (!testDirectory) testDirectory = "tests";
+  if (!executorVersion) executorVersion = "v1.3.12";
+  if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,
     targetSetupCommand,

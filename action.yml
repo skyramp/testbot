@@ -29,9 +29,8 @@ inputs:
 
   # High priority optional inputs
   test_directory:
-    description: 'Directory containing Skyramp tests'
+    description: 'Directory containing Skyramp tests. Falls back to workspace.yml outputDir, then "tests".'
     required: false
-    default: 'tests'
   target_setup_command:
     description: 'Command to start services before test maintenance. Can optionally emit a JSON object as its last stdout line to override workspace baseUrl at runtime (e.g., {"baseUrl": "http://remote-host:8000"} for single-service, or {"services": {"backend": {"baseUrl": "..."}, "frontend": {"baseUrl": "..."}}} for multi-service). Sets SKYRAMP_TEST_BASE_URL (single) or SKYRAMP_TEST_SERVICE_URL_<NAME> (multi) env vars for test execution.'
     required: false
@@ -51,13 +50,11 @@ inputs:
 
   # Medium priority optional inputs
   skyramp_executor_version:
-    description: 'Skyramp Executor Docker image version'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.12".'
     required: false
-    default: 'v1.3.12'
   skyramp_mcp_version:
-    description: 'Skyramp MCP package version'
+    description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
     required: false
-    default: 'latest'
   skyramp_mcp_source:
     description: 'Source for Skyramp MCP package: "npm" or "github"'
     required: false

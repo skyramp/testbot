@@ -7,8 +7,12 @@ import {
 import type { ActionInputs, ResolvedConfig, WorkspaceServiceInfo } from './types'
 
 /**
- * Load configuration from .skyramp/workspace.yml,
- * with action inputs as fallback defaults.
+ * Load configuration from .skyramp/workspace.yml.
+ *
+ * Precedence (highest to lowest):
+ *   1. Workflow inputs (explicitly set in the GitHub Actions workflow file)
+ *   2. Workspace config (.skyramp/workspace.yml)
+ *   3. Hardcoded defaults
  */
 export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> {
   const workingDir = path.resolve(inputs.workingDirectory)
@@ -26,12 +30,13 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
     try {
       const wsConfig: WorkspaceConfig = await manager.read()
 
-      // Extract metadata versions (workspace takes precedence over inputs)
+      // Workspace values fill in gaps left by empty workflow inputs.
+      // Workflow inputs always take precedence when non-empty.
       if (wsConfig.metadata) {
-        if (wsConfig.metadata.executorVersion) {
+        if (!executorVersion && wsConfig.metadata.executorVersion) {
           executorVersion = wsConfig.metadata.executorVersion
         }
-        if (wsConfig.metadata.mcpVersion) {
+        if (!mcpVersion && wsConfig.metadata.mcpVersion) {
           mcpVersion = wsConfig.metadata.mcpVersion
         }
       }
@@ -47,12 +52,10 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
         })
       }
 
-      // Use first service for operational defaults.
-      // Action inputs take precedence over workspace for setup/teardown commands
-      // (workspace values are for local dev; action inputs are for CI).
+      // Use first service for operational defaults when workflow inputs are empty.
       const first = (wsConfig.services ?? [])[0]
       if (first) {
-        if (first.outputDir) {
+        if (!testDirectory && first.outputDir) {
           testDirectory = first.outputDir
         }
         if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
@@ -69,6 +72,11 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
   } else {
     core.notice('No .skyramp/workspace.yml found, using action input defaults')
   }
+
+  // Apply hardcoded defaults for fields that are still empty
+  if (!testDirectory) testDirectory = 'tests'
+  if (!executorVersion) executorVersion = 'v1.3.12'
+  if (!mcpVersion) mcpVersion = 'latest'
 
   const config: ResolvedConfig = {
     testDirectory,

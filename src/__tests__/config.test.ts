@@ -19,19 +19,25 @@ vi.mock('@skyramp/skyramp/src/workspace', () => ({
 
 import { loadConfig } from '../config'
 
+/**
+ * Simulates action inputs as they come from core.getInput().
+ * Fields without a `default:` in action.yml return '' when not set by the user.
+ * test_directory, skyramp_executor_version, skyramp_mcp_version have no defaults
+ * in action.yml — they're resolved via workspace fallback + hardcoded defaults in config.ts.
+ */
 function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
   return {
     skyrampLicenseFile: 'license',
     cursorApiKey: 'key',
     copilotApiKey: '',
     anthropicApiKey: '',
-    testDirectory: 'tests',
+    testDirectory: '',
     targetSetupCommand: 'docker compose up -d',
     authTokenCommand: '',
     targetTeardownCommand: '',
     skipTargetTeardown: false,
-    skyrampExecutorVersion: 'v1.3.3',
-    skyrampMcpVersion: 'latest',
+    skyrampExecutorVersion: '',
+    skyrampMcpVersion: '',
     skyrampMcpSource: 'npm',
     skyrampMcpGithubToken: '',
     skyrampMcpGithubRef: 'main',
@@ -60,19 +66,19 @@ describe('loadConfig', () => {
     mockGetConfigPath.mockReturnValue('/mock/.skyramp/workspace.yml')
   })
 
-  it('returns input defaults when no workspace.yml exists', async () => {
+  it('uses hardcoded defaults when no workspace.yml exists and inputs are empty', async () => {
     mockExists.mockResolvedValue(false)
 
     const config = await loadConfig(makeInputs())
 
     expect(config.testDirectory).toBe('tests')
     expect(config.targetSetupCommand).toBe('docker compose up -d')
-    expect(config.skyrampExecutorVersion).toBe('v1.3.3')
+    expect(config.skyrampExecutorVersion).toBe('v1.3.12')
     expect(config.skyrampMcpVersion).toBe('latest')
     expect(config.services).toEqual([])
   })
 
-  it('extracts all services from workspace.yml', async () => {
+  it('workspace fills in when workflow inputs are empty', async () => {
     mockExists.mockResolvedValue(true)
     mockRead.mockResolvedValue({
       metadata: {
@@ -94,12 +100,12 @@ describe('loadConfig', () => {
 
     const config = await loadConfig(makeInputs())
 
-    // First service used for operational defaults
+    // Workspace fills in empty inputs
     expect(config.testDirectory).toBe('tests/python')
-    // Action input takes precedence over workspace serverStartCommand
-    expect(config.targetSetupCommand).toBe('docker compose up -d')
     expect(config.skyrampExecutorVersion).toBe('v2.0.0')
     expect(config.skyrampMcpVersion).toBe('0.1.0')
+    // Action input takes precedence over workspace serverStartCommand
+    expect(config.targetSetupCommand).toBe('docker compose up -d')
     // All services collected
     expect(config.services).toEqual([{
       serviceName: 'api',
@@ -108,6 +114,38 @@ describe('loadConfig', () => {
       baseUrl: 'http://localhost:8000',
       outputDir: 'tests/python',
     }])
+  })
+
+  it('workflow inputs take precedence over workspace values', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      metadata: {
+        schemaVersion: 'v1',
+        executorVersion: 'v2.0.0',
+        mcpVersion: '0.1.0',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      },
+      services: [{
+        serviceName: 'api',
+        outputDir: 'tests/python',
+        language: 'python',
+        framework: 'pytest',
+        api: { baseUrl: 'http://localhost:8000' },
+        runtimeDetails: { serverStartCommand: 'docker compose up -d api', runtime: 'docker' },
+      }],
+    })
+
+    const config = await loadConfig(makeInputs({
+      testDirectory: 'my-tests',
+      skyrampExecutorVersion: 'v3.0.0',
+      skyrampMcpVersion: '2.0.0',
+    }))
+
+    // Workflow inputs win over workspace
+    expect(config.testDirectory).toBe('my-tests')
+    expect(config.skyrampExecutorVersion).toBe('v3.0.0')
+    expect(config.skyrampMcpVersion).toBe('2.0.0')
   })
 
   it('collects multiple services', async () => {
@@ -125,11 +163,11 @@ describe('loadConfig', () => {
     expect(config.services[0].serviceName).toBe('frontend')
     expect(config.services[1].serviceName).toBe('backend')
     expect(config.services[1].language).toBe('python')
-    // First service used for testDirectory
+    // First service used for testDirectory (input is empty)
     expect(config.testDirectory).toBe('tests/js')
   })
 
-  it('warns and uses defaults on read error', async () => {
+  it('warns and uses hardcoded defaults on read error', async () => {
     mockExists.mockResolvedValue(true)
     mockRead.mockRejectedValue(new Error('YAML parse error'))
 
