@@ -1,46 +1,18 @@
-# Claude Code Configuration — Testbot
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-Skyramp Testbot is a reusable GitHub Action (Node.js/TypeScript) that uses an AI agent (Cursor or Copilot CLI) with the Skyramp MCP server to automatically generate, execute, and report on API tests for pull requests.
+Skyramp Testbot is a reusable GitHub Action (Node.js/TypeScript) that uses an AI agent (Cursor, Copilot, or Claude Code CLI) with the Skyramp MCP server to automatically generate, execute, and report on API tests for pull requests.
 
 ## Key Commands
 
-- `npm run build` — bundle TypeScript to `dist/index.js` + `dist/post.js` via `esbuild`
+- `npm run build` — bundle TypeScript to `dist/index.js` + `dist/post.js` via esbuild
 - `npm run typecheck` — run `tsc --noEmit` for type checking
-- Test by pushing to a branch referenced by a calling workflow (e.g., api-insight's `.github/workflows/`)
-
-## Project Structure
-
-```
-action.yml              # Declarative inputs/outputs + runs.using: node24
-package.json            # Dependencies and build scripts
-tsconfig.json           # TypeScript configuration (target ES2024)
-.github/workflows/
-  build.yml             # CI: auto-builds dist/ on push to any branch
-dist/                   # Compiled bundle — auto-built and committed by CI on every push
-src/
-  main.ts               # Entry point — orchestrates the full 18-step flow
-  types.ts              # Shared interfaces, AgentStrategy abstract class
-  inputs.ts             # getInputs() + detectAgentType()
-  agents/               # Strategy pattern — one file per agent type
-    index.ts            # createAgent() factory function
-    cursor.ts           # CursorAgent extends AgentStrategy
-    copilot.ts          # CopilotAgent extends AgentStrategy
-    claude.ts           # ClaudeAgent extends AgentStrategy
-  agent.ts              # Thin delegates: installAgentCli(), initializeAgent(), buildAgentCommand(), buildPrompt(), runAgentWithRetry()
-  config.ts             # loadConfig() — merges .skyramp.yml with action inputs
-  self-trigger.ts       # checkSelfTrigger() — PR head SHA aware
-  progress.ts           # PR progress comment CRUD via Octokit
-  mcp.ts                # installMcp() (npm/github source) + configureMcp()
-  services.ts           # startServices() + teardownServices() + generateAuthToken()
-  post.ts               # Post-step entry point — runs teardownServices() (guaranteed by GHA)
-  report.ts             # readSummary(), parseMetrics()
-  git.ts                # generateGitDiff(), configureGitIdentity(), autoCommit()
-  utils.ts              # exec(), sleep(), withRetry(), withGroup(), debug()/setDebugEnabled()
-assets/
-  progress-spinner.gif  # Animated spinner for PR progress comments
-```
+- `npm test` — run all tests with vitest (`vitest run`)
+- `npm run test:watch` — run tests in watch mode
+- End-to-end testing: push to a branch referenced by a calling workflow (e.g., api-insight's `.github/workflows/`)
 
 ## Architecture
 
@@ -114,6 +86,10 @@ No changes to `agent.ts`, `mcp.ts`, or `main.ts` are needed — they delegate to
 - **Graceful failure**: If the agent fails, the action continues to post partial results before calling `core.setFailed()`
 - **Agent timeout**: `testbot_timeout` (default 60 min) uses `Promise.race` as a safety net. Note: the child process is NOT killed on timeout (limitation of `@actions/exec`); it's cleaned up when the runner tears down the job.
 - **GitHub token**: Must be read from `core.getInput('github_token')`, not `process.env.GITHUB_TOKEN` — node24 actions don't inherit env vars like composite actions do.
+
+## Code Review Guidelines
+
+- **Prefer TypeScript enums over ad-hoc union types**: When you see string union types like `"foo" | "bar"` used as parameter types, define them as proper TypeScript enums instead. This applies to both writing new code and reviewing existing code.
 
 ## Common Gotchas
 
