@@ -74,6 +74,7 @@ interface RunSummary {
   summaryLine?: string;
   fileChanges: boolean;
   endpointsFound: string[];
+  utilityToolCalls: Record<string, number>;
 }
 
 interface TestExecResult {
@@ -150,6 +151,20 @@ Examples:
 
 // ── Analysis ──
 
+const UTILITY_TOOLS = new Set([
+  "skyramp_execute_test",
+  "skyramp_start_trace_collection",
+  "skyramp_stop_trace_collection",
+  "skyramp_initialize_workspace",
+  "skyramp_login",
+  "skyramp_logout",
+  "skyramp_fix_errors",
+  "skyramp_reuse_code",
+  "skyramp_modularization",
+  "skyramp_state_cleanup",
+  "skyramp_submit_report",
+]);
+
 const TEST_GEN_TOOLS = new Set([
   "skyramp_smoke_test_generation",
   "skyramp_contract_test_generation",
@@ -162,13 +177,10 @@ const TEST_GEN_TOOLS = new Set([
 ]);
 
 const ANALYSIS_TOOLS = new Set([
-  "skyramp_analyze_repository",
   "skyramp_analyze_changes",
-  "skyramp_recommend_tests",
-  "skyramp_map_tests",
-  "skyramp_discover_tests",
-  "skyramp_analyze_test_drift",
-  "skyramp_calculate_health_scores",
+  "skyramp_analyze_test_health",
+  "skyramp_execute_tests",
+  "skyramp_actions",
 ]);
 
 function extractTestType(toolName: string): string {
@@ -311,6 +323,13 @@ function buildSummary(label: string, parsed: ParsedLog, result: ResultEvent | nu
   const endpointsFound = extractEndpoints(calls);
   const fileChanges = detectFileChanges(calls);
 
+  const utilityToolCalls: Record<string, number> = {};
+  for (const call of calls) {
+    if (UTILITY_TOOLS.has(call.toolName)) {
+      utilityToolCalls[call.toolName] = (utilityToolCalls[call.toolName] ?? 0) + 1;
+    }
+  }
+
   return {
     label,
     format: init.format ?? "unknown",
@@ -329,6 +348,7 @@ function buildSummary(label: string, parsed: ParsedLog, result: ResultEvent | nu
     costUsd,
     fileChanges,
     endpointsFound,
+    utilityToolCalls
   };
 }
 
@@ -474,6 +494,34 @@ function renderComparison(a: RunSummary, b: RunSummary): void {
     }
   }
 
+  // Utility tool calls
+  header("Utility Tool Calls");
+  const allUtilityTools = new Set([
+    ...Object.keys(a.utilityToolCalls),
+    ...Object.keys(b.utilityToolCalls),
+  ]);
+  if (allUtilityTools.size === 0) {
+    console.log("  (no utility tools called in either run)");
+  } else {
+    console.log(
+      "Tool".padEnd(labelW + 10) +
+      "Run A".padEnd(10) +
+      "Run B"
+    );
+    for (const tool of [...allUtilityTools].sort()) {
+      const countA = a.utilityToolCalls[tool] ?? 0;
+      const countB = b.utilityToolCalls[tool] ?? 0;
+      const valA = countA > 0 ? String(countA) : "—";
+      const valB = countB > 0 ? String(countB) : "—";
+      const marker = valA !== valB ? " ◀" : "";
+      console.log(
+        tool.padEnd(labelW + 10) +
+        valA.padEnd(10) +
+        valB + marker
+      );
+    }
+  }
+
   // Report
   header("Report");
   const truncate = (s: string, max: number) => s.length > max ? s.slice(0, max - 1) + "…" : s;
@@ -525,6 +573,19 @@ function renderComparison(a: RunSummary, b: RunSummary): void {
 
   if (a.fileChanges !== b.fileChanges) {
     diffs.push(`File changes: ${a.fileChanges ? "yes" : "no"} vs ${b.fileChanges ? "yes" : "no"}`);
+  }
+
+  // Check utility tools with differing call counts
+  const allUtilityKeys = new Set([
+    ...Object.keys(a.utilityToolCalls),
+    ...Object.keys(b.utilityToolCalls),
+  ]);
+  for (const tool of allUtilityKeys) {
+    const countA = a.utilityToolCalls[tool] ?? 0;
+    const countB = b.utilityToolCalls[tool] ?? 0;
+    if (countA !== countB) {
+      diffs.push(`${tool}: ${countA} vs ${countB} calls`);
+    }
   }
 
   const missingSections = [...allSections].filter(
