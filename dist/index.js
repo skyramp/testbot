@@ -99762,9 +99762,14 @@ async function checkSelfTrigger() {
   info(`Commit email: ${commitEmail}`);
   info(`Expected name: ${BOT_NAME}`);
   info(`Expected email: ${BOT_EMAIL}`);
-  const skip = commitAuthor === BOT_NAME && commitEmail === BOT_EMAIL;
-  if (skip) {
-    notice("Detected self-triggered execution (commit by Skyramp Testbot). Skipping to prevent recursion.");
+  const isBotCommit = commitAuthor === BOT_NAME && commitEmail === BOT_EMAIL;
+  const action5 = ctx.payload.action;
+  const isPushTriggered = action5 === "synchronize";
+  const skip = isBotCommit && isPushTriggered;
+  if (isBotCommit && !isPushTriggered) {
+    notice(`Head commit is by Skyramp Testbot but event action is '${action5}' (not synchronize). Proceeding normally.`);
+  } else if (skip) {
+    notice("Detected self-triggered execution (commit by Skyramp Testbot on synchronize event). Skipping to prevent recursion.");
   } else {
     notice("Not a self-triggered execution. Proceeding with test maintenance.");
   }
