@@ -55,6 +55,8 @@ export interface WorkspaceServiceInfo {
 /** Configuration resolved from .skyramp/workspace.yml merged with action inputs. */
 export interface ResolvedConfig extends SharedConfig {
   services: WorkspaceServiceInfo[]
+  /** PR head branch ref — set for issue_comment/workflow_dispatch events so autoCommit pushes to the right branch. */
+  prHeadRef?: string
 }
 
 /** Per-service overrides from Target deployment details. */

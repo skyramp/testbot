@@ -1,7 +1,8 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import { exec } from './utils'
-import { BOT_NAME, BOT_EMAIL } from './constants'
+import { BOT_EMAIL, BOT_NAME } from './constants'
+
 
 export interface SelfTriggerResult {
   skip: boolean
@@ -48,19 +49,13 @@ export async function checkSelfTrigger(): Promise<SelfTriggerResult> {
   core.info(`Expected email: ${BOT_EMAIL}`)
 
   const isBotCommit = commitAuthor === BOT_NAME && commitEmail === BOT_EMAIL
-
-  // Only skip on 'synchronize' events (bot pushing commits). User-initiated events
-  // like 'opened' or 'reopened' should always run, even if the head commit was from
-  // a previous testbot auto-commit (e.g. user closes PR and opens a new one on the
-  // same branch). See SKYR-3650.
-  const action = ctx.payload.action as string | undefined
-  const isPushTriggered = action === 'synchronize'
-  const skip = isBotCommit && isPushTriggered
-
-  if (isBotCommit && !isPushTriggered) {
-    core.notice(`Head commit is by Skyramp Testbot but event action is '${action}' (not synchronize). Proceeding normally.`)
+  // workflow_dispatch is an explicit user re-run — never skip, even if HEAD is a bot commit
+  const isExplicitDispatch = ctx.eventName === 'workflow_dispatch'
+  const skip = isBotCommit && !isExplicitDispatch
+  if (isBotCommit && isExplicitDispatch) {
+    core.notice('Bot commit detected but workflow_dispatch is an explicit re-run — proceeding.')
   } else if (skip) {
-    core.notice('Detected self-triggered execution (commit by Skyramp Testbot on synchronize event). Skipping to prevent recursion.')
+    core.notice('Detected self-triggered execution (commit by Skyramp Testbot). Skipping to prevent recursion.')
   } else {
     core.notice('Not a self-triggered execution. Proceeding with test maintenance.')
   }

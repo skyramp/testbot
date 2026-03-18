@@ -9,15 +9,20 @@ export function setGitHubToken(token: string): void {
   _githubToken = token
 }
 
-export function generateProgressBody(step: number, reportContent?: string): string {
+export function generateProgressBody(step: number, reportContent?: string, isCommentTrigger = false): string {
   const check1 = step >= 1 ? '[x]' : '[ ]'
   const check2 = step >= 2 ? '[x]' : '[ ]'
   const check3 = step >= 3 ? '[x]' : '[ ]'
 
-  let body = `### Skyramp Testbot Plan
-Reviewing the Pull Request for test recommendations.
+  const { owner, repo } = github.context.repo
+  const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${github.context.runId}`
+  const step1Label = isCommentTrigger ? 'Analyzing user request' : 'Analyzing Pull Request'
 
-- ${check1} Analyzing code changes
+  let body = `<!-- skyramp-testbot -->
+### Skyramp Testbot Plan
+Reviewing the Pull Request for test recommendations. ([workflow run](${runUrl}))
+
+- ${check1} ${step1Label}
 - ${check2} Running tests
 - ${check3} Generating report`
 
@@ -38,11 +43,11 @@ function getOctokit() {
 /**
  * Post the initial progress comment on the PR. Returns the comment ID (or null on failure).
  */
-export async function postInitialProgress(prNumber: number): Promise<number | null> {
+export async function postInitialProgress(prNumber: number, isCommentTrigger = false): Promise<number | null> {
   core.startGroup('Posting initial progress comment')
   try {
     const octokit = getOctokit()
-    const body = generateProgressBody(1)
+    const body = generateProgressBody(1, undefined, isCommentTrigger)
     const { data } = await octokit.rest.issues.createComment({
       ...github.context.repo,
       issue_number: prNumber,
@@ -61,10 +66,10 @@ export async function postInitialProgress(prNumber: number): Promise<number | nu
 /**
  * Update the progress comment to reflect the current step.
  */
-export async function updateProgress(commentId: number, step: number): Promise<void> {
+export async function updateProgress(commentId: number, step: number, isCommentTrigger = false): Promise<void> {
   try {
     const octokit = getOctokit()
-    const body = generateProgressBody(step)
+    const body = generateProgressBody(step, undefined, isCommentTrigger)
     await octokit.rest.issues.updateComment({
       ...github.context.repo,
       comment_id: commentId,
@@ -79,11 +84,11 @@ export async function updateProgress(commentId: number, step: number): Promise<v
  * Append the final report to the progress comment (step 3 + report content).
  * Returns true on success, false on failure (caller should fall back to standalone comment).
  */
-export async function appendReportToProgress(commentId: number, reportFile: string): Promise<boolean> {
+export async function appendReportToProgress(commentId: number, reportFile: string, isCommentTrigger = false): Promise<boolean> {
   try {
     const reportContent = fs.existsSync(reportFile) ? fs.readFileSync(reportFile, 'utf-8') : ''
     const octokit = getOctokit()
-    const body = generateProgressBody(3, reportContent)
+    const body = generateProgressBody(3, reportContent, isCommentTrigger)
     await octokit.rest.issues.updateComment({
       ...github.context.repo,
       comment_id: commentId,

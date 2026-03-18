@@ -24,18 +24,124 @@ async function run(): Promise<void> {
 
   // ── 2. Parse & validate inputs ──────────────────────────────────────
   const inputs = getInputs()
-  const prNumber = github.context.payload.pull_request?.number as number | undefined
 
   // Provide the GitHub token to the progress module for Octokit calls.
   // node24 actions don't inherit GITHUB_TOKEN as an env var; read it from the action input instead.
   const githubToken = core.getInput('github_token')
   setGitHubToken(githubToken)
 
-  // Ensure GITHUB_TOKEN is in process.env so it propagates to the MCP
-  // subprocess (needed by gh CLI for PR comment parsing). node24 actions
-  // don't inherit GITHUB_TOKEN as an env var automatically.
-  if (githubToken && !process.env.GITHUB_TOKEN) {
-    process.env.GITHUB_TOKEN = githubToken
+  // Determine PR context based on event type
+  const isCommentTrigger = github.context.eventName === 'issue_comment'
+  const isDispatchTrigger = github.context.eventName === 'workflow_dispatch'
+  let prNumber: number | undefined
+  let prTitle = ''
+  let prBody = ''
+  let baseBranch = ''
+  // User prompt from @skyramp-testbot comment
+  let userPrompt = ''
+  // Check run ID for workflow_dispatch — used to report status on the PR
+  let checkRunId: number | undefined
+  let prHeadSha: string | undefined
+  let prHeadRef: string | undefined
+
+  if (isDispatchTrigger) {
+    // workflow_dispatch: PR number and selected tests come from inputs
+    const inputPrNumber = github.context.payload.inputs?.pr_number
+    if (inputPrNumber) {
+      prNumber = parseInt(inputPrNumber, 10)
+      try {
+        const octokit = github.getOctokit(githubToken)
+        const { data: pr } = await octokit.rest.pulls.get({
+          ...github.context.repo,
+          pull_number: prNumber,
+        })
+        prTitle = pr.title
+        prBody = pr.body ?? ''
+        baseBranch = pr.base.ref
+        prHeadSha = pr.head.sha
+        prHeadRef = pr.head.ref
+        core.notice(`Retrigger via workflow_dispatch for PR #${prNumber}`)
+
+        // Create a check run on the PR head SHA so the status appears on the PR
+        if (prHeadSha) {
+          try {
+            const { data: check } = await octokit.rest.checks.create({
+              ...github.context.repo,
+              name: 'Skyramp Testbot (retrigger)',
+              head_sha: prHeadSha,
+              status: 'in_progress',
+              started_at: new Date().toISOString(),
+              details_url: `https://github.com/${github.context.repo.owner}/${github.context.repo.repo}/actions/runs/${github.context.runId}`,
+            })
+            checkRunId = check.id
+            core.info(`Created check run ${checkRunId} on PR head SHA ${prHeadSha}`)
+          } catch (checkErr) {
+            core.warning(`Failed to create check run on PR: ${checkErr}`)
+          }
+        }
+      } catch (err) {
+        core.warning(`Failed to fetch PR details for workflow_dispatch event: ${err}`)
+      }
+    }
+  } else if (isCommentTrigger) {
+    const commentBody = github.context.payload.comment?.body as string | undefined
+    if (commentBody?.includes('@skyramp-testbot')) {
+      // Extract prompt after @skyramp-testbot
+      const match = commentBody.match(/@skyramp-testbot\s+([\s\S]*)/i)
+      if (match) {
+        userPrompt = match[1].trim()
+      }
+      prNumber = github.context.payload.issue?.number
+      if (prNumber) {
+        try {
+          const octokit = github.getOctokit(githubToken)
+          const { data: pr } = await octokit.rest.pulls.get({
+            ...github.context.repo,
+            pull_number: prNumber,
+          })
+          prTitle = pr.title
+          prBody = pr.body ?? ''
+          baseBranch = pr.base.ref
+          prHeadSha = pr.head.sha
+        prHeadRef = pr.head.ref
+          core.notice(`Triggered via @skyramp-testbot comment on PR #${prNumber}`)
+
+          // Create a check run on the PR head SHA so the status appears on the PR
+          if (prHeadSha) {
+            try {
+              const { data: check } = await octokit.rest.checks.create({
+                ...github.context.repo,
+                name: 'Skyramp Testbot (@skyramp-testbot)',
+                head_sha: prHeadSha,
+                status: 'in_progress',
+                started_at: new Date().toISOString(),
+                details_url: `https://github.com/${github.context.repo.owner}/${github.context.repo.repo}/actions/runs/${github.context.runId}`,
+              })
+              checkRunId = check.id
+              core.info(`Created check run ${checkRunId} on PR head SHA ${prHeadSha}`)
+            } catch (checkErr) {
+              core.warning(`Failed to create check run on PR: ${checkErr}`)
+            }
+          }
+        } catch (err) {
+          core.warning(`Failed to fetch PR details for issue_comment event: ${err}`)
+        }
+      }
+    } else {
+      core.info('Comment does not mention @skyramp-testbot, skipping.')
+      return
+    }
+  } else {
+    prNumber = github.context.payload.pull_request?.number as number | undefined
+    prTitle = github.context.payload.pull_request?.title ?? ''
+    prBody = github.context.payload.pull_request?.body ?? ''
+    baseBranch = github.context.payload.pull_request?.base?.ref ?? ''
+  }
+
+  // userPrompt requires prNumber — the skip-analysis flow needs PR comment context
+  if (userPrompt && !prNumber) {
+    core.setFailed('userPrompt requires a PR context (prNumber). This should not happen for issue_comment events.')
+    return
   }
 
   let agent: ReturnType<typeof createAgent>
@@ -102,13 +208,21 @@ async function run(): Promise<void> {
   debug(`Paths: tempDir=${tempDir}, workingDir=${workingDir}`)
   debug(`PR #${prNumber ?? 'N/A'}, event=${github.context.eventName}`)
 
-  // ── 5. Generate git diff ────────────────────────────────────────────
-  await generateGitDiff(paths.gitDiffPath, workingDir)
+  // ── 5. Checkout PR branch for non-pull_request events ──────────────
+  // issue_comment and workflow_dispatch checkout the default branch (main),
+  // but we need to be on the PR head branch for correct diff and push.
+  if (prHeadRef && github.context.eventName !== 'pull_request') {
+    await exec('git', ['checkout', prHeadRef], { cwd: workingDir })
+    core.info(`Checked out PR head branch: ${prHeadRef}`)
+  }
+
+  // ── 6. Generate git diff ────────────────────────────────────────────
+  await generateGitDiff(paths.gitDiffPath, workingDir, baseBranch || undefined)
 
   // ── 6. Post initial progress comment ────────────────────────────────
   let progressCommentId: number | null = null
   if (config.postPrComment && prNumber) {
-    progressCommentId = await postInitialProgress(prNumber)
+    progressCommentId = await postInitialProgress(prNumber, isCommentTrigger)
   }
 
   // ── 7. Inject & validate license ───────────────────────────────────
@@ -256,25 +370,26 @@ async function run(): Promise<void> {
 
   // ── 14. Update progress (step 2: analyzing changes) ────────────────
   if (progressCommentId) {
-    await updateProgress(progressCommentId, 2)
+    await updateProgress(progressCommentId, 2, isCommentTrigger)
   }
 
-  // ── 15. Run Skyramp Testbot ────────────────────────────────────────
+  // ── 15. Run Skyramp Testbot ─────────────────────────────────────────
   const result = await withGroup('Running Skyramp Testbot', async () => {
     // Copy git diff to working directory for consistent agent access
     const localDiffPath = path.join(workingDir, '.skyramp_git_diff')
     fs.copyFileSync(paths.gitDiffPath, localDiffPath)
 
     const prompt = buildPrompt({
-      prTitle: github.context.payload.pull_request?.title ?? '',
-      prBody: github.context.payload.pull_request?.body ?? '',
-      baseBranch: github.context.payload.pull_request?.base?.ref ?? '',
-      prNumber,
+      prTitle,
+      prBody,
+      baseBranch,
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,
       repositoryPath: workingDir,
       services: config.services,
+      userPrompt,
+      prNumber,
     })
 
     const useDebugLog = agent.supportsNdjsonLog && config.enableDebug
@@ -310,8 +425,8 @@ async function run(): Promise<void> {
     return agentResult
   })
 
-  // ── 16. Read summary & parse metrics ───────────────────────────────
-  const { summary, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed)
+  // ── 17. Read summary & parse metrics ───────────────────────────────
+  const { summary, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed, userPrompt || undefined)
   parseMetrics(summary)
 
   // Use agent-provided commit message if available (keeps user input as fallback)
@@ -334,7 +449,7 @@ async function run(): Promise<void> {
   debug(`Agent stdout file exists: ${fs.existsSync(paths.agentStdoutPath)}`)
   debug(`Combined result file exists: ${fs.existsSync(paths.combinedResultPath)}`)
 
-  // ── 17. Upload artifacts ─────────────────────────────────────────
+  // ── 18. Upload artifacts ─────────────────────────────────────────
   try {
     const artifact = new DefaultArtifactClient()
 
@@ -353,12 +468,12 @@ async function run(): Promise<void> {
     core.warning(`Failed to upload artifacts: ${err}`)
   }
 
-  // ── 18. Post final PR comment ──────────────────────────────────────
+  // ── 19. Post final PR comment ──────────────────────────────────────
   if (config.postPrComment && prNumber) {
     await withGroup('Posting final PR comment', async () => {
       let posted = false
       if (progressCommentId) {
-        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath)
+        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath, isCommentTrigger)
         if (posted) {
           core.notice('Progress comment updated with final report')
         } else {
@@ -375,9 +490,10 @@ async function run(): Promise<void> {
     })
   }
 
-  // ── 19. Auto-commit test changes ───────────────────────────────────
+  // ── 20. Auto-commit test changes ───────────────────────────────────
   let commitSha = ''
   if (config.autoCommit) {
+    config.prHeadRef = prHeadRef
     await configureGitIdentity(botName, botEmail)
     commitSha = await autoCommit(config)
   }
@@ -385,6 +501,7 @@ async function run(): Promise<void> {
   // If the testbot agent failed AND it produced file changes, fail the action.
   // When there are no changes to commit (e.g. setup PR, no testable code),
   // treat it as a graceful no-op so the workflow check stays green.
+  const actionFailed = !result.success && !!commitSha
   if (!result.success) {
     if (commitSha) {
       core.setFailed(`Skyramp Testbot failed with exit code ${result.exitCode}`)
@@ -392,8 +509,26 @@ async function run(): Promise<void> {
       core.warning(`Skyramp Testbot exited with code ${result.exitCode} but produced no file changes — treating as successful`)
     }
   }
+
+  // Complete the check run on the PR (for workflow_dispatch retriggers)
+  if (checkRunId) {
+    try {
+      const octokit = github.getOctokit(githubToken)
+      await octokit.rest.checks.update({
+        ...github.context.repo,
+        check_run_id: checkRunId,
+        status: 'completed',
+        conclusion: actionFailed ? 'failure' : 'success',
+        completed_at: new Date().toISOString(),
+      })
+    } catch (err) {
+      core.warning(`Failed to update check run: ${err}`)
+    }
+  }
 }
 
-run().catch(err => {
+run().catch(async (err) => {
+  // Complete the check run as failed on unexpected errors
+  // (checkRunId and prHeadSha are in the outer scope but may not be set)
   core.setFailed(err instanceof Error ? err.message : String(err))
 })

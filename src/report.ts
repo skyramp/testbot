@@ -36,6 +36,8 @@ export function tryParseReport(raw: string): TestbotReport | null {
 interface RenderOptions {
   commitMessage?: string
   collapsed?: boolean
+  /** When set, indicates this run was triggered by a @skyramp-testbot comment */
+  userPrompt?: string
 }
 
 /**
@@ -44,8 +46,35 @@ interface RenderOptions {
  * and an optional commitMessage is rendered as a non-collapsed summary at the top.
  */
 export function renderReport(report: TestbotReport, options: RenderOptions = {}): string {
-  const { commitMessage, collapsed = false } = options
+  const { commitMessage, collapsed = false, userPrompt } = options
   const lines: string[] = []
+
+  // Marker for identifying testbot comments
+  lines.push('<!-- skyramp-testbot -->')
+
+  // Minimal report: when no tests were created/executed and only issues found,
+  // render just the issues (e.g. guardrail rejecting an unrelated @skyramp-testbot prompt)
+  const isMinimalReport =
+    report.newTestsCreated.length === 0 &&
+    report.testResults.length === 0 &&
+    report.testMaintenance.length === 0 &&
+    report.issuesFound.length > 0
+  if (isMinimalReport) {
+    lines.push('### ⚠️ Skyramp Testbot')
+    lines.push('')
+    for (const issue of report.issuesFound) {
+      lines.push(issue.description)
+    }
+    return lines.join('\n')
+  }
+
+  const escapeCell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, '<br>')
+
+  // User prompt attribution (when triggered via @skyramp-testbot comment)
+  if (userPrompt) {
+    lines.push(`> Following user instruction: *${userPrompt}*`)
+    lines.push('')
+  }
 
   // Summary line (non-collapsed, shown at the top) — only when collapsed mode is on
   if (collapsed && commitMessage) {
@@ -79,18 +108,11 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
   // New Tests Created (omit if empty)
   if (report.newTestsCreated.length > 0) {
     sectionStart('💡 New Tests Created')
+    lines.push('| Test Type | Endpoint | Description |')
+    lines.push('|-----------|----------|-------------|')
     for (const t of report.newTestsCreated) {
-      lines.push(`- **${t.testType}** for ${t.endpoint} — \`${t.fileName}\``)
-      if (t.description) {
-        lines.push(`  ${t.description}`)
-      }
-      const artifacts: string[] = []
-      if (t.scenarioFile) artifacts.push(`Scenario: \`${t.scenarioFile}\``)
-      if (t.traceFile) artifacts.push(`Trace: \`${t.traceFile}\``)
-      if (t.frontendTrace) artifacts.push(`UI Trace: \`${t.frontendTrace}\``)
-      if (artifacts.length > 0) {
-        lines.push(`  📎 ${artifacts.join(' | ')}`)
-      }
+      const desc = escapeCell(t.description ?? t.fileName)
+      lines.push(`| ${t.testType} | ${escapeCell(t.endpoint)} | ${desc} |`)
     }
     sectionEnd()
   }
@@ -99,52 +121,32 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
   if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
     const recs = report.additionalRecommendations
     const count = recs.length
-    sectionStart(`📌 Additional Recommendations (${count})`)
 
     const priorityOrder = (p: string) => p === 'high' ? 0 : p === 'medium' ? 1 : 2
     const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority))
 
-    const grouped = new Map<string, typeof recs>()
+    lines.push('')
+    lines.push('<details>')
+    lines.push(`<summary><strong>📌 Additional Recommendations (${count})</strong></summary>`)
+    lines.push('')
+    lines.push('To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).')
+    lines.push('')
     for (const rec of sorted) {
-      const list = grouped.get(rec.testType) || []
-      list.push(rec)
-      grouped.set(rec.testType, list)
+      const priority = rec.priority === 'high' ? 'HIGH' : rec.priority === 'medium' ? 'MEDIUM' : 'LOW'
+      const endpoint = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path
+        ? `\`${rec.steps[0].method} ${rec.steps[0].path}\``
+        : ''
+      const endpointSuffix = endpoint ? ` — ${endpoint}` : ''
+      lines.push(`- **${rec.testType}** (${priority})${endpointSuffix}: ${rec.description}`)
     }
-
-    for (const [testType, items] of grouped) {
-      lines.push(`#### ${testType}`)
-      lines.push('')
-      for (const rec of items) {
-        lines.push(`**\`${rec.scenarioName}\`**`)
-        lines.push('')
-        lines.push(rec.description)
-        lines.push('')
-        if (rec.steps.length > 0) {
-          for (let i = 0; i < rec.steps.length; i++) {
-            const s = rec.steps[i]
-            const prefix = s.method && s.path ? `\`${s.method} ${s.path}\`` : ''
-            lines.push(`${i + 1}. ${prefix}${prefix ? ' — ' : ''}${s.description}`)
-          }
-          lines.push('')
-        }
-        const artifacts: string[] = []
-        if (rec.openApiSpec) artifacts.push(`OpenAPI: \`${rec.openApiSpec}\``)
-        if (rec.backendTrace) artifacts.push(`Backend trace: \`${rec.backendTrace}\``)
-        if (rec.frontendTrace) artifacts.push(`Frontend trace: \`${rec.frontendTrace}\``)
-        if (artifacts.length > 0) {
-          lines.push(`*Artifacts:* ${artifacts.join(' · ')}`)
-          lines.push('')
-        }
-      }
-    }
-
-    sectionEnd()
+    lines.push('')
+    lines.push('</details>')
+    lines.push('')
   }
 
-  // Test Maintenance (omit if empty)
+  // Test Maintenance (always show)
+  sectionStart('✅ Test Maintenance')
   if (report.testMaintenance.length > 0) {
-    sectionStart('✅ Test Maintenance')
-    const escapeCell = (s: string) => s.replace(/\|/g, '\\|').replace(/\n/g, '<br>')
     const hasBeforeAfter = report.testMaintenance.some(
       m => typeof m === 'object' && m !== null && 'beforeStatus' in m,
     )
@@ -165,20 +167,19 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
         lines.push(`- ${m.description}`)
       }
     }
-    sectionEnd()
+  } else {
+    lines.push('No existing Skyramp tests required maintenance for this PR.')
   }
+  sectionEnd()
 
-  // Test Results (omit if empty)
-  if (report.testResults.length > 0) {
-    sectionStart('🧪 Test Results')
-    lines.push('| Test Type | Endpoint | Status | Details |')
-    lines.push('|-----------|----------|--------|---------|')
-    for (const r of report.testResults) {
-      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`)
-    }
-    sectionEnd()
+  // Test Results (always present)
+  sectionStart('🧪 Test Results')
+  lines.push('| Test Type | Endpoint | Status | Details |')
+  lines.push('|-----------|----------|--------|---------|')
+  for (const r of report.testResults) {
+    lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`)
   }
-
+  sectionEnd()
 
   // Issues Found (omit if empty)
   if (report.issuesFound.length > 0) {
@@ -198,7 +199,7 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
  * the standard markdown format. Otherwise uses the raw content as-is.
  * Writes the final report to combinedResultPath for PR comment posting.
  */
-export function readSummary(paths: Paths, reportCollapsed = false): { summary: string; commitMessage?: string } {
+ export function readSummary(paths: Paths, reportCollapsed = false, userPrompt?: string): { summary: string; commitMessage?: string } {
   core.startGroup('Reading test summary')
 
   const src = resolveSummarySource(paths)
@@ -210,9 +211,10 @@ export function readSummary(paths: Paths, reportCollapsed = false): { summary: s
     const report = tryParseReport(raw)
     if (report) {
       core.notice('Testbot report parsed from JSON')
-      summary = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed })
+      summary = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt })
       commitMessage = report.commitMessage
     } else {
+
       core.info('Summary is not JSON — using raw content')
       summary = raw
     }

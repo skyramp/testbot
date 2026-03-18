@@ -69,7 +69,7 @@ describe('renderReport', () => {
     expect(md).toContain('Tests cover the checkout flow.')
 
     expect(md).toContain('### 💡 New Tests Created')
-    expect(md).toContain('- **contract** for POST /orders — `test_orders.py`')
+    expect(md).toContain('| contract | POST /orders | test_orders.py |')
 
     expect(md).toContain('### ✅ Test Maintenance')
     expect(md).toContain('- Updated auth header in existing tests')
@@ -112,11 +112,13 @@ describe('renderReport', () => {
     expect(md).toContain('### 📋 Business Case Analysis')
     expect(md).toContain('### 🧪 Test Results')
     expect(md).not.toContain('💡 New Tests Created')
-    expect(md).not.toContain('✅ Test Maintenance')
+    // Test Maintenance always shows (with "No existing..." message when empty)
+    expect(md).toContain('✅ Test Maintenance')
+    expect(md).toContain('No existing Skyramp tests required maintenance for this PR.')
     expect(md).not.toContain('⚠️ Issues Found')
   })
 
-  it('omits Test Results section when testResults is empty', () => {
+  it('renders Test Results section with empty table when testResults is empty', () => {
     const report: TestbotReport = {
       businessCaseAnalysis: 'Setup PR with no tests.',
       newTestsCreated: [],
@@ -127,8 +129,9 @@ describe('renderReport', () => {
     const md = renderReport(report)
 
     expect(md).toContain('### 📋 Business Case Analysis')
-    expect(md).not.toContain('🧪 Test Results')
-    expect(md).not.toContain('| Test Type |')
+    // Test Results always shows (with empty table)
+    expect(md).toContain('🧪 Test Results')
+    expect(md).toContain('| Test Type | Endpoint | Status | Details |')
   })
 
   it('renders the test results table with headers', () => {

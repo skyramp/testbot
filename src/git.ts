@@ -1,25 +1,27 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import * as fs from 'fs'
-import * as path from 'path'
 import { exec, debug } from './utils'
 import type { ResolvedConfig } from './types'
-import { BOT_EMAIL } from './constants'
 
 /**
  * Generate a git diff between the PR base and HEAD, written to the given path.
  */
-export async function generateGitDiff(diffPath: string, workingDir: string): Promise<void> {
+export async function generateGitDiff(diffPath: string, workingDir: string, baseBranch?: string): Promise<void> {
   core.startGroup('Generating git diff')
 
   const baseSha = github.context.payload.pull_request?.base?.sha as string | undefined
 
   let diffContent: string
-  if (!baseSha) {
-    core.warning('Not running in a pull request context, using HEAD~1 for diff')
-    diffContent = (await exec('git', ['diff', 'HEAD~1'], { cwd: workingDir })).stdout
-  } else {
+  if (baseSha) {
     diffContent = (await exec('git', ['diff', baseSha], { cwd: workingDir })).stdout
+  } else if (baseBranch) {
+    // workflow_dispatch / issue_comment: diff against the PR's base branch
+    core.info(`Not a pull_request event, diffing against origin/${baseBranch}`)
+    diffContent = (await exec('git', ['diff', `origin/${baseBranch}`], { cwd: workingDir })).stdout
+  } else {
+    core.warning('No base SHA or base branch available, using HEAD~1 for diff')
+    diffContent = (await exec('git', ['diff', 'HEAD~1'], { cwd: workingDir })).stdout
   }
 
   fs.writeFileSync(diffPath, diffContent)
@@ -29,72 +31,6 @@ export async function generateGitDiff(diffPath: string, workingDir: string): Pro
   debug(`Git diff path: ${diffPath}`)
 
   core.endGroup()
-}
-
-
-/**
- * Remove test files committed by previous TestBot runs on this PR branch.
- * Identifies bot commits between the PR base and HEAD, collects the files
- * they introduced, and deletes them from the working tree so the next agent
- * run starts with a clean slate. The deletions are picked up by autoCommit()
- * when it stages the test directories.
- */
-export async function cleanBotFiles(workingDir: string): Promise<string[]> {
-  core.startGroup('Cleaning previous TestBot files')
-
-  const baseSha = github.context.payload.pull_request?.base?.sha as string | undefined
-  if (!baseSha) {
-    core.info('Not a pull request context — skipping bot file cleanup')
-    core.endGroup()
-    return []
-  }
-
-  // Find all commits by the bot between PR base and HEAD
-  const { stdout: logOutput } = await exec(
-    'git', ['log', `--author=${BOT_EMAIL}`, '--format=%H', `${baseSha}..HEAD`],
-    { cwd: workingDir, silent: true }
-  )
-
-  const botShas = logOutput.trim().split('\n').filter(Boolean)
-  if (botShas.length === 0) {
-    core.info('No previous TestBot commits found on this branch')
-    core.endGroup()
-    return []
-  }
-
-  debug(`Found ${botShas.length} TestBot commit(s): ${botShas.join(', ')}`)
-
-  // Collect files from each bot commit
-  const filesToRemove = new Set<string>()
-  for (const sha of botShas) {
-    const { stdout: filesOutput } = await exec(
-      'git', ['diff-tree', '--no-commit-id', '--name-only', '--diff-filter=A', '-r', sha],
-      { cwd: workingDir, silent: true }
-    )
-    for (const file of filesOutput.trim().split('\n').filter(Boolean)) {
-      filesToRemove.add(file)
-    }
-  }
-
-  // Delete files that still exist on disk
-  const removed: string[] = []
-  for (const file of filesToRemove) {
-    const absPath = path.join(workingDir, file)
-    if (fs.existsSync(absPath)) {
-      fs.unlinkSync(absPath)
-      removed.push(file)
-      debug(`Removed: ${file}`)
-    }
-  }
-
-  if (removed.length > 0) {
-    core.notice(`Removed ${removed.length} file(s) from previous TestBot runs`)
-  } else {
-    core.info('No bot-generated files found on disk to remove')
-  }
-
-  core.endGroup()
-  return removed
 }
 
 /**
@@ -122,9 +58,6 @@ export async function autoCommit(config: ResolvedConfig): Promise<string> {
     if (svc.outputDir) dirs.add(svc.outputDir)
   }
   if (dirs.size === 0) dirs.add(config.testDirectory)
-
-  // Always stage .skyramp/ — the agent may have created/updated workspace.yml
-  dirs.add('.skyramp')
 
   // Stage files from each directory
   for (const dir of dirs) {
@@ -159,7 +92,10 @@ export async function autoCommit(config: ResolvedConfig): Promise<string> {
 
   // Push — pull_request events use a detached HEAD (merge commit),
   // so we must push to the PR branch explicitly.
+  // For issue_comment/workflow_dispatch we already checked out the PR branch,
+  // but still push explicitly to be safe.
   const headRef = github.context.payload.pull_request?.head?.ref as string | undefined
+    || config.prHeadRef
   if (headRef) {
     await exec('git', ['push', 'origin', `HEAD:refs/heads/${headRef}`])
   } else if (github.context.eventName === 'pull_request') {
