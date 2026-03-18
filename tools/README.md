@@ -101,3 +101,33 @@ npx tsx tools/evaluate-runs.ts --files log1.ndjson log2.ndjson ...
 - `--pr` — PR number — fetches all testbot runs for that PR
 - `--files` — paths to local `agent-log.ndjson` files
 - `--repo` — repository (default: `letsramp/api-insight`)
+
+## compare-runs.ts
+
+Side-by-side comparison of two testbot agent logs. Shows behavioral differences between runs: tool call sequences, test generation/execution, report sections, timing, and cost. Useful for debugging "why did this run behave differently?"
+
+```bash
+# Compare two CI runs
+npx tsx tools/compare-runs.ts <run_id_1> <run_id_2> --repo owner/repo
+
+# Compare two local log files
+npx tsx tools/compare-runs.ts -f /path/to/log1.ndjson -f /path/to/log2.ndjson
+
+# Mix: one CI run and one local file
+npx tsx tools/compare-runs.ts <run_id> -f /path/to/log.ndjson --repo owner/repo
+```
+
+**Options:**
+- `<run_id>` — GitHub Actions run ID(s) (requires `gh` CLI)
+- `--file`, `-f` — path to a local `agent-log.ndjson` file (use twice for two files)
+- `--repo` — repository (default: `letsramp/api-insight`)
+- `--keep-logs` — don't delete downloaded NDJSON files after analysis
+
+**What it compares:**
+- **Overview** — format, model, duration, API time, cost, turns, tool call counts
+- **Skyramp tool sequence** — side-by-side MCP tool call order with diff markers
+- **Endpoints discovered** — which API endpoints each run's analysis found
+- **Test generation** — which test types were generated (smoke, contract, load, fuzz, e2e, etc.)
+- **Test execution** — pass/fail results with HTTP status and timing
+- **Report** — summary line, file changes, and which report sections were populated
+- **Key differences** — auto-detected divergences with ⚠ markers
