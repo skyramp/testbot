@@ -27,7 +27,7 @@ beforeEach(() => {
 })
 
 describe('checkSelfTrigger', () => {
-  it('detects self-trigger from push event head_commit', async () => {
+  it('does not skip push event with bot head_commit (not synchronize)', async () => {
     mockContext.payload = {
       head_commit: {
         author: { name: 'Skyramp Testbot', email: 'test-bot@skyramp.dev' },
@@ -35,7 +35,8 @@ describe('checkSelfTrigger', () => {
     }
 
     const result = await checkSelfTrigger()
-    expect(result.skip).toBe(true)
+    // push events don't have action='synchronize', so skip=false
+    expect(result.skip).toBe(false)
     expect(result.botName).toBe('Skyramp Testbot')
     expect(result.botEmail).toBe('test-bot@skyramp.dev')
     // Should NOT fall back to git log when head_commit is present
@@ -55,7 +56,9 @@ describe('checkSelfTrigger', () => {
   })
 
   it('falls back to git log for pull_request events using PR head SHA', async () => {
+    mockContext.eventName = 'pull_request'
     mockContext.payload = {
+      action: 'synchronize',
       pull_request: {
         head: { sha: 'abc123def' },
       },
@@ -159,9 +162,10 @@ describe('checkSelfTrigger', () => {
     expect(result.skip).toBe(false)
   })
 
-  it('skips for pull_request events with bot commit', async () => {
+  it('skips for pull_request synchronize events with bot commit', async () => {
     mockContext.eventName = 'pull_request'
     mockContext.payload = {
+      action: 'synchronize',
       pull_request: { head: { sha: 'abc123' } },
     }
     mockExec
@@ -170,5 +174,47 @@ describe('checkSelfTrigger', () => {
 
     const result = await checkSelfTrigger()
     expect(result.skip).toBe(true)
+  })
+
+  it('does not skip for pull_request opened events with bot commit (SKYR-3650)', async () => {
+    mockContext.eventName = 'pull_request'
+    mockContext.payload = {
+      action: 'opened',
+      pull_request: { head: { sha: 'abc123' } },
+    }
+    mockExec
+      .mockResolvedValueOnce({ stdout: 'Skyramp Testbot', stderr: '', exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: 'test-bot@skyramp.dev', stderr: '', exitCode: 0 })
+
+    const result = await checkSelfTrigger()
+    expect(result.skip).toBe(false)
+  })
+
+  it('does not skip for pull_request reopened events with bot commit (SKYR-3650)', async () => {
+    mockContext.eventName = 'pull_request'
+    mockContext.payload = {
+      action: 'reopened',
+      pull_request: { head: { sha: 'abc123' } },
+    }
+    mockExec
+      .mockResolvedValueOnce({ stdout: 'Skyramp Testbot', stderr: '', exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: 'test-bot@skyramp.dev', stderr: '', exitCode: 0 })
+
+    const result = await checkSelfTrigger()
+    expect(result.skip).toBe(false)
+  })
+
+  it('does not skip for issue_comment events with bot commit', async () => {
+    mockContext.eventName = 'issue_comment'
+    mockContext.payload = {
+      action: 'created',
+      comment: { body: '@skyramp-testbot run tests' },
+    }
+    mockExec
+      .mockResolvedValueOnce({ stdout: 'Skyramp Testbot', stderr: '', exitCode: 0 })
+      .mockResolvedValueOnce({ stdout: 'test-bot@skyramp.dev', stderr: '', exitCode: 0 })
+
+    const result = await checkSelfTrigger()
+    expect(result.skip).toBe(false)
   })
 })
