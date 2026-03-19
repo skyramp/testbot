@@ -99763,12 +99763,13 @@ async function checkSelfTrigger() {
   info(`Expected name: ${BOT_NAME}`);
   info(`Expected email: ${BOT_EMAIL}`);
   const isBotCommit = commitAuthor === BOT_NAME && commitEmail === BOT_EMAIL;
-  const isExplicitDispatch = ctx.eventName === "workflow_dispatch";
-  const skip = isBotCommit && !isExplicitDispatch;
-  if (isBotCommit && isExplicitDispatch) {
-    notice("Bot commit detected but workflow_dispatch is an explicit re-run \u2014 proceeding.");
+  const action5 = ctx.payload.action;
+  const isSynchronize = ctx.eventName === "pull_request" && action5 === "synchronize";
+  const skip = isBotCommit && isSynchronize;
+  if (isBotCommit && !isSynchronize) {
+    notice(`Head commit is by ${BOT_NAME} but event is '${ctx.eventName}' action='${action5 ?? "N/A"}' (not pull_request/synchronize). Proceeding normally.`);
   } else if (skip) {
-    notice("Detected self-triggered execution (commit by Skyramp Testbot). Skipping to prevent recursion.");
+    notice(`Detected self-triggered execution (commit by ${BOT_NAME} on synchronize event). Skipping to prevent recursion.`);
   } else {
     notice("Not a self-triggered execution. Proceeding with test maintenance.");
   }
