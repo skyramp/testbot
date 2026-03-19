@@ -99762,8 +99762,12 @@ async function checkSelfTrigger() {
   info(`Commit email: ${commitEmail}`);
   info(`Expected name: ${BOT_NAME}`);
   info(`Expected email: ${BOT_EMAIL}`);
-  const skip = commitAuthor === BOT_NAME && commitEmail === BOT_EMAIL;
-  if (skip) {
+  const isBotCommit = commitAuthor === BOT_NAME && commitEmail === BOT_EMAIL;
+  const isExplicitDispatch = ctx.eventName === "workflow_dispatch";
+  const skip = isBotCommit && !isExplicitDispatch;
+  if (isBotCommit && isExplicitDispatch) {
+    notice("Bot commit detected but workflow_dispatch is an explicit re-run \u2014 proceeding.");
+  } else if (skip) {
     notice("Detected self-triggered execution (commit by Skyramp Testbot). Skipping to prevent recursion.");
   } else {
     notice("Not a self-triggered execution. Proceeding with test maintenance.");
@@ -99778,14 +99782,18 @@ var _githubToken = "";
 function setGitHubToken(token) {
   _githubToken = token;
 }
-function generateProgressBody(step, reportContent) {
+function generateProgressBody(step, reportContent, isCommentTrigger = false) {
   const check1 = step >= 1 ? "[x]" : "[ ]";
   const check2 = step >= 2 ? "[x]" : "[ ]";
   const check3 = step >= 3 ? "[x]" : "[ ]";
-  let body2 = `### Skyramp Testbot Plan
-Reviewing the Pull Request for test recommendations.
+  const { owner, repo } = context2.repo;
+  const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context2.runId}`;
+  const step1Label = isCommentTrigger ? "Analyzing user request" : "Analyzing Pull Request";
+  let body2 = `<!-- skyramp-testbot -->
+### Skyramp Testbot Plan
+Reviewing the Pull Request for test recommendations. ([workflow run](${runUrl}))
 
-- ${check1} Analyzing code changes
+- ${check1} ${step1Label}
 - ${check2} Running tests
 - ${check3} Generating report`;
   if (reportContent) {
@@ -99801,11 +99809,11 @@ function getOctokit2() {
   }
   return getOctokit(_githubToken);
 }
-async function postInitialProgress(prNumber) {
+async function postInitialProgress(prNumber, isCommentTrigger = false) {
   startGroup("Posting initial progress comment");
   try {
     const octokit = getOctokit2();
-    const body2 = generateProgressBody(1);
+    const body2 = generateProgressBody(1, void 0, isCommentTrigger);
     const { data } = await octokit.rest.issues.createComment({
       ...context2.repo,
       issue_number: prNumber,
@@ -99820,10 +99828,10 @@ async function postInitialProgress(prNumber) {
     return null;
   }
 }
-async function updateProgress(commentId, step) {
+async function updateProgress(commentId, step, isCommentTrigger = false) {
   try {
     const octokit = getOctokit2();
-    const body2 = generateProgressBody(step);
+    const body2 = generateProgressBody(step, void 0, isCommentTrigger);
     await octokit.rest.issues.updateComment({
       ...context2.repo,
       comment_id: commentId,
@@ -99833,11 +99841,11 @@ async function updateProgress(commentId, step) {
     warning(`Failed to update progress comment: ${err}`);
   }
 }
-async function appendReportToProgress(commentId, reportFile) {
+async function appendReportToProgress(commentId, reportFile, isCommentTrigger = false) {
   try {
     const reportContent = fs8.existsSync(reportFile) ? fs8.readFileSync(reportFile, "utf-8") : "";
     const octokit = getOctokit2();
-    const body2 = generateProgressBody(3, reportContent);
+    const body2 = generateProgressBody(3, reportContent, isCommentTrigger);
     await octokit.rest.issues.updateComment({
       ...context2.repo,
       comment_id: commentId,
@@ -99984,9 +99992,10 @@ function buildAgentCommand(agent, enableDebug) {
 function buildPrompt(opts) {
   const serviceContext = opts.services?.length ? buildServiceContext(opts.services) : "";
   const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
+  const userPromptParam = opts.userPrompt ? `&userPrompt=${encodeURIComponent(opts.userPrompt)}` : "";
   const prNumberParam = opts.prNumber ? `&prNumber=${opts.prNumber}` : "";
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${prNumberParam}
+${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${userPromptParam}${prNumberParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
@@ -100179,15 +100188,18 @@ async function generateAuthToken(config, workingDir) {
 
 // src/git.ts
 var fs11 = __toESM(require("fs"));
-async function generateGitDiff(diffPath, workingDir) {
+async function generateGitDiff(diffPath, workingDir, baseBranch) {
   startGroup("Generating git diff");
   const baseSha = context2.payload.pull_request?.base?.sha;
   let diffContent;
-  if (!baseSha) {
-    warning("Not running in a pull request context, using HEAD~1 for diff");
-    diffContent = (await exec2("git", ["diff", "HEAD~1"], { cwd: workingDir })).stdout;
-  } else {
+  if (baseSha) {
     diffContent = (await exec2("git", ["diff", baseSha], { cwd: workingDir })).stdout;
+  } else if (baseBranch) {
+    info(`Not a pull_request event, diffing against origin/${baseBranch}`);
+    diffContent = (await exec2("git", ["diff", `origin/${baseBranch}`], { cwd: workingDir })).stdout;
+  } else {
+    warning("No base SHA or base branch available, using HEAD~1 for diff");
+    diffContent = (await exec2("git", ["diff", "HEAD~1"], { cwd: workingDir })).stdout;
   }
   fs11.writeFileSync(diffPath, diffContent);
   const lines = diffContent.split("\n").length;
@@ -100209,7 +100221,6 @@ async function autoCommit(config) {
     if (svc.outputDir) dirs.add(svc.outputDir);
   }
   if (dirs.size === 0) dirs.add(config.testDirectory);
-  dirs.add(".skyramp");
   for (const dir of dirs) {
     const { exitCode: addExitCode } = await exec2(
       "git",
@@ -100234,7 +100245,7 @@ async function autoCommit(config) {
   await exec2("git", ["commit", "-m", config.commitMessage]);
   const { stdout } = await exec2("git", ["rev-parse", "HEAD"], { silent: true });
   const sha = stdout.trim();
-  const headRef = context2.payload.pull_request?.head?.ref;
+  const headRef = context2.payload.pull_request?.head?.ref || config.prHeadRef;
   if (headRef) {
     await exec2("git", ["push", "origin", `HEAD:refs/heads/${headRef}`]);
   } else if (context2.eventName === "pull_request") {
@@ -100271,8 +100282,23 @@ function tryParseReport(raw) {
   }
 }
 function renderReport(report, options = {}) {
-  const { commitMessage, collapsed = false } = options;
+  const { commitMessage, collapsed = false, userPrompt } = options;
   const lines = [];
+  lines.push("<!-- skyramp-testbot -->");
+  const isMinimalReport = report.newTestsCreated.length === 0 && report.testResults.length === 0 && report.testMaintenance.length === 0 && report.issuesFound.length > 0;
+  if (isMinimalReport) {
+    lines.push("### \u26A0\uFE0F Skyramp Testbot");
+    lines.push("");
+    for (const issue2 of report.issuesFound) {
+      lines.push(issue2.description);
+    }
+    return lines.join("\n");
+  }
+  const escapeCell = (s) => s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
+  if (userPrompt) {
+    lines.push(`> Following user instruction: *${userPrompt}*`);
+    lines.push("");
+  }
   if (collapsed && commitMessage) {
     lines.push(`**Summary:** ${commitMessage}`);
     lines.push("");
@@ -100298,64 +100324,37 @@ function renderReport(report, options = {}) {
   sectionEnd();
   if (report.newTestsCreated.length > 0) {
     sectionStart("\u{1F4A1} New Tests Created");
+    lines.push("| Test Type | Endpoint | Description |");
+    lines.push("|-----------|----------|-------------|");
     for (const t of report.newTestsCreated) {
-      lines.push(`- **${t.testType}** for ${t.endpoint} \u2014 \`${t.fileName}\``);
-      if (t.description) {
-        lines.push(`  ${t.description}`);
-      }
-      const artifacts = [];
-      if (t.scenarioFile) artifacts.push(`Scenario: \`${t.scenarioFile}\``);
-      if (t.traceFile) artifacts.push(`Trace: \`${t.traceFile}\``);
-      if (t.frontendTrace) artifacts.push(`UI Trace: \`${t.frontendTrace}\``);
-      if (artifacts.length > 0) {
-        lines.push(`  \u{1F4CE} ${artifacts.join(" | ")}`);
-      }
+      const desc = escapeCell(t.description ?? t.fileName);
+      lines.push(`| ${t.testType} | ${escapeCell(t.endpoint)} | ${desc} |`);
     }
     sectionEnd();
   }
   if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
     const recs = report.additionalRecommendations;
     const count = recs.length;
-    sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
     const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
     const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
-    const grouped = /* @__PURE__ */ new Map();
+    lines.push("");
+    lines.push("<details>");
+    lines.push(`<summary><strong>\u{1F4CC} Additional Recommendations (${count})</strong></summary>`);
+    lines.push("");
+    lines.push("To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).");
+    lines.push("");
     for (const rec of sorted) {
-      const list = grouped.get(rec.testType) || [];
-      list.push(rec);
-      grouped.set(rec.testType, list);
+      const priority = rec.priority === "high" ? "HIGH" : rec.priority === "medium" ? "MEDIUM" : "LOW";
+      const endpoint2 = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path ? `\`${rec.steps[0].method} ${rec.steps[0].path}\`` : "";
+      const endpointSuffix = endpoint2 ? ` \u2014 ${endpoint2}` : "";
+      lines.push(`- **${rec.testType}** (${priority})${endpointSuffix}: ${rec.description}`);
     }
-    for (const [testType, items] of grouped) {
-      lines.push(`#### ${testType}`);
-      lines.push("");
-      for (const rec of items) {
-        lines.push(`**\`${rec.scenarioName}\`**`);
-        lines.push("");
-        lines.push(rec.description);
-        lines.push("");
-        if (rec.steps.length > 0) {
-          for (let i = 0; i < rec.steps.length; i++) {
-            const s = rec.steps[i];
-            const prefix2 = s.method && s.path ? `\`${s.method} ${s.path}\`` : "";
-            lines.push(`${i + 1}. ${prefix2}${prefix2 ? " \u2014 " : ""}${s.description}`);
-          }
-          lines.push("");
-        }
-        const artifacts = [];
-        if (rec.openApiSpec) artifacts.push(`OpenAPI: \`${rec.openApiSpec}\``);
-        if (rec.backendTrace) artifacts.push(`Backend trace: \`${rec.backendTrace}\``);
-        if (rec.frontendTrace) artifacts.push(`Frontend trace: \`${rec.frontendTrace}\``);
-        if (artifacts.length > 0) {
-          lines.push(`*Artifacts:* ${artifacts.join(" \xB7 ")}`);
-          lines.push("");
-        }
-      }
-    }
-    sectionEnd();
+    lines.push("");
+    lines.push("</details>");
+    lines.push("");
   }
+  sectionStart("\u2705 Test Maintenance");
   if (report.testMaintenance.length > 0) {
-    sectionStart("\u2705 Test Maintenance");
-    const escapeCell = (s) => s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
     const hasBeforeAfter = report.testMaintenance.some(
       (m) => typeof m === "object" && m !== null && "beforeStatus" in m
     );
@@ -100376,17 +100375,17 @@ function renderReport(report, options = {}) {
         lines.push(`- ${m.description}`);
       }
     }
-    sectionEnd();
+  } else {
+    lines.push("No existing Skyramp tests required maintenance for this PR.");
   }
-  if (report.testResults.length > 0) {
-    sectionStart("\u{1F9EA} Test Results");
-    lines.push("| Test Type | Endpoint | Status | Details |");
-    lines.push("|-----------|----------|--------|---------|");
-    for (const r of report.testResults) {
-      lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
-    }
-    sectionEnd();
+  sectionEnd();
+  sectionStart("\u{1F9EA} Test Results");
+  lines.push("| Test Type | Endpoint | Status | Details |");
+  lines.push("|-----------|----------|--------|---------|");
+  for (const r of report.testResults) {
+    lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
   }
+  sectionEnd();
   if (report.issuesFound.length > 0) {
     sectionStart("\u26A0\uFE0F Issues Found");
     for (const issue2 of report.issuesFound) {
@@ -100396,7 +100395,7 @@ function renderReport(report, options = {}) {
   }
   return lines.join("\n");
 }
-function readSummary(paths, reportCollapsed = false) {
+function readSummary(paths, reportCollapsed = false, userPrompt) {
   startGroup("Reading test summary");
   const src = resolveSummarySource(paths);
   let summary2;
@@ -100406,7 +100405,7 @@ function readSummary(paths, reportCollapsed = false) {
     const report = tryParseReport(raw);
     if (report) {
       notice("Testbot report parsed from JSON");
-      summary2 = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed });
+      summary2 = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt });
       commitMessage = report.commitMessage;
     } else {
       info("Summary is not JSON \u2014 using raw content");
@@ -100447,11 +100446,108 @@ async function run() {
   setOutput("skipped_self_trigger", String(skip));
   if (skip) return;
   const inputs = getInputs();
-  const prNumber = context2.payload.pull_request?.number;
   const githubToken = getInput("github_token");
   setGitHubToken(githubToken);
-  if (githubToken && !process.env.GITHUB_TOKEN) {
-    process.env.GITHUB_TOKEN = githubToken;
+  const isCommentTrigger = context2.eventName === "issue_comment";
+  const isDispatchTrigger = context2.eventName === "workflow_dispatch";
+  let prNumber;
+  let prTitle = "";
+  let prBody = "";
+  let baseBranch = "";
+  let userPrompt = "";
+  let checkRunId;
+  let prHeadSha;
+  let prHeadRef;
+  if (isDispatchTrigger) {
+    const inputPrNumber = context2.payload.inputs?.pr_number;
+    if (inputPrNumber) {
+      prNumber = parseInt(inputPrNumber, 10);
+      try {
+        const octokit = getOctokit(githubToken);
+        const { data: pr } = await octokit.rest.pulls.get({
+          ...context2.repo,
+          pull_number: prNumber
+        });
+        prTitle = pr.title;
+        prBody = pr.body ?? "";
+        baseBranch = pr.base.ref;
+        prHeadSha = pr.head.sha;
+        prHeadRef = pr.head.ref;
+        notice(`Retrigger via workflow_dispatch for PR #${prNumber}`);
+        if (prHeadSha) {
+          try {
+            const { data: check } = await octokit.rest.checks.create({
+              ...context2.repo,
+              name: "Skyramp Testbot (retrigger)",
+              head_sha: prHeadSha,
+              status: "in_progress",
+              started_at: (/* @__PURE__ */ new Date()).toISOString(),
+              details_url: `https://github.com/${context2.repo.owner}/${context2.repo.repo}/actions/runs/${context2.runId}`
+            });
+            checkRunId = check.id;
+            info(`Created check run ${checkRunId} on PR head SHA ${prHeadSha}`);
+          } catch (checkErr) {
+            warning(`Failed to create check run on PR: ${checkErr}`);
+          }
+        }
+      } catch (err) {
+        warning(`Failed to fetch PR details for workflow_dispatch event: ${err}`);
+      }
+    }
+  } else if (isCommentTrigger) {
+    const commentBody = context2.payload.comment?.body;
+    if (commentBody?.includes("@skyramp-testbot")) {
+      const match = commentBody.match(/@skyramp-testbot\s+([\s\S]*)/i);
+      if (match) {
+        userPrompt = match[1].trim();
+      }
+      prNumber = context2.payload.issue?.number;
+      if (prNumber) {
+        try {
+          const octokit = getOctokit(githubToken);
+          const { data: pr } = await octokit.rest.pulls.get({
+            ...context2.repo,
+            pull_number: prNumber
+          });
+          prTitle = pr.title;
+          prBody = pr.body ?? "";
+          baseBranch = pr.base.ref;
+          prHeadSha = pr.head.sha;
+          prHeadRef = pr.head.ref;
+          notice(`Triggered via @skyramp-testbot comment on PR #${prNumber}`);
+          if (prHeadSha) {
+            try {
+              const { data: check } = await octokit.rest.checks.create({
+                ...context2.repo,
+                name: "Skyramp Testbot (@skyramp-testbot)",
+                head_sha: prHeadSha,
+                status: "in_progress",
+                started_at: (/* @__PURE__ */ new Date()).toISOString(),
+                details_url: `https://github.com/${context2.repo.owner}/${context2.repo.repo}/actions/runs/${context2.runId}`
+              });
+              checkRunId = check.id;
+              info(`Created check run ${checkRunId} on PR head SHA ${prHeadSha}`);
+            } catch (checkErr) {
+              warning(`Failed to create check run on PR: ${checkErr}`);
+            }
+          }
+        } catch (err) {
+          warning(`Failed to fetch PR details for issue_comment event: ${err}`);
+        }
+      }
+    } else {
+      info("Comment does not mention @skyramp-testbot, skipping.");
+      return;
+    }
+  } else {
+    prNumber = context2.payload.pull_request?.number;
+    prTitle = context2.payload.pull_request?.title ?? "";
+    prBody = context2.payload.pull_request?.body ?? "";
+    baseBranch = context2.payload.pull_request?.base?.ref ?? "";
+  }
+  if (userPrompt && !prNumber) {
+    setFailed("userPrompt requires a PR context (prNumber). This should not happen for issue_comment events.");
+    return;
   }
   let agent;
   try {
@@ -100505,10 +100601,14 @@ async function run() {
   const workingDir = path10.resolve(inputs.workingDirectory);
   debug2(`Paths: tempDir=${tempDir}, workingDir=${workingDir}`);
   debug2(`PR #${prNumber ?? "N/A"}, event=${context2.eventName}`);
-  await generateGitDiff(paths.gitDiffPath, workingDir);
+  if (prHeadRef && context2.eventName !== "pull_request") {
+    await exec2("git", ["checkout", prHeadRef], { cwd: workingDir });
+    info(`Checked out PR head branch: ${prHeadRef}`);
+  }
+  await generateGitDiff(paths.gitDiffPath, workingDir, baseBranch || void 0);
   let progressCommentId = null;
   if (config.postPrComment && prNumber) {
-    progressCommentId = await postInitialProgress(prNumber);
+    progressCommentId = await postInitialProgress(prNumber, isCommentTrigger);
   }
   await withGroup("Configuring Skyramp license", async () => {
     fs13.writeFileSync(paths.licensePath, inputs.skyrampLicenseFile, { mode: 384 });
@@ -100636,21 +100736,22 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   const tokenSource = dynamicToken ? "auth_token_command" : process.env.SKYRAMP_TEST_TOKEN ? "SKYRAMP_TEST_TOKEN env var" : "none";
   debug2(`Auth token source: ${tokenSource}, length: ${authToken.length}`);
   if (progressCommentId) {
-    await updateProgress(progressCommentId, 2);
+    await updateProgress(progressCommentId, 2, isCommentTrigger);
   }
   const result = await withGroup("Running Skyramp Testbot", async () => {
     const localDiffPath = path10.join(workingDir, ".skyramp_git_diff");
     fs13.copyFileSync(paths.gitDiffPath, localDiffPath);
     const prompt = buildPrompt({
-      prTitle: context2.payload.pull_request?.title ?? "",
-      prBody: context2.payload.pull_request?.body ?? "",
-      baseBranch: context2.payload.pull_request?.base?.ref ?? "",
-      prNumber,
+      prTitle,
+      prBody,
+      baseBranch,
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
       authToken,
       repositoryPath: workingDir,
-      services: config.services
+      services: config.services,
+      userPrompt,
+      prNumber
     });
     const useDebugLog = agent.supportsNdjsonLog && config.enableDebug;
     debug2(`Agent command: ${agentCmd.command} ${agentCmd.args.join(" ")}`);
@@ -100675,7 +100776,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     }
     return agentResult;
   });
-  const { summary: summary2, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed);
+  const { summary: summary2, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed, userPrompt || void 0);
   parseMetrics(summary2);
   if (reportCommitMessage) {
     let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").trim();
@@ -100708,7 +100809,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     await withGroup("Posting final PR comment", async () => {
       let posted = false;
       if (progressCommentId) {
-        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath);
+        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath, isCommentTrigger);
         if (posted) {
           notice("Progress comment updated with final report");
         } else {
@@ -100726,9 +100827,11 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   }
   let commitSha = "";
   if (config.autoCommit) {
+    config.prHeadRef = prHeadRef;
     await configureGitIdentity(botName, botEmail);
     commitSha = await autoCommit(config);
   }
+  const actionFailed = !result.success && !!commitSha;
   if (!result.success) {
     if (commitSha) {
       setFailed(`Skyramp Testbot failed with exit code ${result.exitCode}`);
@@ -100736,8 +100839,22 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
       warning(`Skyramp Testbot exited with code ${result.exitCode} but produced no file changes \u2014 treating as successful`);
     }
   }
+  if (checkRunId) {
+    try {
+      const octokit = getOctokit(githubToken);
+      await octokit.rest.checks.update({
+        ...context2.repo,
+        check_run_id: checkRunId,
+        status: "completed",
+        conclusion: actionFailed ? "failure" : "success",
+        completed_at: (/* @__PURE__ */ new Date()).toISOString()
+      });
+    } catch (err) {
+      warning(`Failed to update check run: ${err}`);
+    }
+  }
 }
-run().catch((err) => {
+run().catch(async (err) => {
   setFailed(err instanceof Error ? err.message : String(err));
 });
 /*! Bundled license information:
