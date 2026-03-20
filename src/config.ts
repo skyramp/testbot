@@ -48,15 +48,15 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
           language: svc.language,
           framework: svc.framework,
           baseUrl: svc.api?.baseUrl,
-          outputDir: svc.outputDir,
+          testDirectory: svc.testDirectory,
         })
       }
 
       // Use first service for operational defaults when workflow inputs are empty.
       const first = (wsConfig.services ?? [])[0]
       if (first) {
-        if (!testDirectory && first.outputDir) {
-          testDirectory = first.outputDir
+        if (!testDirectory && first.testDirectory) {
+          testDirectory = first.testDirectory
         }
         if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
           targetSetupCommand = first.runtimeDetails.serverStartCommand

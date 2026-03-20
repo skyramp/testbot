@@ -27130,13 +27130,13 @@ async function loadConfig(inputs) {
           language: svc.language,
           framework: svc.framework,
           baseUrl: svc.api?.baseUrl,
-          outputDir: svc.outputDir
+          testDirectory: svc.testDirectory
         });
       }
       const first = (wsConfig.services ?? [])[0];
       if (first) {
-        if (!testDirectory && first.outputDir) {
-          testDirectory = first.outputDir;
+        if (!testDirectory && first.testDirectory) {
+          testDirectory = first.testDirectory;
         }
         if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
           targetSetupCommand = first.runtimeDetails.serverStartCommand;

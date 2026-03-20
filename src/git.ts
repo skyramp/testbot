@@ -52,10 +52,10 @@ export async function configureGitIdentity(botName: string, botEmail: string): P
 export async function autoCommit(config: ResolvedConfig): Promise<string> {
   core.startGroup('Auto-committing test changes')
 
-  // Collect all directories to stage: per-service outputDirs + fallback testDirectory
+  // Collect all directories to stage: per-service testDirectories + fallback testDirectory
   const dirs = new Set<string>()
   for (const svc of config.services) {
-    if (svc.outputDir) dirs.add(svc.outputDir)
+    if (svc.testDirectory) dirs.add(svc.testDirectory)
   }
   if (dirs.size === 0) dirs.add(config.testDirectory)
 

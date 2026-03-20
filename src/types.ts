@@ -49,7 +49,7 @@ export interface WorkspaceServiceInfo {
   language?: string
   framework?: string
   baseUrl?: string
-  outputDir?: string
+  testDirectory?: string
 }
 
 /** Configuration resolved from .skyramp/workspace.yml merged with action inputs. */

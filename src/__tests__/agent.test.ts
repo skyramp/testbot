@@ -74,14 +74,14 @@ describe('buildPrompt', () => {
           language: 'python',
           framework: 'pytest',
           baseUrl: 'http://localhost:8000',
-          outputDir: 'tests/python',
+          testDirectory: 'tests/python',
         },
         {
           serviceName: 'frontend',
           language: 'typescript',
           framework: 'playwright',
           baseUrl: 'http://localhost:3000',
-          outputDir: 'tests/e2e',
+          testDirectory: 'tests/e2e',
         },
       ],
     })

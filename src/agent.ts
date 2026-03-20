@@ -91,7 +91,7 @@ function buildServiceContext(services: WorkspaceServiceInfo[]): string {
     if (svc.language) parts.push(`  <language>${svc.language}</language>`)
     if (svc.framework) parts.push(`  <framework>${svc.framework}</framework>`)
     if (svc.baseUrl) parts.push(`  <base_url>${svc.baseUrl}</base_url>`)
-    if (svc.outputDir) parts.push(`  <output_dir>${svc.outputDir}</output_dir>`)
+    if (svc.testDirectory) parts.push(`  <output_dir>${svc.testDirectory}</output_dir>`)
     parts.push('</service>')
     return parts.join('\n')
   })
