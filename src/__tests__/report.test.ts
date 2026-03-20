@@ -65,11 +65,10 @@ describe('renderReport', () => {
   it('renders a full report with ### headings by default', () => {
     const md = renderReport(validReport)
 
-    expect(md).toContain('### 📋 Business Case Analysis')
-    expect(md).toContain('Tests cover the checkout flow.')
+    expect(md).toContain('> Tests cover the checkout flow.')
 
-    expect(md).toContain('### 💡 New Tests Created')
-    expect(md).toContain('| contract | POST /orders | test_orders.py |')
+    expect(md).toContain('### 💡 Test Recommendations Implemented')
+    expect(md).toContain('- **contract** — `POST /orders`: `test_orders.py`')
 
     expect(md).toContain('### ✅ Test Maintenance')
     expect(md).toContain('- Updated auth header in existing tests')
@@ -89,8 +88,8 @@ describe('renderReport', () => {
     const md = renderReport(validReport, { collapsed: true })
 
     expect(md).toContain('<details>')
-    expect(md).toContain('<summary>📋 Business Case Analysis</summary>')
-    expect(md).toContain('<summary>💡 New Tests Created</summary>')
+    expect(md).toContain('> Tests cover the checkout flow.')
+    expect(md).toContain('<summary>💡 Test Recommendations Implemented</summary>')
     expect(md).toContain('<summary>🧪 Test Results</summary>')
     expect(md).toContain('<summary>⚠️ Issues Found</summary>')
     expect(md).toContain('</details>')
@@ -109,9 +108,9 @@ describe('renderReport', () => {
     }
     const md = renderReport(minimal)
 
-    expect(md).toContain('### 📋 Business Case Analysis')
+    expect(md).toContain('> ')
     expect(md).toContain('### 🧪 Test Results')
-    expect(md).not.toContain('💡 New Tests Created')
+    expect(md).not.toContain('💡 Test Recommendations Implemented')
     // Test Maintenance always shows (with "No existing..." message when empty)
     expect(md).toContain('✅ Test Maintenance')
     expect(md).toContain('No existing Skyramp tests required maintenance for this PR.')
@@ -128,7 +127,7 @@ describe('renderReport', () => {
     }
     const md = renderReport(report)
 
-    expect(md).toContain('### 📋 Business Case Analysis')
+    expect(md).toContain('> ')
     // Test Results always shows (with empty table)
     expect(md).toContain('🧪 Test Results')
     expect(md).toContain('| Test Type | Endpoint | Status | Details |')
@@ -254,7 +253,7 @@ describe('readSummary', () => {
 
     const result = readSummary(paths)
     expect(result.commitMessage).toBe('add tests for /products endpoint')
-    expect(result.summary).toContain('### 📋 Business Case Analysis')
+    expect(result.summary).toContain('> Tests cover the checkout flow.')
     expect(result.summary).not.toContain('<details>')
     expect(result.summary).not.toContain('**Summary:**')
   })
@@ -267,7 +266,7 @@ describe('readSummary', () => {
     expect(result.commitMessage).toBe('add tests for /products endpoint')
     expect(result.summary).toContain('**Summary:** add tests for /products endpoint')
     expect(result.summary).toContain('<details>')
-    expect(result.summary).toContain('<summary>📋 Business Case Analysis</summary>')
+    expect(result.summary).toContain('> Tests cover the checkout flow.')
   })
 
   it('returns undefined commitMessage for raw (non-JSON) summary', () => {
@@ -283,7 +282,7 @@ describe('readSummary', () => {
 
     const result = readSummary(paths)
     expect(result.commitMessage).toBeUndefined()
-    expect(result.summary).toContain('Business Case Analysis')
+    expect(result.summary).toContain('> Tests cover the checkout flow.')
   })
 
   it('returns default commitMessage from report', () => {
@@ -292,7 +291,7 @@ describe('readSummary', () => {
 
     const result = readSummary(paths)
     expect(result.commitMessage).toBe('Added recommendations by Skyramp Testbot.')
-    expect(result.summary).toContain('Business Case Analysis')
+    expect(result.summary).toContain('> Tests cover the checkout flow.')
   })
 
   it('returns undefined commitMessage when no summary file exists', () => {
@@ -318,5 +317,90 @@ describe('parseMetrics', () => {
   it('handles empty string', () => {
     const metrics = parseMetrics('')
     expect(metrics).toEqual({ modified: 0, created: 0, executed: 0 })
+  })
+})
+
+describe('Business Case Analysis rendering', () => {
+  it('renders BCA as a blockquote', () => {
+    const md = renderReport(validReport)
+    expect(md).toContain('> Tests cover the checkout flow.')
+  })
+
+  it('does not render BCA as a collapsible section', () => {
+    const md = renderReport(validReport)
+    expect(md).not.toContain('📋 Business Case Analysis')
+  })
+})
+
+describe('Next Steps section', () => {
+  it('renders agent-provided nextSteps', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      nextSteps: ['Check your target_setup_command — endpoints returned 404'],
+    }
+    const md = renderReport(report)
+    expect(md).toContain('### 💡 Next Steps')
+    expect(md).toContain('- Check your target_setup_command — endpoints returned 404')
+  })
+
+  it('renders "review commit" when autoCommit is true and no issues', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      issuesFound: [],
+    }
+    const md = renderReport(report, { autoCommit: true })
+    expect(md).toContain('### 💡 Next Steps')
+    expect(md).toContain('- Review the commit made by Skyramp Testbot.')
+  })
+
+  it('suggests enabling auto_commit when autoCommit is false', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      issuesFound: [],
+    }
+    const md = renderReport(report)
+    expect(md).toContain('### 💡 Next Steps')
+    expect(md).toContain('Enable `auto_commit: true`')
+  })
+
+  it('does not render "review commit" when there are issues', () => {
+    const md = renderReport(validReport, { autoCommit: true })
+    // validReport has issuesFound, so no auto "review commit"
+    expect(md).not.toContain('Review the commit')
+  })
+
+  it('renders agent nextSteps even when autoCommit is true (no duplicate review message)', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      nextSteps: ['Check your target_setup_command'],
+      issuesFound: [],
+    }
+    const md = renderReport(report, { autoCommit: true })
+    expect(md).toContain('- Check your target_setup_command')
+    // Agent provided steps, so no auto "review commit" message
+    expect(md).not.toContain('Review the commit')
+  })
+
+  it('does not render next steps when no tests and autoCommit is true', () => {
+    const report: TestbotReport = {
+      businessCaseAnalysis: 'Setup PR.',
+      newTestsCreated: [],
+      testMaintenance: [],
+      testResults: [],
+      issuesFound: [],
+    }
+    const md = renderReport(report, { autoCommit: true })
+    expect(md).not.toContain('Next Steps')
+  })
+
+  it('is always rendered as ### heading, not collapsible', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      nextSteps: ['Some step'],
+    }
+    const md = renderReport(report, { collapsed: true })
+    // Even in collapsed mode, Next Steps uses ### heading, not <details>
+    expect(md).toContain('### 💡 Next Steps')
+    expect(md).not.toContain('<summary>💡 Next Steps</summary>')
   })
 })

@@ -39,9 +39,14 @@ describe('generateProgressBody', () => {
     expect(body).toContain('[x] Generating report')
   })
 
-  it('appends report content when provided', () => {
+  it('replaces checklist with report content when provided', () => {
     const body = generateProgressBody(3, '### Test Report\nAll passed.')
     expect(body).toContain('### Test Report\nAll passed.')
+    expect(body).toContain('workflow run')
+    // Checklist should be gone
+    expect(body).not.toContain('Analyzing')
+    expect(body).not.toContain('Running tests')
+    expect(body).not.toContain('Generating report')
   })
 
   it('does not append anything when reportContent is undefined', () => {

@@ -131,6 +131,7 @@ export interface TestbotReport {
     frontendTrace?: string
   }[]
   issuesFound: { description: string }[]
+  nextSteps?: string[]
   commitMessage?: string
 }
 

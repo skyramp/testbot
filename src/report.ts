@@ -38,6 +38,8 @@ interface RenderOptions {
   collapsed?: boolean
   /** When set, indicates this run was triggered by a @skyramp-testbot comment */
   userPrompt?: string
+  /** When true, testbot auto-committed test changes */
+  autoCommit?: boolean
 }
 
 /**
@@ -46,7 +48,7 @@ interface RenderOptions {
  * and an optional commitMessage is rendered as a non-collapsed summary at the top.
  */
 export function renderReport(report: TestbotReport, options: RenderOptions = {}): string {
-  const { commitMessage, collapsed = false, userPrompt } = options
+  const { commitMessage, collapsed = false, userPrompt, autoCommit = false } = options
   const lines: string[] = []
 
   // Marker for identifying testbot comments
@@ -64,6 +66,14 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     lines.push('')
     for (const issue of report.issuesFound) {
       lines.push(issue.description)
+    }
+    if (report.nextSteps && report.nextSteps.length > 0) {
+      lines.push('')
+      lines.push('### 💡 Next Steps')
+      lines.push('')
+      for (const step of report.nextSteps) {
+        lines.push(`- ${step}`)
+      }
     }
     return lines.join('\n')
   }
@@ -100,19 +110,20 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     lines.push('')
   }
 
-  // Business Case Analysis (always present)
-  sectionStart('📋 Business Case Analysis')
-  lines.push(report.businessCaseAnalysis)
-  sectionEnd()
+  // Business Case Analysis — rendered as a blockquote headline
+  for (const bcaLine of report.businessCaseAnalysis.split(/\r?\n/)) {
+    lines.push(`> ${bcaLine}`)
+  }
+  lines.push('')
 
-  // New Tests Created (omit if empty)
+  // Test Recommendations Implemented (omit if empty)
   if (report.newTestsCreated.length > 0) {
-    sectionStart('💡 New Tests Created')
-    lines.push('| Test Type | Endpoint | Description |')
-    lines.push('|-----------|----------|-------------|')
+    sectionStart('💡 Test Recommendations Implemented')
     for (const t of report.newTestsCreated) {
-      const desc = escapeCell(t.description ?? t.fileName)
-      lines.push(`| ${t.testType} | ${escapeCell(t.endpoint)} | ${desc} |`)
+      const endpoint = t.endpoint ? ` — \`${t.endpoint}\`` : ''
+      const desc = t.description ? `: ${t.description}` : ''
+      const file = t.fileName ? (t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\``) : ''
+      lines.push(`- **${t.testType}**${endpoint}${desc}${file}`)
     }
     sectionEnd()
   }
@@ -190,6 +201,26 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     sectionEnd()
   }
 
+  // Next Steps — always rendered open (not collapsible)
+  const steps: string[] = [...(report.nextSteps ?? [])]
+  const hasIssues = report.issuesFound.length > 0
+  const hasTests = report.newTestsCreated.length > 0 || report.testMaintenance.length > 0 || report.testResults.length > 0
+  if (hasTests && !hasIssues && steps.length === 0) {
+    if (autoCommit) {
+      steps.push('Review the commit made by Skyramp Testbot.')
+    } else {
+      steps.push('Enable `auto_commit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.')
+    }
+  }
+  if (steps.length > 0) {
+    lines.push('### 💡 Next Steps')
+    lines.push('')
+    for (const step of steps) {
+      lines.push(`- ${step}`)
+    }
+    lines.push('')
+  }
+
   return lines.join('\n')
 }
 
@@ -199,7 +230,7 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
  * the standard markdown format. Otherwise uses the raw content as-is.
  * Writes the final report to combinedResultPath for PR comment posting.
  */
- export function readSummary(paths: Paths, reportCollapsed = false, userPrompt?: string): { summary: string; commitMessage?: string } {
+ export function readSummary(paths: Paths, reportCollapsed = false, userPrompt?: string, autoCommit = false): { summary: string; commitMessage?: string } {
   core.startGroup('Reading test summary')
 
   const src = resolveSummarySource(paths)
@@ -211,7 +242,7 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     const report = tryParseReport(raw)
     if (report) {
       core.notice('Testbot report parsed from JSON')
-      summary = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt })
+      summary = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt, autoCommit })
       commitMessage = report.commitMessage
     } else {
 

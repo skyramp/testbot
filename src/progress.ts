@@ -18,19 +18,20 @@ export function generateProgressBody(step: number, reportContent?: string, isCom
   const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${github.context.runId}`
   const step1Label = isCommentTrigger ? 'Analyzing user request' : 'Analyzing Pull Request'
 
-  let body = `<!-- skyramp-testbot -->
+  // When the final report is ready, replace the progress checklist with just the report
+  if (reportContent) {
+    // Strip the marker if renderReport already included it to avoid duplicates
+    const content = reportContent.replace(/^\s*<!--\s*skyramp-testbot\s*-->\s*\n?/, '')
+    return `<!-- skyramp-testbot -->\n([workflow run](${runUrl}))\n\n${content}`
+  }
+
+  return `<!-- skyramp-testbot -->
 ### Skyramp Testbot Plan
 Reviewing the Pull Request for test recommendations. ([workflow run](${runUrl}))
 
 - ${check1} ${step1Label}
 - ${check2} Running tests
 - ${check3} Generating report`
-
-  if (reportContent) {
-    body += `\n\n${reportContent}`
-  }
-
-  return body
 }
 
 function getOctokit() {
