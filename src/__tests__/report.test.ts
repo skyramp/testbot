@@ -68,7 +68,7 @@ describe('renderReport', () => {
     expect(md).toContain('> Tests cover the checkout flow.')
 
     expect(md).toContain('### 💡 Test Recommendations Implemented')
-    expect(md).toContain('- **contract** — `POST /orders`: `test_orders.py`')
+    expect(md).toContain('- contract — `POST /orders`: `test_orders.py`')
 
     expect(md).toContain('### ✅ Test Maintenance')
     expect(md).toContain('- Updated auth header in existing tests')

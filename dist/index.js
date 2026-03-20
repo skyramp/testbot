@@ -100242,9 +100242,20 @@ async function autoCommit(config) {
     notice("No test file changes to commit");
     setOutput("commit_sha", "");
     endGroup();
-    return "";
+    return { sha: "", hasChanges: false };
   }
-  await exec2("git", ["commit", "-m", config.commitMessage]);
+  const { exitCode: commitExitCode, stdout: commitStdout, stderr: commitStderr } = await exec2(
+    "git",
+    ["commit", "-m", config.commitMessage],
+    { ignoreReturnCode: true }
+  );
+  if (commitExitCode !== 0) {
+    const errorOutput = commitStderr.trim() || commitStdout.trim() || `git commit exited with code ${commitExitCode}`;
+    warning(`git commit failed (exit code ${commitExitCode})`);
+    setOutput("commit_sha", "");
+    endGroup();
+    return { sha: "", hasChanges: true, commitError: errorOutput };
+  }
   const { stdout } = await exec2("git", ["rev-parse", "HEAD"], { silent: true });
   const sha = stdout.trim();
   const headRef = context2.payload.pull_request?.head?.ref || config.prHeadRef;
@@ -100258,7 +100269,7 @@ async function autoCommit(config) {
   notice(`Committed and pushed test changes (${sha})`);
   setOutput("commit_sha", sha);
   endGroup();
-  return sha;
+  return { sha, hasChanges: true };
 }
 
 // src/report.ts
@@ -100339,7 +100350,7 @@ function renderReport(report, options = {}) {
       const endpoint2 = t.endpoint ? ` \u2014 \`${t.endpoint}\`` : "";
       const desc = t.description ? `: ${t.description}` : "";
       const file = t.fileName ? t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\`` : "";
-      lines.push(`- **${t.testType}**${endpoint2}${desc}${file}`);
+      lines.push(`- ${t.testType}${endpoint2}${desc}${file}`);
     }
     sectionEnd();
   }
@@ -100348,21 +100359,16 @@ function renderReport(report, options = {}) {
     const count = recs.length;
     const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
     const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
-    lines.push("");
-    lines.push("<details>");
-    lines.push(`<summary><strong>\u{1F4CC} Additional Recommendations (${count})</strong></summary>`);
-    lines.push("");
+    sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
     lines.push("To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).");
     lines.push("");
     for (const rec of sorted) {
       const priority = rec.priority === "high" ? "HIGH" : rec.priority === "medium" ? "MEDIUM" : "LOW";
       const endpoint2 = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path ? `\`${rec.steps[0].method} ${rec.steps[0].path}\`` : "";
       const endpointSuffix = endpoint2 ? ` \u2014 ${endpoint2}` : "";
-      lines.push(`- **${rec.testType}** (${priority})${endpointSuffix}: ${rec.description}`);
+      lines.push(`- ${rec.testType} (${priority})${endpointSuffix}: ${rec.description}`);
     }
-    lines.push("");
-    lines.push("</details>");
-    lines.push("");
+    sectionEnd();
   }
   sectionStart("\u2705 Test Maintenance");
   if (report.testMaintenance.length > 0) {
@@ -100429,12 +100435,16 @@ function readSummary(paths, reportCollapsed = false, userPrompt, autoCommit2 = f
   const src = resolveSummarySource(paths);
   let summary2;
   let commitMessage;
+  let report;
+  let renderOptions = {};
   if (src) {
     const raw = fs12.readFileSync(src, "utf-8");
-    const report = tryParseReport(raw);
-    if (report) {
+    const parsed = tryParseReport(raw);
+    if (parsed) {
       notice("Testbot report parsed from JSON");
-      summary2 = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt, autoCommit: autoCommit2 });
+      report = parsed;
+      renderOptions = { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt, autoCommit: autoCommit2 };
+      summary2 = renderReport(report, renderOptions);
       commitMessage = report.commitMessage;
     } else {
       info("Summary is not JSON \u2014 using raw content");
@@ -100448,7 +100458,7 @@ function readSummary(paths, reportCollapsed = false, userPrompt, autoCommit2 = f
   }
   setOutput("test_summary", summary2);
   endGroup();
-  return { summary: summary2, commitMessage };
+  return { summary: summary2, commitMessage, report, renderOptions };
 }
 function parseMetrics(summary2) {
   startGroup("Parsing summary metrics");
@@ -100805,7 +100815,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     }
     return agentResult;
   });
-  const { summary: summary2, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed, userPrompt || void 0, config.autoCommit);
+  const { summary: summary2, commitMessage: reportCommitMessage, report, renderOptions } = readSummary(paths, config.reportCollapsed, userPrompt || void 0, config.autoCommit);
   parseMetrics(summary2);
   if (reportCommitMessage) {
     let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").trim();
@@ -100822,6 +100832,29 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   debug2(`Agent log file exists: ${fs13.existsSync(paths.agentLogPath)}`);
   debug2(`Agent stdout file exists: ${fs13.existsSync(paths.agentStdoutPath)}`);
   debug2(`Combined result file exists: ${fs13.existsSync(paths.combinedResultPath)}`);
+  let commitHasChanges = false;
+  if (config.autoCommit) {
+    config.prHeadRef = prHeadRef;
+    await configureGitIdentity(botName, botEmail);
+    const commitResult = await autoCommit(config);
+    commitHasChanges = commitResult.hasChanges;
+    if (commitResult.commitError) {
+      const isHookFailure = /hook/i.test(commitResult.commitError);
+      const issueDescription = isHookFailure ? `Git pre-commit hook blocked the test commit. Error: \`${commitResult.commitError.split("\n")[0]}\`. Install the missing tool(s) in your testbot workflow (as a step before the Skyramp Testbot action), or configure \`auto_commit: false\` and commit manually.` : `Failed to commit generated tests. Error: \`${commitResult.commitError.split("\n")[0]}\`. Check your repository's git hooks or testbot workflow configuration.`;
+      if (report) {
+        report.issuesFound.push({ description: issueDescription });
+        const reRendered = renderReport(report, renderOptions);
+        fs13.writeFileSync(paths.combinedResultPath, reRendered);
+        setOutput("test_summary", reRendered);
+      } else if (fs13.existsSync(paths.combinedResultPath)) {
+        fs13.appendFileSync(paths.combinedResultPath, `
+
+**\u26A0\uFE0F ${issueDescription}**
+`);
+      }
+      warning(`Auto-commit failed: ${commitResult.commitError}`);
+    }
+  }
   try {
     const artifact = new DefaultArtifactClient();
     const reportFiles = [paths.summaryPath, paths.combinedResultPath, paths.agentStdoutPath].filter((f) => fs13.existsSync(f));
@@ -100854,15 +100887,9 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
       }
     });
   }
-  let commitSha = "";
-  if (config.autoCommit) {
-    config.prHeadRef = prHeadRef;
-    await configureGitIdentity(botName, botEmail);
-    commitSha = await autoCommit(config);
-  }
-  const actionFailed = !result.success && !!commitSha;
+  const actionFailed = !result.success && commitHasChanges;
   if (!result.success) {
-    if (commitSha) {
+    if (commitHasChanges) {
       setFailed(`Skyramp Testbot failed with exit code ${result.exitCode}`);
     } else {
       warning(`Skyramp Testbot exited with code ${result.exitCode} but produced no file changes \u2014 treating as successful`);

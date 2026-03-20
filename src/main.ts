@@ -13,7 +13,7 @@ import { installMcp, configureMcp } from './mcp'
 import { installAgentCli, initializeAgent, buildAgentCommand, buildPrompt, runAgentWithRetry } from './agent'
 import { startServices, exportServiceBaseUrlEnvVars, generateAuthToken } from './services'
 import { generateGitDiff, configureGitIdentity, autoCommit } from './git'
-import { readSummary, parseMetrics } from './report'
+import { readSummary, renderReport, parseMetrics } from './report'
 import { exec, withRetry, withGroup, setDebugEnabled, debug } from './utils'
 
 async function run(): Promise<void> {
@@ -426,7 +426,7 @@ async function run(): Promise<void> {
   })
 
   // ── 17. Read summary & parse metrics ───────────────────────────────
-  const { summary, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed, userPrompt || undefined, config.autoCommit)
+  const { summary, commitMessage: reportCommitMessage, report, renderOptions } = readSummary(paths, config.reportCollapsed, userPrompt || undefined, config.autoCommit)
   parseMetrics(summary)
 
   // Use agent-provided commit message if available (keeps user input as fallback)
@@ -449,7 +449,35 @@ async function run(): Promise<void> {
   debug(`Agent stdout file exists: ${fs.existsSync(paths.agentStdoutPath)}`)
   debug(`Combined result file exists: ${fs.existsSync(paths.combinedResultPath)}`)
 
-  // ── 18. Upload artifacts ─────────────────────────────────────────
+  // ── 18. Auto-commit test changes ───────────────────────────────────
+  // Run before PR comment so commit errors can be included in the report.
+  let commitHasChanges = false
+  if (config.autoCommit) {
+    config.prHeadRef = prHeadRef
+    await configureGitIdentity(botName, botEmail)
+    const commitResult = await autoCommit(config)
+    commitHasChanges = commitResult.hasChanges
+
+    // If commit failed (e.g. pre-commit hook), inject error into Issues Found and re-render
+    if (commitResult.commitError) {
+      const isHookFailure = /hook/i.test(commitResult.commitError)
+      const issueDescription = isHookFailure
+        ? `Git pre-commit hook blocked the test commit. Error: \`${commitResult.commitError.split('\n')[0]}\`. Install the missing tool(s) in your testbot workflow (as a step before the Skyramp Testbot action), or configure \`auto_commit: false\` and commit manually.`
+        : `Failed to commit generated tests. Error: \`${commitResult.commitError.split('\n')[0]}\`. Check your repository's git hooks or testbot workflow configuration.`
+
+      if (report) {
+        report.issuesFound.push({ description: issueDescription })
+        const reRendered = renderReport(report, renderOptions)
+        fs.writeFileSync(paths.combinedResultPath, reRendered)
+        core.setOutput('test_summary', reRendered)
+      } else if (fs.existsSync(paths.combinedResultPath)) {
+        fs.appendFileSync(paths.combinedResultPath, `\n\n**⚠️ ${issueDescription}**\n`)
+      }
+      core.warning(`Auto-commit failed: ${commitResult.commitError}`)
+    }
+  }
+
+  // ── 19. Upload artifacts ─────────────────────────────────────────
   try {
     const artifact = new DefaultArtifactClient()
 
@@ -468,7 +496,7 @@ async function run(): Promise<void> {
     core.warning(`Failed to upload artifacts: ${err}`)
   }
 
-  // ── 19. Post final PR comment ──────────────────────────────────────
+  // ── 20. Post final PR comment ──────────────────────────────────────
   if (config.postPrComment && prNumber) {
     await withGroup('Posting final PR comment', async () => {
       let posted = false
@@ -490,20 +518,13 @@ async function run(): Promise<void> {
     })
   }
 
-  // ── 20. Auto-commit test changes ───────────────────────────────────
-  let commitSha = ''
-  if (config.autoCommit) {
-    config.prHeadRef = prHeadRef
-    await configureGitIdentity(botName, botEmail)
-    commitSha = await autoCommit(config)
-  }
-
   // If the testbot agent failed AND it produced file changes, fail the action.
   // When there are no changes to commit (e.g. setup PR, no testable code),
   // treat it as a graceful no-op so the workflow check stays green.
-  const actionFailed = !result.success && !!commitSha
+  // Use commitHasChanges (not commitSha) because a hook failure leaves sha empty but changes exist.
+  const actionFailed = !result.success && commitHasChanges
   if (!result.success) {
-    if (commitSha) {
+    if (commitHasChanges) {
       core.setFailed(`Skyramp Testbot failed with exit code ${result.exitCode}`)
     } else {
       core.warning(`Skyramp Testbot exited with code ${result.exitCode} but produced no file changes — treating as successful`)

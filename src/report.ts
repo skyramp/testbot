@@ -123,7 +123,7 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
       const endpoint = t.endpoint ? ` — \`${t.endpoint}\`` : ''
       const desc = t.description ? `: ${t.description}` : ''
       const file = t.fileName ? (t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\``) : ''
-      lines.push(`- **${t.testType}**${endpoint}${desc}${file}`)
+      lines.push(`- ${t.testType}${endpoint}${desc}${file}`)
     }
     sectionEnd()
   }
@@ -136,10 +136,7 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     const priorityOrder = (p: string) => p === 'high' ? 0 : p === 'medium' ? 1 : 2
     const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority))
 
-    lines.push('')
-    lines.push('<details>')
-    lines.push(`<summary><strong>📌 Additional Recommendations (${count})</strong></summary>`)
-    lines.push('')
+    sectionStart(`📌 Additional Recommendations (${count})`)
     lines.push('To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).')
     lines.push('')
     for (const rec of sorted) {
@@ -148,11 +145,9 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
         ? `\`${rec.steps[0].method} ${rec.steps[0].path}\``
         : ''
       const endpointSuffix = endpoint ? ` — ${endpoint}` : ''
-      lines.push(`- **${rec.testType}** (${priority})${endpointSuffix}: ${rec.description}`)
+      lines.push(`- ${rec.testType} (${priority})${endpointSuffix}: ${rec.description}`)
     }
-    lines.push('')
-    lines.push('</details>')
-    lines.push('')
+    sectionEnd()
   }
 
   // Test Maintenance (always show)
@@ -230,19 +225,31 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
  * the standard markdown format. Otherwise uses the raw content as-is.
  * Writes the final report to combinedResultPath for PR comment posting.
  */
- export function readSummary(paths: Paths, reportCollapsed = false, userPrompt?: string, autoCommit = false): { summary: string; commitMessage?: string } {
+export interface ReadSummaryResult {
+  summary: string
+  commitMessage?: string
+  /** Parsed report object, if the summary was valid JSON. Available for post-hoc mutation + re-render. */
+  report?: TestbotReport
+  renderOptions: RenderOptions
+}
+
+ export function readSummary(paths: Paths, reportCollapsed = false, userPrompt?: string, autoCommit = false): ReadSummaryResult {
   core.startGroup('Reading test summary')
 
   const src = resolveSummarySource(paths)
   let summary: string
   let commitMessage: string | undefined
+  let report: TestbotReport | undefined
+  let renderOptions: RenderOptions = {}
 
   if (src) {
     const raw = fs.readFileSync(src, 'utf-8')
-    const report = tryParseReport(raw)
-    if (report) {
+    const parsed = tryParseReport(raw)
+    if (parsed) {
       core.notice('Testbot report parsed from JSON')
-      summary = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt, autoCommit })
+      report = parsed
+      renderOptions = { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt, autoCommit }
+      summary = renderReport(report, renderOptions)
       commitMessage = report.commitMessage
     } else {
 
@@ -258,7 +265,7 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
 
   core.setOutput('test_summary', summary)
   core.endGroup()
-  return { summary, commitMessage }
+  return { summary, commitMessage, report, renderOptions }
 }
 
 /**

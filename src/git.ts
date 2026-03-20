@@ -44,12 +44,21 @@ export async function configureGitIdentity(botName: string, botEmail: string): P
   core.endGroup()
 }
 
+export interface AutoCommitResult {
+  /** Commit SHA if a commit was made, empty string otherwise. */
+  sha: string
+  /** Whether test file changes were detected (staged). */
+  hasChanges: boolean
+  /** Set when git commit fails (e.g. pre-commit hook). Contains the error message. */
+  commitError?: string
+}
+
 /**
  * Auto-commit test changes matching the file pattern.
- * Returns the commit SHA if a commit was made, or empty string if nothing to commit.
+ * Returns a result indicating what happened: no changes, committed, or commit failed.
  * Assumes configureGitIdentity() has already been called.
  */
-export async function autoCommit(config: ResolvedConfig): Promise<string> {
+export async function autoCommit(config: ResolvedConfig): Promise<AutoCommitResult> {
   core.startGroup('Auto-committing test changes')
 
   // Collect all directories to stage: per-service testDirectories + fallback testDirectory
@@ -80,11 +89,23 @@ export async function autoCommit(config: ResolvedConfig): Promise<string> {
     core.notice('No test file changes to commit')
     core.setOutput('commit_sha', '')
     core.endGroup()
-    return ''
+    return { sha: '', hasChanges: false }
   }
 
   // Commit (uses git config user.name/user.email set by configureGitIdentity)
-  await exec('git', ['commit', '-m', config.commitMessage])
+  const { exitCode: commitExitCode, stdout: commitStdout, stderr: commitStderr } = await exec(
+    'git', ['commit', '-m', config.commitMessage],
+    { ignoreReturnCode: true }
+  )
+
+  if (commitExitCode !== 0) {
+    // Hook output may go to stdout (e.g. lint-staged, gitleaks) or stderr — use whichever is non-empty
+    const errorOutput = commitStderr.trim() || commitStdout.trim() || `git commit exited with code ${commitExitCode}`
+    core.warning(`git commit failed (exit code ${commitExitCode})`)
+    core.setOutput('commit_sha', '')
+    core.endGroup()
+    return { sha: '', hasChanges: true, commitError: errorOutput }
+  }
 
   // Get the commit SHA
   const { stdout } = await exec('git', ['rev-parse', 'HEAD'], { silent: true })
@@ -108,5 +129,5 @@ export async function autoCommit(config: ResolvedConfig): Promise<string> {
   core.setOutput('commit_sha', sha)
   core.endGroup()
 
-  return sha
+  return { sha, hasChanges: true }
 }
