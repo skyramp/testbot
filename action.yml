@@ -29,7 +29,7 @@ inputs:
 
   # High priority optional inputs
   test_directory:
-    description: 'Directory containing Skyramp tests. Falls back to workspace.yml outputDir, then "tests".'
+    description: 'Directory containing Skyramp tests. Falls back to workspace.yml testDirectory, then "tests".'
     required: false
   target_setup_command:
     description: 'Command to start services before test maintenance. Can optionally emit a JSON object as its last stdout line to override workspace baseUrl at runtime (e.g., {"baseUrl": "http://remote-host:8000"} for single-service, or {"services": {"backend": {"baseUrl": "..."}, "frontend": {"baseUrl": "..."}}} for multi-service). Sets SKYRAMP_TEST_BASE_URL (single) or SKYRAMP_TEST_SERVICE_URL_<NAME> (multi) env vars for test execution.'

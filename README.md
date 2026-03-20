@@ -16,12 +16,22 @@
 
 ## Quick Start
 
-1. Setup your repository with 2 secrets:
+The fastest way to get started is with the **Skyramp Testbot Installer** — a guided wizard that installs the GitHub App, configures secrets, and opens a ready-to-merge setup PR in your repository.
+
+1. Go to [testbot.skyramp.dev](https://testbot.skyramp.dev) and sign in with GitHub.
+2. Install the Skyramp Testbot GitHub App on your organization or personal account.
+3. Select a repository, configure your Skyramp license and AI agent key, and review the generated workflow.
+4. Click **Deploy** — the installer creates a PR with the workflow file and configures your secrets automatically.
+5. Merge the PR, and Testbot will run on every pull request.
+
+### Manual Setup
+
+If you prefer to set things up manually:
+
+1. Add 2 secrets to your repository:
     1. Obtain a [Skyramp](https://skyramp.dev) license key and store it as `SKYRAMP_LICENSE`.
     2. Add an API key for your chosen AI agent (`ANTHROPIC_API_KEY`, `CURSOR_API_KEY`, or `COPILOT_PAT`).
-2. Add this workflow to your repository:
-
-    Cursor version
+2. Add this workflow to your repository (`.github/workflows/skyramp-testbot.yml`):
 
     ```yaml
     name: Skyramp Testbot
@@ -126,7 +136,7 @@ Before using this action, ensure you have:
 ### Basic Usage with Claude Code
 
 ```yaml
-- uses: skyramp/testbot@v0.5.2
+- uses: skyramp/testbot@v0.5.3
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -136,7 +146,7 @@ Before using this action, ensure you have:
 ### Basic Usage with Cursor
 
 ```yaml
-- uses: skyramp/testbot@v0.5.2
+- uses: skyramp/testbot@v0.5.3
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -145,7 +155,7 @@ Before using this action, ensure you have:
 ### Using GitHub Copilot CLI
 
 ```yaml
-- uses: skyramp/testbot@v0.5.2
+- uses: skyramp/testbot@v0.5.3
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     copilot_api_key: ${{ secrets.COPILOT_PAT }}
@@ -154,7 +164,7 @@ Before using this action, ensure you have:
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v0.5.2
+- uses: skyramp/testbot@v0.5.3
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -164,7 +174,7 @@ Before using this action, ensure you have:
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v0.5.2
+- uses: skyramp/testbot@v0.5.3
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -174,7 +184,7 @@ Before using this action, ensure you have:
 ### Custom Test Directory Location
 
 ```yaml
-- uses: skyramp/testbot@v0.5.2
+- uses: skyramp/testbot@v0.5.3
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -201,7 +211,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v0.5.2
+      - uses: skyramp/testbot@v0.5.3
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -212,7 +222,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `auth_token_command` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v0.5.2
+- uses: skyramp/testbot@v0.5.3
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
     cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
@@ -224,7 +234,7 @@ The token is automatically masked in GitHub Actions logs via `::add-mask::`. If 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v0.5.2
+- uses: skyramp/testbot@v0.5.3
   id: skyramp
   with:
     skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
@@ -261,7 +271,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead of GITHUB_TOKEN
 
-      - uses: skyramp/testbot@v0.5.2
+      - uses: skyramp/testbot@v0.5.3
         with:
           skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
           cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
