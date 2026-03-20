@@ -61,21 +61,28 @@ jobs:
 
       - run: npm run build
 
+      - name: Checkout skyramp/testbot for dist push
+        uses: actions/checkout@v4
+        with:
+          repository: skyramp/testbot
+          token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          path: skyramp-testbot
+
       - name: Push dist to eval-dist branch
         id: push
         run: |
           EVAL_REF="eval-dist/${{ github.run_id }}"
+          cp dist/index.js skyramp-testbot/dist/index.js
+          cp dist/post.js skyramp-testbot/dist/post.js
+          cp action.yml skyramp-testbot/action.yml
+          cd skyramp-testbot
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$EVAL_REF"
-          git add -f dist/
-          git diff --cached --quiet \
-            && git commit --allow-empty -m "chore: eval dist [run ${{ github.run_id }}]" \
-            || git commit -m "chore: eval dist [run ${{ github.run_id }}]"
+          git add dist/ action.yml
+          git commit -m "chore: eval dist [run ${{ github.run_id }}]"
           git push origin "$EVAL_REF"
           echo "eval_ref=$EVAL_REF" >> "$GITHUB_OUTPUT"
-        env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
 
   run-matrix:
     name: Run Matrix
@@ -167,18 +174,12 @@ jobs:
             echo "::warning::Eval verdict is FAIL — business case pass rate below 80%"
           fi
 
-  cleanup:
-    name: Delete eval-dist branch
-    needs: [build, aggregate]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    if: always() && needs.build.outputs.eval_ref != ''
-    steps:
       - name: Delete eval-dist branch
+        if: always() && needs.build.outputs.eval_ref != ''
         run: |
           gh api -X DELETE \
-            "repos/${{ github.repository }}/git/refs/heads/${{ needs.build.outputs.eval_ref }}" \
+            "repos/skyramp/testbot/git/refs/heads/${{ needs.build.outputs.eval_ref }}" \
             2>/dev/null && echo "Deleted ${{ needs.build.outputs.eval_ref }}" \
             || echo "Branch already gone or delete failed (ok)"
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}

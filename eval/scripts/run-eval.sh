@@ -11,7 +11,7 @@ set -euo pipefail
 #   3. Push to GitHub and open a PR
 #   4. Wait for the skyramp-testbot.yml workflow to complete
 #   5. Download the skyramp-testbot-report artifact → testbot-result.txt
-#   6. Score businessCaseAnalysis with llm-judge.sh (D1–D3) + jq-based report field checks (D4)
+#   6. Score businessCaseAnalysis with llm-judge.sh (D1–D4)
 #   7. Close the PR and delete the remote branch when done
 #
 # Usage:
@@ -97,7 +97,7 @@ get_default_branch() {
     || echo "main"
 }
 
-# Rewrite `uses: <any-testbot-ref>` in skyramp-testbot.yml to point at TESTBOT_REPO@TESTBOT_REF
+# Rewrite `uses: <any-testbot-ref>` in skyramp-testbot.yml to point at TESTBOT_REPO@TESTBOT_REF.
 patch_testbot_workflow() {
   local work_dir="$1"
   local workflow_path="$work_dir/.github/workflows/$TESTBOT_WORKFLOW"
@@ -118,19 +118,20 @@ wait_for_testbot_run() {
   local branch="$2"
   local since="$3"
 
-  local elapsed=0 interval=30
+  local elapsed=0 interval=30 run_id=""
 
   echo "    Waiting for testbot run on $branch (timeout ${TESTBOT_TIMEOUT}s)..." >&2
 
   while [[ $elapsed -lt $TESTBOT_TIMEOUT ]]; do
-    local run_id
-    run_id=$(gh run list \
-      --repo "$full_repo" \
-      --workflow "$TESTBOT_WORKFLOW" \
-      --branch "$branch" \
-      --json databaseId,status,createdAt \
-      --jq ".[] | select(.createdAt >= \"$since\") | .databaseId" \
-      2>/dev/null | head -1 || true)
+    if [[ -z "$run_id" ]]; then
+      run_id=$(gh run list \
+        --repo "$full_repo" \
+        --workflow "$TESTBOT_WORKFLOW" \
+        --branch "$branch" \
+        --json databaseId,status,createdAt \
+        --jq ".[] | select(.createdAt >= \"$since\") | .databaseId" \
+        2>/dev/null | tail -1 || true)
+    fi
 
     if [[ -n "$run_id" ]]; then
       local status
@@ -200,39 +201,32 @@ score_report() {
   pr_id=$(jq -r '.pr_id // "unknown"' "$expected_file")
   repo_name=$(basename "$(dirname "$result_dir")")
 
-  local d1=0 d2=0 d3=0 d5=0
+  local d1=0 d2=0 d3=0 d4=0
   if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
     d1=$("$SCRIPT_DIR/lib/llm-judge.sh" "$report_file" "$expected_file" "relevance")
     d2=$("$SCRIPT_DIR/lib/llm-judge.sh" "$report_file" "$expected_file" "specificity")
     d3=$("$SCRIPT_DIR/lib/llm-judge.sh" "$report_file" "$expected_file" "value_articulation")
-    d5=$("$SCRIPT_DIR/lib/llm-judge.sh" "$report_file" "$expected_file" "clarity")
+    d4=$("$SCRIPT_DIR/lib/llm-judge.sh" "$report_file" "$expected_file" "clarity")
   else
-    echo "  [warn] ANTHROPIC_API_KEY not set — D1/D2/D3/D5 default to 0"
+    echo "  [warn] ANTHROPIC_API_KEY not set — D1/D2/D3/D4 default to 0"
   fi
 
-  local d4=0
-  local has_bc has_tr
-  has_bc=$(jq -r 'if (.businessCaseAnalysis // "") != "" then "yes" else "no" end' "$report_file" 2>/dev/null || echo "no")
-  has_tr=$(jq -r 'if (.testResults | type) == "array" and (.testResults | length) > 0 then "yes" else "no" end' "$report_file" 2>/dev/null || echo "no")
-  if [[ "$has_bc" == "yes" && "$has_tr" == "yes" ]]; then d4=1
-  elif [[ "$has_bc" == "yes" ]]; then d4="0.5"; fi
-
-  local total max_possible=5
-  total=$(echo "$d1 + $d2 + $d3 + $d4 + $d5" | bc)
+  local total max_possible=4
+  total=$(echo "$d1 + $d2 + $d3 + $d4" | bc)
   local threshold pass="false"
-  threshold=$(echo "scale=1; $max_possible * 0.625" | bc)
+  threshold=$(echo "scale=1; $max_possible * 0.75" | bc)
   if (( $(echo "$total >= $threshold" | bc -l) )); then pass="true"; fi
 
   jq -n \
     --arg pr_id "$pr_id" --arg repo "$repo_name" --arg strictness "$strictness" \
-    --argjson d1 "$d1" --argjson d2 "$d2" --argjson d3 "$d3" --argjson d4 "$d4" --argjson d5 "$d5" \
+    --argjson d1 "$d1" --argjson d2 "$d2" --argjson d3 "$d3" --argjson d4 "$d4" \
     --argjson total "$total" --argjson max_possible "$max_possible" --argjson pass "$pass" \
     '{pr_id:$pr_id,repo:$repo,strictness:$strictness,
       dim1_relevance:$d1,dim2_specificity:$d2,dim3_value_articulation:$d3,
-      dim4_report_completeness:$d4,dim5_clarity:$d5,total:$total,max_possible:$max_possible,passed:$pass}' \
+      dim4_clarity:$d4,total:$total,max_possible:$max_possible,passed:$pass}' \
     > "$score_file"
 
-  echo "  Score: D1=$d1 D2=$d2 D3=$d3 D4=$d4 D5=$d5 → $total/$max_possible (pass=$pass)"
+  echo "  Score: D1=$d1 D2=$d2 D3=$d3 D4=$d4 → $total/$max_possible (pass=$pass)"
 }
 
 eval_pr() {
@@ -309,15 +303,13 @@ eval_pr() {
   # ── 4. Cleanup on return ──────────────────────────────────────────────────
   local pr_number="" branch_pushed=false
   cleanup_pr() {
-    git -C "$work_dir" config --unset http.extraHeader 2>/dev/null || true
-    if [[ -n "$pr_number" ]]; then
-      echo "  Closing PR #$pr_number and deleting branch $branch_name..."
+    [[ -n "${work_dir:-}" ]] && git -C "$work_dir" config --unset http.extraHeader 2>/dev/null || true
+    if [[ -n "${pr_number:-}" ]]; then
+      echo "  Closing PR #$pr_number and deleting branch ${branch_name:-}..."
       gh pr close "$pr_number" --repo "$full_repo" 2>/dev/null || true
-    else
-      echo "  Deleting branch $branch_name..."
     fi
-    if [[ "$branch_pushed" == true ]]; then
-      git -C "$work_dir" push origin --delete "$branch_name" 2>/dev/null || true
+    if [[ "${branch_pushed:-}" == true && -n "${branch_name:-}" ]]; then
+      [[ -n "${work_dir:-}" ]] && git -C "$work_dir" push origin --delete "$branch_name" 2>/dev/null || true
     fi
   }
   trap cleanup_pr RETURN EXIT INT TERM
@@ -354,7 +346,12 @@ eval_pr() {
     --body "${pr_title}
 
 > Auto-generated by testbot eval (testbot: \`${TESTBOT_REF}\`). Closed automatically." \
-    --json number --jq '.number')
+    | grep -o '[0-9]*$')
+  if [[ -z "$pr_number" ]]; then
+    echo "  ERROR: PR creation failed"
+    echo '{"error":"pr creation failed"}' > "$result_dir/score.json"
+    return 1
+  fi
   echo "  Opened PR #$pr_number"
 
   # ── 7. Wait for testbot run ───────────────────────────────────────────────

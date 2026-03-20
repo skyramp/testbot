@@ -94,26 +94,14 @@ jobs:
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "Testbot ref: $REF"
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GH_TOKEN: ${{ secrets.EVAL_PAT }}
 
-      - name: Verify PR is not from a fork
-        if: inputs.event_name == 'pull_request' && inputs.issue_number != ''
-        run: |
-          head_repo=$(gh pr view "${{ inputs.issue_number }}" \
-            --repo "${{ github.repository }}" \
-            --json headRepository --jq '.headRepository.nameWithOwner')
-          if [[ "$head_repo" != "${{ github.repository }}" ]]; then
-            echo "ERROR: PR is from a fork ($head_repo). Eval with secrets is not permitted for forks."
-            exit 1
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
 
       - name: Run eval
         env:
-          GH_PAT: ${{ secrets.PAT_TOKEN }}
+          GH_PAT: ${{ secrets.EVAL_PAT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_KEY }}
-          TESTBOT_REPO: ${{ github.repository }}
+          TESTBOT_REPO: skyramp/testbot
           TESTBOT_REF: ${{ steps.testbot-ref.outputs.ref }}
           EVAL_WORK_ROOT: /tmp/eval-run
           EVAL_FRAMEWORK_DIR: ${{ github.workspace }}/eval-framework

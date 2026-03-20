@@ -23,13 +23,12 @@ Each testbot run produces a `testbot-result.txt` (JSON). The eval scores the `bu
 
 | # | Dimension | Method | Description |
 |:-:|-----------|--------|-------------|
-| D1 | **Relevance** | LLM judge | Does it address the actual PR changes? |
-| D2 | **Specificity** | LLM judge | Are specific endpoint paths or feature names mentioned? |
-| D3 | **Value Articulation** | LLM judge | Does it explain *why* testing these changes matters? |
-| D4 | **Report Completeness** | jq | Are `businessCaseAnalysis` and `testResults` both present and non-empty? |
-| D5 | **Clarity** | LLM judge | Is the business case concise and easy to understand? |
+| D1 | **Relevance** | LLM judge | Does it identify user interactions impacted by the PR and connect them to test coverage needs? |
+| D2 | **Specificity** | LLM judge | Does it cover the full feature as a unit (all related endpoints), not just the newly added ones? |
+| D3 | **Value Articulation** | LLM judge | Does it state the key user actions enabled/protected, without describing what the tests do? |
+| D4 | **Clarity** | LLM judge | Is it concise and focused on user/business value, not test mechanics? |
 
-**Pass threshold per PR:** ≥ 62.5% of dimensions (≥ 3.125 / 5)
+**Pass threshold per PR:** ≥ 75% of dimensions (≥ 3 / 4)
 **Overall verdict:** PASS if ≥ 80% of scored PRs pass
 
 ## Eval Repos
@@ -63,8 +62,8 @@ fork_name: <fork-name>
 
 | Secret | Used for |
 |--------|----------|
-| `PAT_TOKEN` | Clone forked repos, push eval branches, open/close PRs, download artifacts |
-| `ANTHROPIC_KEY` | LLM judge scoring (D1–D3) |
+| `EVAL_PAT` | Clone forked repos, push eval branches, open/close PRs, download artifacts |
+| `ANTHROPIC_KEY` | LLM judge scoring (D1–D4) |
 | `GH_ORG_PRIVATE_PAT` | Checkout letsramp/eval-framework (private) |
 
 Note: Testbot-specific secrets (`SKYRAMP_LICENSE`, `SKYRAMP_TESTBOT_API_KEY`, etc.) are in the **forked repos**, not this repo — the testbot Action running there reads them directly.
@@ -120,7 +119,7 @@ eval/
     aggregate.sh         ← compile results into summary.md
     eval-agent.sh        ← standalone local agent runner (no GitHub PR flow)
     lib/
-      llm-judge.sh       ← LLM-as-judge for D1/D2/D3
+      llm-judge.sh       ← LLM-as-judge for D1–D4
   results/               ← generated at runtime (gitignored)
     summary.md
     <repo>/<pr>/testbot-result.txt

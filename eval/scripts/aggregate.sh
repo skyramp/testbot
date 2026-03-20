@@ -17,16 +17,16 @@ passed_prs=0
 failed_prs=0
 error_prs=0
 
-# Five dimensions: D1 Relevance, D2 Specificity, D3 Value Articulation, D4 Report Completeness, D5 Clarity
-dim_sums=(0 0 0 0 0)
-dim_counts=(0 0 0 0 0)
-dim_names=("Relevance" "Specificity" "Value Articulation" "Report Completeness" "Clarity")
-dim_keys=("dim1_relevance" "dim2_specificity" "dim3_value_articulation" "dim4_report_completeness" "dim5_clarity")
+# Four dimensions: D1 Relevance, D2 Specificity, D3 Value Articulation, D4 Clarity
+dim_sums=(0 0 0 0)
+dim_counts=(0 0 0 0)
+dim_names=("Relevance" "Specificity" "Value Articulation" "Clarity")
+dim_keys=("dim1_relevance" "dim2_specificity" "dim3_value_articulation" "dim4_clarity")
 
 echo "## Results" >> "$output"
 echo "" >> "$output"
-echo "| Repo | PR | D1 Relevance | D2 Specificity | D3 Value | D4 Complete | D5 Clarity | Total | Pass? |" >> "$output"
-echo "|------|-----|:---:|:---:|:---:|:---:|:---:|:-----:|:-----:|" >> "$output"
+echo "| Repo | PR | D1 Relevance | D2 Specificity | D3 Value | D4 Clarity | Total | Pass? |" >> "$output"
+echo "|------|-----|:---:|:---:|:---:|:---:|:-----:|:-----:|" >> "$output"
 
 # Collect score files: results/<repo>/<pr>/score.json
 while IFS= read -r score_file; do
@@ -47,12 +47,11 @@ while IFS= read -r score_file; do
   d1=$(jq '.dim1_relevance // 0' "$score_file")
   d2=$(jq '.dim2_specificity // 0' "$score_file")
   d3=$(jq '.dim3_value_articulation // 0' "$score_file")
-  d4=$(jq '.dim4_report_completeness // 0' "$score_file")
-  d5=$(jq '.dim5_clarity // 0' "$score_file")
+  d4=$(jq '.dim4_clarity // 0' "$score_file")
 
-  total=$(echo "$d1 + $d2 + $d3 + $d4 + $d5" | bc)
-  max_possible=5
-  threshold=$(echo "scale=1; $max_possible * 0.625" | bc)
+  total=$(echo "$d1 + $d2 + $d3 + $d4" | bc)
+  max_possible=4
+  threshold=$(echo "scale=1; $max_possible * 0.75" | bc)
 
   pass="NO"
   if (( $(echo "$total >= $threshold" | bc -l) )); then
@@ -62,9 +61,9 @@ while IFS= read -r score_file; do
     ((failed_prs++)) || true
   fi
 
-  echo "| $repo | $pr | $d1 | $d2 | $d3 | $d4 | $d5 | **$total/$max_possible** | $pass |" >> "$output"
+  echo "| $repo | $pr | $d1 | $d2 | $d3 | $d4 | **$total/$max_possible** | $pass |" >> "$output"
 
-  for i in 0 1 2 3 4; do
+  for i in 0 1 2 3; do
     val=$(jq ".${dim_keys[$i]} // 0" "$score_file")
     dim_sums[$i]=$(echo "${dim_sums[$i]} + $val" | bc 2>/dev/null || echo "${dim_sums[$i]}")
     dim_counts[$i]=$((${dim_counts[$i]} + 1))
@@ -122,13 +121,12 @@ echo "## Scoring Guide" >> "$output"
 echo "" >> "$output"
 echo "| Dimension | Method | Description |" >> "$output"
 echo "|-----------|--------|-------------|" >> "$output"
-echo "| D1 Relevance | LLM judge | Does the business case address actual PR changes? |" >> "$output"
-echo "| D2 Specificity | LLM judge | Are specific endpoints / feature names mentioned? |" >> "$output"
-echo "| D3 Value Articulation | LLM judge | Does it explain WHY testing matters? |" >> "$output"
-echo "| D4 Report Completeness | jq | Does the report contain businessCaseAnalysis + testResults? |" >> "$output"
-echo "| D5 Clarity | LLM judge | Is the business case concise and easy to understand? |" >> "$output"
+echo "| D1 Relevance | LLM judge | Addresses PR changes AND identifies impacted user interactions? |" >> "$output"
+echo "| D2 Specificity | LLM judge | Names specific endpoints AND covers the full feature as a unit? |" >> "$output"
+echo "| D3 Value Articulation | LLM judge | States key user actions/business impact without describing test mechanics? |" >> "$output"
+echo "| D4 Clarity | LLM judge | Concise and focused on user/business value, not test descriptions? |" >> "$output"
 echo "" >> "$output"
-echo "**Pass threshold:** >= 62.5% of dimensions (3.125/5) per PR" >> "$output"
+echo "**Pass threshold:** >= 75% of dimensions (3/4) per PR" >> "$output"
 echo "" >> "$output"
 echo "**Overall verdict:** PASS if >= 80% of scored PRs pass" >> "$output"
 echo "" >> "$output"

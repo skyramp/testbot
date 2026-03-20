@@ -30,7 +30,7 @@ should_mention=$(jq -r '(.should_mention_in_business_case // []) | join(", ")' "
 
 case "$dimension" in
   relevance)
-    rubric="Score how RELEVANT the business case analysis is to the actual code changes in this PR.
+    rubric="Score how RELEVANT the business case analysis is to the actual PR changes and the USER INTERACTIONS impacted.
 
 CONTEXT:
 - PR description: $description
@@ -38,18 +38,18 @@ CONTEXT:
 - Expected mentions: $should_mention
 
 SCORING RUBRIC:
-- 1.0: The business case explicitly addresses the specific code changes, mentions the affected endpoints or features by name, and connects them directly to test coverage needs.
-- 0.5: The business case broadly addresses the PR area but is vague about specific endpoints or features, or only partially covers the changes.
-- 0.0: The business case is generic/boilerplate with no meaningful connection to the actual PR changes. Could have been written for any PR.
+- 1.0: Explicitly addresses the specific code changes AND identifies the user interactions or user flows affected by this PR (e.g. 'users can now export items', 'customers can leave and view reviews'). Connects those interactions to the need for test coverage to validate correct behavior post-merge.
+- 0.5: Mentions the affected endpoints or features by name but frames it as technical changes rather than user interactions, or only partially covers the impacted user flows.
+- 0.0: Generic/boilerplate with no meaningful connection to the actual PR changes or user-facing impact. Could have been written for any PR.
 
 EXAMPLES:
-'Tests cover the GET /articles/feed/favorites endpoint and its interaction with the user follow and article favorite systems' → Score 1.0 (specific endpoint + cross-resource context)
-'Tests should cover the new API functionality for article feeds' → Score 0.5 (vague reference to the feature)
+'This PR enables customers to leave product reviews and see them reliably — tests validate both the submission and retrieval flows to prevent regressions that would break this user journey' → Score 1.0 (specific changes + user interactions + why coverage matters)
+'Tests cover the GET /articles/feed/favorites endpoint and its interaction with the user follow system' → Score 0.5 (specific endpoint but framed technically, not as user interaction)
 'Tests ensure the API functions correctly' → Score 0.0 (completely generic)"
     ;;
 
   specificity)
-    rubric="Score how SPECIFIC and CONCRETE the business case analysis is in naming technical details.
+    rubric="Score how SPECIFIC and CONCRETE the business case analysis is, and whether it covers the FULL FEATURE as a unit — not just the newly added endpoints.
 
 CONTEXT:
 - PR description: $description
@@ -57,45 +57,45 @@ CONTEXT:
 - Expected mentions: $should_mention
 
 SCORING RUBRIC:
-- 1.0: Names specific endpoint paths (e.g. 'GET /api/articles/feed/favorites'), HTTP methods, field names, or service names. References concrete test scenarios with specific data flows.
-- 0.5: Mentions some endpoint names or service names, but omits HTTP methods or request/response details. Partially specific.
-- 0.0: No specific endpoint paths, methods, field names, or service names. Pure prose with no technical grounding.
+- 1.0: Names specific endpoint paths (e.g. 'GET /api/articles/feed'), HTTP methods, or field names AND treats the affected feature as a unit to be validated end-to-end (e.g. for a reviews PR: covers both POST /reviews AND GET /reviews as the full user-facing flow), not just the endpoints added in the diff.
+- 0.5: Names some specific endpoints or features but either omits HTTP methods/paths, or only covers the newly added endpoints and misses related endpoints that form part of the same user-facing feature.
+- 0.0: No specific endpoint paths, methods, field names, or feature names. Pure prose with no technical grounding.
 
 EXAMPLES:
-'Validates that POST /api/reviews with a valid packageId and rating returns 201 and that the reviews appear on GET /api/packages/{slug}/reviews' → Score 1.0
-'Tests the reviews endpoint behavior' → Score 0.5
+'Validates the full reviews workflow: POST /api/reviews to submit and GET /api/packages/{slug}/reviews to confirm visibility — ensuring the end-to-end user journey works' → Score 1.0 (specific paths + full feature unit)
+'Tests the POST /reviews endpoint that was added in this PR' → Score 0.5 (specific but only covers added endpoint, misses GET)
 'Ensures the new feature works as expected' → Score 0.0"
     ;;
 
   value_articulation)
-    rubric="Score how well the business case articulates WHY testing these changes matters for the business or end users.
+    rubric="Score how well the business case articulates WHY testing these changes matters and identifies the KEY USER ACTIONS enabled or protected — without describing what the tests do.
 
 CONTEXT:
 - PR description: $description
 
 SCORING RUBRIC:
-- 1.0: Clearly explains the business impact or user risk if the tested functionality breaks. Connects test coverage to a specific business outcome, user flow, or risk (e.g. revenue, trust, data integrity, user experience).
-- 0.5: Mentions that testing is important but provides a generic rationale (e.g. 'ensures correctness') without specific business impact.
-- 0.0: States what is being tested without any explanation of why it matters beyond functional correctness.
+- 1.0: Clearly explains the business impact or user risk if the functionality breaks AND states the primary user actions or use cases enabled/protected by this PR. Connects test coverage to a specific user flow or business outcome. Does NOT describe test mechanics or focus on secondary changes.
+- 0.5: Mentions business impact or user actions but either (a) focuses on a secondary use case while missing the primary one, (b) gives a generic rationale like 'ensures correctness' without specific user impact, or (c) mixes valid business value with descriptions of what the tests do.
+- 0.0: Primarily describes what the tests do (e.g. 'the tests verify POST /reviews returns 201') with no explanation of user value or business impact.
 
 EXAMPLES:
-'Failures in the checkout flow would directly block revenue — these tests catch payment processing regressions before they reach production users' → Score 1.0
-'Testing is important to ensure the feature works correctly' → Score 0.5
-'Tests cover the new favorites feed endpoint' → Score 0.0 (describes what, not why)"
+'This PR enables customers to submit product reviews and ensures those reviews are immediately visible to other shoppers — regressions here would break the core social proof loop that drives purchase decisions' → Score 1.0 (primary user action + business risk, no test description)
+'The key change adds UI support, and tests validate the new component renders correctly' → Score 0.5 (focuses on secondary change, describes tests)
+'The tests verify that POST /reviews returns 201 and GET /reviews returns the submitted data' → Score 0.0 (pure test description, no business value)"
     ;;
 
   clarity)
-    rubric="Score how CONCISE and CLEAR the business case analysis is.
+    rubric="Score how CONCISE and CLEAR the business case analysis is — focused on user/business value, NOT on describing what the tests do.
 
 SCORING RUBRIC:
-- 1.0: The text is direct and easy to understand. No unnecessary filler, no repeated points, no jargon. A non-technical reader could grasp the key message in one read.
-- 0.5: Mostly clear but contains some redundancy, padding, or overly complex phrasing that reduces readability.
-- 0.0: Verbose, repetitive, or hard to follow. The core message is buried in filler text or technical jargon with no plain-language explanation.
+- 1.0: Direct, no unnecessary filler, no repeated points, no jargon. Focused purely on user interactions and business value. No test descriptions. Core message is immediately clear in one read.
+- 0.5: Mostly clear but either (a) contains some redundancy, padding, or overly complex phrasing, or (b) spends significant text describing test mechanics instead of focusing on user/business value.
+- 0.0: Verbose, repetitive, or hard to follow. Primarily describes what the tests do rather than making a business case. The actual user value is buried or absent.
 
 EXAMPLES:
-'The new bulk-evaluate endpoint processes up to 100 flags in one call — testing it prevents latency regressions that would degrade flag-gated feature rollouts.' → Score 1.0 (tight, plain, one clear sentence)
-'This PR introduces important changes to the feature flag evaluation system which is a core component of our platform and it is important to ensure that these changes are tested thoroughly to make sure they work correctly.' → Score 0.5 (repetitive but understandable)
-'The implementation of the aforementioned functionality necessitates comprehensive validation across multiple dimensions of system behavior to ensure robustness.' → Score 0.0 (jargon-heavy, says nothing concrete)"
+'Customers can submit reviews and see them immediately — these tests prevent regressions in both flows before they reach production.' → Score 1.0 (tight, plain, pure business value)
+'The tests cover the POST /reviews endpoint which was added in this PR to allow users to submit reviews, and the integration test verifies a 201 response is returned.' → Score 0.5 (mixes test description with value)
+'The integration test sends a POST request to /reviews with a valid payload and asserts a 201 status, then calls GET /reviews to verify the item appears in the list.' → Score 0.0 (pure test description, no business value)"
     ;;
 
   *)
