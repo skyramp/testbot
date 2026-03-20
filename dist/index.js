@@ -99790,19 +99790,20 @@ function generateProgressBody(step, reportContent, isCommentTrigger = false) {
   const { owner, repo } = context2.repo;
   const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context2.runId}`;
   const step1Label = isCommentTrigger ? "Analyzing user request" : "Analyzing Pull Request";
-  let body2 = `<!-- skyramp-testbot -->
+  if (reportContent) {
+    const content = reportContent.replace(/^\s*<!--\s*skyramp-testbot\s*-->\s*\n?/, "");
+    return `<!-- skyramp-testbot -->
+([workflow run](${runUrl}))
+
+${content}`;
+  }
+  return `<!-- skyramp-testbot -->
 ### Skyramp Testbot Plan
 Reviewing the Pull Request for test recommendations. ([workflow run](${runUrl}))
 
 - ${check1} ${step1Label}
 - ${check2} Running tests
 - ${check3} Generating report`;
-  if (reportContent) {
-    body2 += `
-
-${reportContent}`;
-  }
-  return body2;
 }
 function getOctokit2() {
   if (!_githubToken) {
@@ -100283,7 +100284,7 @@ function tryParseReport(raw) {
   }
 }
 function renderReport(report, options = {}) {
-  const { commitMessage, collapsed = false, userPrompt } = options;
+  const { commitMessage, collapsed = false, userPrompt, autoCommit: autoCommit2 = false } = options;
   const lines = [];
   lines.push("<!-- skyramp-testbot -->");
   const isMinimalReport = report.newTestsCreated.length === 0 && report.testResults.length === 0 && report.testMaintenance.length === 0 && report.issuesFound.length > 0;
@@ -100292,6 +100293,14 @@ function renderReport(report, options = {}) {
     lines.push("");
     for (const issue2 of report.issuesFound) {
       lines.push(issue2.description);
+    }
+    if (report.nextSteps && report.nextSteps.length > 0) {
+      lines.push("");
+      lines.push("### \u{1F4A1} Next Steps");
+      lines.push("");
+      for (const step of report.nextSteps) {
+        lines.push(`- ${step}`);
+      }
     }
     return lines.join("\n");
   }
@@ -100320,16 +100329,17 @@ function renderReport(report, options = {}) {
     }
     lines.push("");
   };
-  sectionStart("\u{1F4CB} Business Case Analysis");
-  lines.push(report.businessCaseAnalysis);
-  sectionEnd();
+  for (const bcaLine of report.businessCaseAnalysis.split(/\r?\n/)) {
+    lines.push(`> ${bcaLine}`);
+  }
+  lines.push("");
   if (report.newTestsCreated.length > 0) {
-    sectionStart("\u{1F4A1} New Tests Created");
-    lines.push("| Test Type | Endpoint | Description |");
-    lines.push("|-----------|----------|-------------|");
+    sectionStart("\u{1F4A1} Test Recommendations Implemented");
     for (const t of report.newTestsCreated) {
-      const desc = escapeCell(t.description ?? t.fileName);
-      lines.push(`| ${t.testType} | ${escapeCell(t.endpoint)} | ${desc} |`);
+      const endpoint2 = t.endpoint ? ` \u2014 \`${t.endpoint}\`` : "";
+      const desc = t.description ? `: ${t.description}` : "";
+      const file = t.fileName ? t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\`` : "";
+      lines.push(`- **${t.testType}**${endpoint2}${desc}${file}`);
     }
     sectionEnd();
   }
@@ -100394,9 +100404,27 @@ function renderReport(report, options = {}) {
     }
     sectionEnd();
   }
+  const steps = [...report.nextSteps ?? []];
+  const hasIssues = report.issuesFound.length > 0;
+  const hasTests = report.newTestsCreated.length > 0 || report.testMaintenance.length > 0 || report.testResults.length > 0;
+  if (hasTests && !hasIssues && steps.length === 0) {
+    if (autoCommit2) {
+      steps.push("Review the commit made by Skyramp Testbot.");
+    } else {
+      steps.push("Enable `auto_commit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.");
+    }
+  }
+  if (steps.length > 0) {
+    lines.push("### \u{1F4A1} Next Steps");
+    lines.push("");
+    for (const step of steps) {
+      lines.push(`- ${step}`);
+    }
+    lines.push("");
+  }
   return lines.join("\n");
 }
-function readSummary(paths, reportCollapsed = false, userPrompt) {
+function readSummary(paths, reportCollapsed = false, userPrompt, autoCommit2 = false) {
   startGroup("Reading test summary");
   const src = resolveSummarySource(paths);
   let summary2;
@@ -100406,7 +100434,7 @@ function readSummary(paths, reportCollapsed = false, userPrompt) {
     const report = tryParseReport(raw);
     if (report) {
       notice("Testbot report parsed from JSON");
-      summary2 = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt });
+      summary2 = renderReport(report, { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt, autoCommit: autoCommit2 });
       commitMessage = report.commitMessage;
     } else {
       info("Summary is not JSON \u2014 using raw content");
@@ -100777,7 +100805,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     }
     return agentResult;
   });
-  const { summary: summary2, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed, userPrompt || void 0);
+  const { summary: summary2, commitMessage: reportCommitMessage } = readSummary(paths, config.reportCollapsed, userPrompt || void 0, config.autoCommit);
   parseMetrics(summary2);
   if (reportCommitMessage) {
     let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").trim();
