@@ -19,7 +19,7 @@ const baseConfig: ResolvedConfig = {
   authTokenCommand: '',
   targetTeardownCommand: '',
   skipTargetTeardown: false,
-  skyrampExecutorVersion: 'v1.3.3',
+  skyrampExecutorVersion: 'v1.3.14',
   skyrampMcpVersion: 'latest',
   skyrampMcpSource: 'npm',
   skyrampMcpGithubRef: '',

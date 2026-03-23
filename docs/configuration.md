@@ -21,13 +21,13 @@ The configuration system follows this precedence order (highest to lowest):
 
 1. **GitHub Action workflow inputs** — Explicitly set values in the workflow file
 2. **`.skyramp/workspace.yml` values** — Service-level configuration (test directory, startup command, versions)
-3. **Hardcoded defaults** — Built-in fallback values (e.g., `tests`, `v1.3.12`, `latest`)
+3. **Hardcoded defaults** — Built-in fallback values (e.g., `tests`, `v1.3.14`, `latest`)
 
 When a workflow input is explicitly provided, it always takes precedence over workspace values. When a workflow input is omitted, workspace values fill in the gap. If neither is set, hardcoded defaults are used. Testbot-specific settings (timeouts, debug, auto-commit, retries, etc.) always come from action inputs.
 
 ### File Location
 
-The action looks for `.skyramp/workspace.yml` relative to the `working_directory` input (default: repository root). This file is typically created by running `skyramp_initialize_workspace` from the Skyramp MCP server.
+The action looks for `.skyramp/workspace.yml` relative to the `workingDirectory` input (default: repository root). This file is typically created by running `skyramp_initialize_workspace` from the Skyramp MCP server.
 
 ### Workspace File Structure
 
@@ -40,7 +40,7 @@ workspace:
 metadata:
   schemaVersion: "v1"
   mcpVersion: "0.0.55"
-  executorVersion: "v1.3.3"
+  executorVersion: "v1.3.14"
   createdAt: "2026-01-15T10:00:00Z"
   updatedAt: "2026-02-18T14:30:00Z"
 
@@ -62,20 +62,20 @@ services:
 
 | Workspace field | Testbot config field | Notes |
 |---|---|---|
-| `services[i].testDirectory` | `testDirectory` | Fallback when `test_directory` input is empty |
-| `services[i].runtimeDetails.serverStartCommand` | `targetSetupCommand` | Fallback when `target_setup_command` input is empty |
-| `services[i].runtimeDetails.serverTeardownCommand` | `targetTeardownCommand` | Fallback when `target_teardown_command` input is empty |
+| `services[i].testDirectory` | `testDirectory` | Fallback when `testDirectory` input is empty |
+| `services[i].runtimeDetails.serverStartCommand` | `targetSetupCommand` | Fallback when `targetSetupCommand` input is empty |
+| `services[i].runtimeDetails.serverTeardownCommand` | `targetTeardownCommand` | Fallback when `targetTeardownCommand` input is empty |
 | `services[i].language` | (passed to agent prompt) | Helps LLM generate appropriate tests |
 | `services[i].framework` | (passed to agent prompt) | Helps LLM use correct test framework |
 | `services[i].api.baseUrl` | (passed to agent prompt) | Helps LLM target correct URL |
-| `metadata.executorVersion` | `skyrampExecutorVersion` | Fallback when `skyramp_executor_version` input is empty |
-| `metadata.mcpVersion` | `skyrampMcpVersion` | Fallback when `skyramp_mcp_version` input is empty |
+| `metadata.executorVersion` | `skyrampExecutorVersion` | Fallback when `skyrampExecutorVersion` input is empty |
+| `metadata.mcpVersion` | `skyrampMcpVersion` | Fallback when `skyrampMcpVersion` input is empty |
 
 ### Multi-Service Workspaces
 
 All services defined in `.skyramp/workspace.yml` are passed to the agent prompt. The LLM receives each service's language, framework, base URL, and output directory, allowing it to generate and maintain tests for all services in a single run.
 
-The first service's `testDirectory` and `runtimeDetails.serverStartCommand` are used as operational defaults (for `testDirectory` and `targetSetupCommand`). During auto-commit, files are staged from each service's `testDirectory`.
+The first service's `testDirectory` and `runtimeDetails.serverStartCommand` are used as operational defaults (for action `testDirectory` and `targetSetupCommand`). During auto-commit, files are staged from each service's `testDirectory`.
 
 ### Validation and Error Handling
 
@@ -87,7 +87,7 @@ The first service's `testDirectory` and `runtimeDetails.serverStartCommand` are 
 
 ### Required Inputs
 
-#### `skyramp_license_file`
+#### `skyrampLicenseFile`
 
 **Description:** Skyramp license file content
 
@@ -98,7 +98,7 @@ The first service's `testDirectory` and `runtimeDetails.serverStartCommand` are 
 **Example:**
 ```yaml
 with:
-  skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+  skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
 ```
 
 **Notes:**
@@ -107,7 +107,7 @@ with:
 - License is written to runner temp directory with 600 permissions
 - File path: `${{ runner.temp }}/skyramp/skyramp_license.lic`
 
-#### `cursor_api_key`
+#### `cursorApiKey`
 
 **Description:** Cursor API key for agent access
 
@@ -118,7 +118,7 @@ with:
 **Example:**
 ```yaml
 with:
-  cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+  cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 ```
 
 **Notes:**
@@ -126,7 +126,7 @@ with:
 - Required when using Cursor CLI agent (default)
 - Check quota limits for high-frequency workflows
 
-#### `copilot_api_key`
+#### `copilotApiKey`
 
 **Description:** GitHub Copilot API token for agent access
 
@@ -137,7 +137,7 @@ with:
 **Example:**
 ```yaml
 with:
-  copilot_api_key: ${{ secrets.COPILOT_API_KEY }}
+  copilotApiKey: ${{ secrets.COPILOT_API_KEY }}
 ```
 
 **Notes:**
@@ -147,16 +147,16 @@ with:
 
 ### Agent Configuration
 
-This is infered by which API key is provided, `cursor_api_key` v/s `copilot_api_key`.
+This is inferred by which API key is provided: `cursorApiKey`, `copilotApiKey`, or `anthropicApiKey` (Claude Code).
 
 **Notes:**
 - Determines which CLI will be installed and configured
-- Must have corresponding API key configured
-- Both agents work with the same Skyramp MCP server
+- Must have exactly one corresponding API key configured
+- Cursor, Copilot, and Claude Code agents all use the same Skyramp MCP server
 
 ### Optional Inputs - High Priority
 
-#### `test_directory`
+#### `testDirectory`
 
 **Description:** Directory containing Skyramp tests
 
@@ -167,7 +167,7 @@ This is infered by which API key is provided, `cursor_api_key` v/s `copilot_api_
 **Example:**
 ```yaml
 with:
-  test_directory: 'api/tests'
+  testDirectory: 'api/tests'
 ```
 
 **Use Cases:**
@@ -175,7 +175,7 @@ with:
 - Multiple test directories (see Advanced Patterns)
 - Monorepo with service-specific test directories
 
-#### `target_setup_command`
+#### `targetSetupCommand`
 
 **Description:** Command to start services before test maintenance
 
@@ -187,34 +187,34 @@ with:
 
 1. **Docker Compose v2:**
    ```yaml
-   target_setup_command: 'docker compose up -d'
+   targetSetupCommand: 'docker compose up -d'
    ```
 
 2. **Docker Compose v1:**
    ```yaml
-   target_setup_command: 'docker-compose up -d'
+   targetSetupCommand: 'docker-compose up -d'
    ```
 
 3. **npm script:**
    ```yaml
-   target_setup_command: 'npm run start:services'
+   targetSetupCommand: 'npm run start:services'
    ```
 
 4. **Multiple commands:**
    ```yaml
-   target_setup_command: 'docker compose up -d && npm run migrate'
+   targetSetupCommand: 'docker compose up -d && npm run migrate'
    ```
 
 5. **Custom script:**
    ```yaml
-   target_setup_command: './scripts/start-test-env.sh'
+   targetSetupCommand: './scripts/start-test-env.sh'
    ```
 
 **Notes:**
-- Command runs in `working_directory`
+- Command runs in `workingDirectory`
 - Failures are treated as fatal: the action run will fail if this command fails
-- Use `skip_target_setup: true` if not needed
-- See `target_ready_check_command` for controlling readiness polling after startup
+- Use `skipTargetSetup: true` if not needed
+- See `targetReadyCheckCommand` for controlling readiness polling after startup
 
 **Setup Output (JSON):**
 
@@ -237,7 +237,7 @@ Resolution order per service: `services[serviceName].baseUrl` → top-level `bas
 
 Non-JSON output is ignored — the command can freely emit log lines before the final JSON line
 
-#### `target_teardown_command`
+#### `targetTeardownCommand`
 
 **Description:** Command to tear down services after test execution. Runs in the GitHub Actions `post` step, which is guaranteed to execute even on failure or cancellation.
 
@@ -249,26 +249,26 @@ Non-JSON output is ignored — the command can freely emit log lines before the 
 
 1. **Docker Compose:**
    ```yaml
-   target_teardown_command: 'docker compose down'
+   targetTeardownCommand: 'docker compose down'
    ```
 
 2. **Custom cleanup script:**
    ```yaml
-   target_teardown_command: './scripts/teardown-test-env.sh'
+   targetTeardownCommand: './scripts/teardown-test-env.sh'
    ```
 
 3. **Multiple commands:**
    ```yaml
-   target_teardown_command: 'docker compose down && rm -rf /tmp/test-data'
+   targetTeardownCommand: 'docker compose down && rm -rf /tmp/test-data'
    ```
 
 **Notes:**
-- Runs in `working_directory`
+- Runs in `workingDirectory`
 - Failure is non-fatal: logs a warning but never fails the action
 - Runs in the `post` step (after the main step completes), guaranteed by GitHub Actions even on cancellation
-- Use `skip_target_teardown: true` to disable without removing the command
+- Use `skipTargetTeardown: true` to disable without removing the command
 
-#### `skip_target_teardown`
+#### `skipTargetTeardown`
 
 **Description:** Skip running service teardown command
 
@@ -279,16 +279,16 @@ Non-JSON output is ignored — the command can freely emit log lines before the 
 **Example:**
 ```yaml
 with:
-  skip_target_teardown: true
+  skipTargetTeardown: true
 ```
 
 **Use Cases:**
 - Temporary debugging where you want services to stay up
 - External teardown handled by a separate workflow step
 
-#### `target_ready_check_command`
+#### `targetReadyCheckCommand`
 
-**Description:** Shell command to verify services are ready after startup. Retried every 2 seconds until it succeeds (exit code 0) or `target_ready_check_timeout` is reached.
+**Description:** Shell command to verify services are ready after startup. Retried every 2 seconds until it succeeds (exit code 0) or `targetReadyCheckTimeout` is reached.
 
 **Type:** String
 
@@ -298,17 +298,17 @@ with:
 
 1. **HTTP health endpoint:**
    ```yaml
-   target_ready_check_command: 'curl -sf http://localhost:8000/health'
+   targetReadyCheckCommand: 'curl -sf http://localhost:8000/health'
    ```
 
 2. **TCP port check:**
    ```yaml
-   target_ready_check_command: 'nc -z localhost 5432'
+   targetReadyCheckCommand: 'nc -z localhost 5432'
    ```
 
 3. **Docker container health:**
    ```yaml
-   target_ready_check_command: 'docker compose exec -T api curl -sf http://localhost:8000/health'
+   targetReadyCheckCommand: 'docker compose exec -T api curl -sf http://localhost:8000/health'
    ```
 
 **Notes:**
@@ -316,9 +316,9 @@ with:
 - Each attempt is logged for visibility
 - On timeout, a warning is logged but the action continues (non-fatal)
 
-#### `target_ready_check_timeout`
+#### `targetReadyCheckTimeout`
 
-**Description:** Maximum seconds to wait for `target_ready_check_command` to succeed
+**Description:** Maximum seconds to wait for `targetReadyCheckCommand` to succeed
 
 **Type:** String (numeric)
 
@@ -327,15 +327,15 @@ with:
 **Example:**
 ```yaml
 with:
-  target_ready_check_timeout: 60
+  targetReadyCheckTimeout: 60
 ```
 
 **Notes:**
-- Only relevant when `target_ready_check_command` is set
+- Only relevant when `targetReadyCheckCommand` is set
 - The command is polled every 2 seconds until success or this timeout
 - If the timeout is reached, a warning is emitted and execution continues
 
-#### `target_ready_check_diagnostics_command`
+#### `targetReadyCheckDiagnosticsCommand`
 
 **Description:** Shell command to collect diagnostics when a health check times out. Runs via `bash -c` in the working directory. Override to use non-Docker diagnostics (e.g., `journalctl`, `kubectl logs`, or custom scripts).
 
@@ -347,38 +347,38 @@ with:
 
 1. **Kubernetes pods:**
    ```yaml
-   target_ready_check_diagnostics_command: 'kubectl get pods -o wide && kubectl logs -l app=myservice --tail=30'
+   targetReadyCheckDiagnosticsCommand: 'kubectl get pods -o wide && kubectl logs -l app=myservice --tail=30'
    ```
 
 2. **Systemd journal:**
    ```yaml
-   target_ready_check_diagnostics_command: 'journalctl -u myservice --no-pager -n 50'
+   targetReadyCheckDiagnosticsCommand: 'journalctl -u myservice --no-pager -n 50'
    ```
 
 3. **Custom script:**
    ```yaml
-   target_ready_check_diagnostics_command: './scripts/collect-diagnostics.sh'
+   targetReadyCheckDiagnosticsCommand: './scripts/collect-diagnostics.sh'
    ```
 
 **Notes:**
-- Only runs when `target_ready_check_command` is set and times out
+- Only runs when `targetReadyCheckCommand` is set and times out
 - Failure of the diagnostics command is non-fatal (caught and logged)
 - Runs via `bash -c`, so pipes and operators work
 
 ### Optional Inputs - Medium Priority
 
-#### `skyramp_executor_version`
+#### `skyrampExecutorVersion`
 
 **Description:** Skyramp Executor Docker image version
 
 **Type:** String
 
-**Default:** `v1.3.3`
+**Default:** `v1.3.14`
 
 **Example:**
 ```yaml
 with:
-  skyramp_executor_version: 'v1.4.0'
+  skyrampExecutorVersion: 'v1.4.0'
 ```
 
 **Notes:**
@@ -386,7 +386,7 @@ with:
 - Check [Skyramp releases](https://github.com/skyramp/executor/releases) for available versions
 - Use specific version tags, not `latest` for production
 
-#### `skyramp_mcp_version`
+#### `skyrampMcpVersion`
 
 **Description:** Skyramp MCP npm package version
 
@@ -397,7 +397,7 @@ with:
 **Example:**
 ```yaml
 with:
-  skyramp_mcp_version: '1.2.0'
+  skyrampMcpVersion: '1.2.0'
 ```
 
 **Notes:**
@@ -405,37 +405,37 @@ with:
 - Pin version for reproducible builds
 - Check [npm registry](https://www.npmjs.com/package/@skyramp/mcp) for versions
 
-#### `node_version`
+#### `nodeVersion`
 
 **Description:** Node.js version for the action
 
 **Type:** String
 
-**Default:** `lts` (Long Term Support)
+**Default:** `lts/*` (matches `action.yml`; resolves to the latest LTS via `actions/setup-node`)
 
 **Examples:**
 
-1. **LTS (Recommended):**
+1. **LTS (Recommended — same as omitting the input):**
    ```yaml
-   node_version: 'lts'
+   nodeVersion: 'lts/*'
    ```
 
 2. **Specific major version:**
    ```yaml
-   node_version: '20.x'
+   nodeVersion: '20.x'
    ```
 
 3. **Exact version:**
    ```yaml
-   node_version: '20.10.0'
+   nodeVersion: '20.10.0'
    ```
 
 **Notes:**
 - Uses `actions/setup-node@v4`
-- LTS is safest for compatibility
+- Prefer `lts/*` for the default behavior; pin `20.x` or an exact version when you need reproducibility
 - Match your project's Node.js version for consistency
 
-#### `skip_target_setup`
+#### `skipTargetSetup`
 
 **Description:** Skip running service startup command
 
@@ -446,7 +446,7 @@ with:
 **Example:**
 ```yaml
 with:
-  skip_target_setup: true
+  skipTargetSetup: true
 ```
 
 **Use Cases:**
@@ -455,7 +455,7 @@ with:
 - Using external test environment
 - Troubleshooting service startup issues
 
-#### `working_directory`
+#### `workingDirectory`
 
 **Description:** Working directory for action execution
 
@@ -466,7 +466,7 @@ with:
 **Example:**
 ```yaml
 with:
-  working_directory: './services/api'
+  workingDirectory: './services/api'
 ```
 
 **Use Cases:**
@@ -475,11 +475,11 @@ with:
 - Custom repository structure
 
 **Notes:**
-- Affects where `target_setup_command` runs
+- Affects where `targetSetupCommand` runs
 - Relative to repository root
 - Test directory is relative to working directory
 
-#### `auto_commit`
+#### `autoCommit`
 
 **Description:** Automatically commit test changes
 
@@ -490,7 +490,7 @@ with:
 **Example:**
 ```yaml
 with:
-  auto_commit: false
+  autoCommit: false
 ```
 
 **When to Disable:**
@@ -503,7 +503,7 @@ with:
 ```yaml
 - uses: skyramp/testbot@v1
   with:
-    auto_commit: false
+    autoCommit: false
 
 - name: Upload changes
   uses: actions/upload-artifact@v4
@@ -512,7 +512,7 @@ with:
     path: tests/
 ```
 
-#### `commit_message`
+#### `commitMessage`
 
 **Description:** Git commit message for test changes
 
@@ -524,29 +524,29 @@ with:
 
 1. **Conventional Commits:**
    ```yaml
-   commit_message: 'test: update API tests via Skyramp bot'
+   commitMessage: 'test: update API tests via Skyramp bot'
    ```
 
 2. **Skip CI:**
    ```yaml
-   commit_message: 'chore: update tests [skip ci]'
+   commitMessage: 'chore: update tests [skip ci]'
    ```
 
 3. **Include PR reference:**
    ```yaml
-   commit_message: 'test: update tests for PR #${{ github.event.pull_request.number }}'
+   commitMessage: 'test: update tests for PR #${{ github.event.pull_request.number }}'
    ```
 
 4. **Detailed message:**
    ```yaml
-   commit_message: |
+   commitMessage: |
      test: automated test maintenance
 
      Generated by Skyramp Testbot
      PR: #${{ github.event.pull_request.number }}
    ```
 
-#### `post_pr_comment`
+#### `postPrComment`
 
 **Description:** Post test summary as PR comment
 
@@ -557,7 +557,7 @@ with:
 **Example:**
 ```yaml
 with:
-  post_pr_comment: false
+  postPrComment: false
 ```
 
 **Notes:**
@@ -566,7 +566,7 @@ with:
 - Uses `peter-evans/create-or-update-comment@v4`
 - Comments are updated, not duplicated
 
-#### `testbot_max_retries`
+#### `testbotMaxRetries`
 
 **Description:** Maximum number of retries for transient agent CLI errors (e.g., Cursor "Connection stalled")
 
@@ -577,14 +577,14 @@ with:
 **Example:**
 ```yaml
 with:
-  testbot_max_retries: 5
+  testbotMaxRetries: 5
 ```
 
 **Notes:**
 - Only transient errors (e.g., "Connection stalled") trigger retries; other failures fail immediately
 - Set to `1` to disable retries
 
-#### `testbot_retry_delay`
+#### `testbotRetryDelay`
 
 **Description:** Delay in seconds between agent retry attempts
 
@@ -595,14 +595,14 @@ with:
 **Example:**
 ```yaml
 with:
-  testbot_retry_delay: 30
+  testbotRetryDelay: 30
 ```
 
 **Notes:**
 - Increase for environments with intermittent connectivity issues
-- The total worst-case delay is `testbot_max_retries * testbot_retry_delay` seconds
+- The total worst-case delay is `testbotMaxRetries * testbotRetryDelay` seconds
 
-#### `enable_debug`
+#### `enableDebug`
 
 **Description:** Enable verbose debug logging
 
@@ -613,7 +613,7 @@ with:
 **Example:**
 ```yaml
 with:
-  enable_debug: true
+  enableDebug: true
 ```
 
 **What Gets Logged:**
@@ -641,8 +641,8 @@ All outputs are available via step outputs:
 - uses: skyramp/testbot@v1
   id: skyramp  # Required for accessing outputs
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 
 - name: Use outputs
   run: |
@@ -775,7 +775,7 @@ All tests passed successfully.
 
 **Notes:**
 - Empty string if no changes were committed (no test modifications)
-- Empty string if `auto_commit` is set to `false`
+- Empty string if `autoCommit` is set to `false`
 - Empty string if execution was skipped due to self-trigger
 - Provided by the underlying `stefanzweifel/git-auto-commit-action`
 
@@ -844,10 +844,10 @@ jobs:
 
       - uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-          test_directory: 'services/${{ matrix.service }}/tests'
-          working_directory: 'services/${{ matrix.service }}'
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+          testDirectory: 'services/${{ matrix.service }}/tests'
+          workingDirectory: 'services/${{ matrix.service }}'
 ```
 
 ### Pattern 2: Staged Rollout
@@ -862,7 +862,7 @@ jobs:
     steps:
       - uses: skyramp/testbot@v1
         with:
-          auto_commit: true
+          autoCommit: true
 
   test-maintenance-production:
     runs-on: ubuntu-latest
@@ -871,7 +871,7 @@ jobs:
     steps:
       - uses: skyramp/testbot@v1
         with:
-          auto_commit: true
+          autoCommit: true
 ```
 
 ### Pattern 3: Caching Dependencies
@@ -889,8 +889,8 @@ Speed up workflows by caching Node modules:
 
 - uses: skyramp/testbot@v1
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 ```
 
 ### Pattern 4: Conditional Execution
@@ -919,8 +919,8 @@ jobs:
     steps:
       - uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 ```
 
 ## Environment-Specific Setup
@@ -930,11 +930,11 @@ jobs:
 ```yaml
 - uses: skyramp/testbot@v1
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE_DEV }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    enable_debug: true
-    auto_commit: false
-    post_pr_comment: true
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE_DEV }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    enableDebug: true
+    autoCommit: false
+    postPrComment: true
 ```
 
 ### Staging Environment
@@ -942,10 +942,10 @@ jobs:
 ```yaml
 - uses: skyramp/testbot@v1
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE_STAGING }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    auto_commit: true
-    commit_message: 'test: automated update [staging]'
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE_STAGING }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    autoCommit: true
+    commitMessage: 'test: automated update [staging]'
 ```
 
 ### Production Environment
@@ -953,12 +953,12 @@ jobs:
 ```yaml
 - uses: skyramp/testbot@v1
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE_PROD }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    skyramp_executor_version: 'v1.3.3'  # Pinned version
-    skyramp_mcp_version: '1.0.0'  # Pinned version
-    auto_commit: true
-    enable_debug: false
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE_PROD }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    skyrampExecutorVersion: 'v1.3.14'  # Pinned version
+    skyrampMcpVersion: '1.0.0'  # Pinned version
+    autoCommit: true
+    enableDebug: false
 ```
 
 ## Best Practices
@@ -970,9 +970,9 @@ For production, pin action and dependency versions:
 ```yaml
 - uses: skyramp/testbot@v1.0.0  # Exact version
   with:
-    skyramp_executor_version: 'v1.3.3'
-    skyramp_mcp_version: '1.0.0'
-    node_version: '20.x'
+    skyrampExecutorVersion: 'v1.3.14'
+    skyrampMcpVersion: '1.0.0'
+    nodeVersion: '20.x'
 ```
 
 ### 2. Secret Management
@@ -981,8 +981,8 @@ Use organization-level secrets for shared resources:
 
 ```yaml
 with:
-  skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}  # Organization secret
-  cursor_api_key: ${{ secrets.CURSOR_API_KEY }}  # Repository secret
+  skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}  # Organization secret
+  cursorApiKey: ${{ secrets.CURSOR_API_KEY }}  # Repository secret
 ```
 
 ### 3. Permission Scoping
@@ -1026,8 +1026,8 @@ This ensures only the latest run proceeds, avoiding stale-branch conflicts and w
 
 ### 6. Performance Optimization
 
-- Use `skip_target_setup: true` if services already running
-- Pin `skyramp_mcp_version` to avoid npm registry lookups
+- Use `skipTargetSetup: true` if services already running
+- Pin `skyrampMcpVersion` to avoid npm registry lookups
 - Cache Docker images if using self-hosted runners
 - Limit diff size for faster agent processing
 
@@ -1036,8 +1036,8 @@ This ensures only the latest run proceeds, avoiding stale-branch conflicts and w
 Before rolling out configuration changes:
 
 1. Test in separate branch
-2. Use `auto_commit: false` initially
-3. Enable `enable_debug: true`
+2. Use `autoCommit: false` initially
+3. Enable `enableDebug: true`
 4. Review artifact outputs
 5. Gradually enable auto-commit
 
@@ -1082,29 +1082,29 @@ jobs:
         uses: skyramp/testbot@v1
         with:
           # Required
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 
           # Paths
-          test_directory: 'tests/api'
-          working_directory: '.'
+          testDirectory: 'tests/api'
+          workingDirectory: '.'
 
           # Services
-          target_setup_command: 'docker compose -f docker-compose.test.yml up -d'
-          skip_target_setup: false
+          targetSetupCommand: 'docker compose -f docker-compose.test.yml up -d'
+          skipTargetSetup: false
 
           # Versions
-          skyramp_executor_version: 'v1.3.3'
-          skyramp_mcp_version: 'latest'
-          node_version: 'lts'
+          skyrampExecutorVersion: 'v1.3.14'
+          skyrampMcpVersion: 'latest'
+          nodeVersion: 'lts/*'
 
           # Behavior
-          auto_commit: true
-          commit_message: 'test: automated test maintenance [skip ci]'
-          post_pr_comment: true
-          testbot_max_retries: 3
-          testbot_retry_delay: 10
-          enable_debug: false
+          autoCommit: true
+          commitMessage: 'test: automated test maintenance [skip ci]'
+          postPrComment: true
+          testbotMaxRetries: 3
+          testbotRetryDelay: 10
+          enableDebug: false
 
       - name: Job summary
         run: |

@@ -511,7 +511,7 @@ function renderDiagnosis(d: Diagnosis): void {
     issues.push("MCP connection was lost during the run — possible server crash (check @skyramp/skyramp version)");
   }
   if (agent.timedOut) {
-    issues.push("Agent timed out — consider increasing testbot_timeout or checking for blocking FFI calls");
+    issues.push("Agent timed out — consider increasing testbotTimeout or checking for blocking FFI calls");
   }
   if (!agent.reportSubmitted && run.conclusion !== "success") {
     issues.push("Report was not submitted via skyramp_submit_report — agent may have crashed or lost MCP connection before completing");

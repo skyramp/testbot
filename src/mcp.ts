@@ -33,7 +33,7 @@ export async function installMcp(
     if (config.skyrampMcpSource === 'github') {
       // Validate github token
       if (!inputs.skyrampMcpGithubToken) {
-        throw new Error("skyramp_mcp_github_token is required when skyramp_mcp_source is 'github'")
+        throw new Error("skyrampMcpGithubToken is required when skyrampMcpSource is 'github'")
       }
 
       core.setSecret(inputs.skyrampMcpGithubToken)

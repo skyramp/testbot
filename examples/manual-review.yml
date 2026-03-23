@@ -20,10 +20,10 @@ jobs:
         id: skyramp
         uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-          auto_commit: false  # Disable auto-commit for manual review
-          post_pr_comment: true
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+          autoCommit: false  # Disable auto-commit for manual review
+          postPrComment: true
 
       - name: Upload test changes as artifact
         uses: actions/upload-artifact@v4

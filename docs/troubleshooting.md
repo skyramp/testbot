@@ -88,7 +88,7 @@ Skyramp MCP returns license validation error
    ```yaml
    - uses: skyramp/testbot@v1
      with:
-       target_setup_command: 'docker compose -f ./docker-compose.yml up -d'
+       targetSetupCommand: 'docker compose -f ./docker-compose.yml up -d'
    ```
 
 3. **Check Docker daemon:**
@@ -114,14 +114,14 @@ Service startup command returns non-zero exit code
    ```yaml
    - uses: skyramp/testbot@v1
      with:
-       target_setup_command: 'npm run start:services || echo "Services failed but continuing"'
+       targetSetupCommand: 'npm run start:services || echo "Services failed but continuing"'
    ```
 
 3. **Skip service startup if not needed:**
    ```yaml
    - uses: skyramp/testbot@v1
      with:
-       skip_target_setup: true
+       skipTargetSetup: true
    ```
 
 ## Agent Issues
@@ -283,7 +283,7 @@ To get detailed logs for troubleshooting:
 ```yaml
 - uses: skyramp/testbot@v1
   with:
-    enable_debug: true
+    enableDebug: true
 ```
 
 This will output:
@@ -318,9 +318,9 @@ If you've tried these solutions and still have issues:
 
 | Error Message | Common Cause | Quick Fix |
 |--------------|--------------|-----------|
-| `skyramp_license_file is required` | Missing secret | Add SKYRAMP_LICENSE to secrets |
-| `cursor_api_key is required` | Missing secret (Cursor) | Add CURSOR_API_KEY to secrets |
-| `copilot_api_key is required` | Missing secret (Copilot) | Add COPILOT_API_KEY to secrets |
+| `skyrampLicenseFile is required but not provided` | Missing or empty license secret | Add repository/org secret and map to `skyrampLicenseFile` (e.g. `SKYRAMP_LICENSE`) |
+| `No agent API key provided` | No agent key in workflow | Set exactly one of `cursorApiKey`, `copilotApiKey`, or `anthropicApiKey` (with matching secret) |
+| `Multiple agent API keys provided` | More than one agent key set | Keep only one of `cursorApiKey`, `copilotApiKey`, `anthropicApiKey` |
 | `License file is empty` | Empty secret value | Check secret content |
 | `Failed to install Cursor CLI` | Network/firewall | Check connectivity, try different runner |
 | `Failed to install GitHub Copilot CLI` | npm/Node.js issue | Check Node.js version (needs 22+) |
@@ -335,7 +335,7 @@ When reporting issues, please include:
 1. **Action version:** (e.g., `@v1.0.0`)
 2. **Runner:** (e.g., `ubuntu-latest`)
 3. **Error message:** (full error from logs)
-4. **Debug logs:** (with `enable_debug: true`)
+4. **Debug logs:** (with `enableDebug: true`)
 5. **Minimal workflow:** (that reproduces the issue)
 6. **Expected behavior:** (what should happen)
 

@@ -50,7 +50,7 @@ If you prefer to set things up manually:
 
           - uses: skyramp/testbot@v0.1
             with:
-              skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+              skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     ```
 
 ## Agent Customization
@@ -83,42 +83,42 @@ Before using this action, ensure you have:
 
 | Input | Description |
 |-------|-------------|
-| `skyramp_license_file` | Skyramp license file content (store in GitHub Secrets) |
-| `anthropic_api_key` | Anthropic API key (provide this to use Claude Code) |
-| `cursor_api_key` | Cursor API key (provide this to use Cursor agent) |
-| `copilot_api_key` | GitHub token with Copilot access (provide this to use Copilot agent) |
+| `skyrampLicenseFile` | Skyramp license file content (store in GitHub Secrets) |
+| `anthropicApiKey` | Anthropic API key (provide this to use Claude Code) |
+| `cursorApiKey` | Cursor API key (provide this to use Cursor agent) |
+| `copilotApiKey` | GitHub token with Copilot access (provide this to use Copilot agent) |
 
 ### Optional - Service Lifecycle
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `target_setup_command` | Command to start services before test maintenance | `docker compose up -d` |
-| `skip_target_setup` | Skip running service startup command | `false` |
-| `target_ready_check_command` | Command to verify services are ready (retried until success or timeout) | `sleep 5` |
-| `target_ready_check_timeout` | Max seconds to wait for ready check to succeed | `30` |
-| `target_ready_check_diagnostics_command` | Command to collect diagnostics on ready check timeout | Docker container status/logs |
-| `target_teardown_command` | Command to tear down services after tests (runs in post step, guaranteed even on failure/cancellation) | `''` |
-| `skip_target_teardown` | Skip running service teardown command | `false` |
-| `auth_token_command` | Shell command to generate an authentication token (stdout is captured and set as `SKYRAMP_TEST_TOKEN`) | `''` |
+| `targetSetupCommand` | Command to start services before test maintenance | `docker compose up -d` |
+| `skipTargetSetup` | Skip running service startup command | `false` |
+| `targetReadyCheckCommand` | Command to verify services are ready (retried until success or timeout) | `sleep 5` |
+| `targetReadyCheckTimeout` | Max seconds to wait for ready check to succeed | `30` |
+| `targetReadyCheckDiagnosticsCommand` | Command to collect diagnostics on ready check timeout | Docker container status/logs |
+| `targetTeardownCommand` | Command to tear down services after tests (runs in post step, guaranteed even on failure/cancellation) | `''` |
+| `skipTargetTeardown` | Skip running service teardown command | `false` |
+| `authTokenCommand` | Shell command to generate an authentication token (stdout is captured and set as `SKYRAMP_TEST_TOKEN`) | `''` |
 
 ### Optional - Other
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `test_directory` | Directory containing Skyramp tests | `tests` |
-| `skyramp_executor_version` | Skyramp Executor Docker image version | `v1.3.3` |
-| `skyramp_mcp_version` | Skyramp MCP package version | `latest` |
-| `node_version` | Node.js version to use | `lts/*` |
-| `working_directory` | Working directory for the action | `.` |
-| `auto_commit` | Automatically commit test changes | `true` |
-| `commit_message` | Commit message for test changes | `Skyramp Testbot: test maintenance suggestions` |
-| `post_pr_comment` | Post summary as PR comment | `true` |
-| `testbot_max_retries` | Maximum number of retries for transient agent CLI errors | `3` |
-| `testbot_retry_delay` | Delay in seconds between agent retry attempts | `10` |
-| `test_execution_timeout` | Timeout in seconds for individual MCP tool calls (e.g., test execution) | `300` |
-| `testbot_timeout` | Timeout in minutes for the agent execution | `60` |
-| `report_collapsed` | Wrap report sections in collapsible `<details>` blocks | `false` |
-| `enable_debug` | Enable debug logging | `true` |
+| `testDirectory` | Directory containing Skyramp tests | `tests` |
+| `skyrampExecutorVersion` | Skyramp Executor Docker image version | `v1.3.14` |
+| `skyrampMcpVersion` | Skyramp MCP package version | `latest` |
+| `nodeVersion` | Node.js version to use | `lts/*` |
+| `workingDirectory` | Working directory for the action | `.` |
+| `autoCommit` | Automatically commit test changes | `true` |
+| `commitMessage` | Commit message for test changes | `Skyramp Testbot: test maintenance suggestions` |
+| `postPrComment` | Post summary as PR comment | `true` |
+| `testbotMaxRetries` | Maximum number of retries for transient agent CLI errors | `3` |
+| `testbotRetryDelay` | Delay in seconds between agent retry attempts | `10` |
+| `testExecutionTimeout` | Timeout in seconds for individual MCP tool calls (e.g., test execution) | `300` |
+| `testbotTimeout` | Timeout in minutes for the agent execution | `60` |
+| `reportCollapsed` | Wrap report sections in collapsible `<details>` blocks | `true` |
+| `enableDebug` | Enable debug logging | `true` |
 
 ## Outputs
 
@@ -138,8 +138,8 @@ Before using this action, ensure you have:
 ```yaml
 - uses: skyramp/testbot@v0.1.0
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
 
 ```
 
@@ -148,8 +148,8 @@ Before using this action, ensure you have:
 ```yaml
 - uses: skyramp/testbot@v0.1.0
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 ```
 
 ### Using GitHub Copilot CLI
@@ -157,8 +157,8 @@ Before using this action, ensure you have:
 ```yaml
 - uses: skyramp/testbot@v0.1.0
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    copilot_api_key: ${{ secrets.COPILOT_PAT }}
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    copilotApiKey: ${{ secrets.COPILOT_PAT }}
 ```
 
 ### Custom Service Startup Command
@@ -166,9 +166,9 @@ Before using this action, ensure you have:
 ```yaml
 - uses: skyramp/testbot@v0.1.0
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    target_setup_command: 'npm run start:services'
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    targetSetupCommand: 'npm run start:services'
 ```
 
 ### Without Auto-commit (Manual Review)
@@ -176,9 +176,9 @@ Before using this action, ensure you have:
 ```yaml
 - uses: skyramp/testbot@v0.1.0
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    auto_commit: false
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    autoCommit: false
 ```
 
 ### Custom Test Directory Location
@@ -186,9 +186,9 @@ Before using this action, ensure you have:
 ```yaml
 - uses: skyramp/testbot@v0.1.0
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    test_directory: 'api/tests'
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    testDirectory: 'api/tests'
 ```
 
 ### Authentication
@@ -213,20 +213,20 @@ jobs:
 
       - uses: skyramp/testbot@v0.1.0
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 ```
 
 #### Dynamic Token
 
-If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `auth_token_command` input. The command runs after services start, and its stdout is captured as the token:
+If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
 - uses: skyramp/testbot@v0.1.0
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    auth_token_command: 'curl -s https://my-api.com/auth/token'
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    authTokenCommand: 'curl -s https://my-api.com/auth/token'
 ```
 
 The token is automatically masked in GitHub Actions logs via `::add-mask::`. If the command fails, the action stops before running any tests.
@@ -237,8 +237,8 @@ The token is automatically masked in GitHub Actions logs via `::add-mask::`. If 
 - uses: skyramp/testbot@v0.1.0
   id: skyramp
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 
 - name: Check Results
   run: |
@@ -273,8 +273,8 @@ jobs:
 
       - uses: skyramp/testbot@v0.1.0
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 ```
 
 See [examples/trigger-workflows.yml](examples/trigger-workflows.yml) for a complete example.
@@ -310,7 +310,7 @@ This ensures Testbot never runs on its own commits while allowing other workflow
 
 - Check runner network connectivity
 - Verify the installation endpoint is accessible
-- Try enabling debug mode: `enable_debug: true`
+- Try enabling debug mode: `enableDebug: true`
 - For Copilot: Ensure npm is working correctly
 
 **License validation errors**
@@ -323,8 +323,8 @@ This ensures Testbot never runs on its own commits while allowing other workflow
 
 - Verify docker-compose.yml exists in repository
 - Check that Docker is available in runner
-- Use `skip_target_setup: true` if services not needed
-- Customize with `target_setup_command` for different startup methods
+- Use `skipTargetSetup: true` if services not needed
+- Customize with `targetSetupCommand` for different startup methods
 
 **Agent timeout or failures**
 

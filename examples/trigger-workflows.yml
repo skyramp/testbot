@@ -55,16 +55,16 @@ jobs:
         id: skyramp
         uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 
           # Commits are authored as 'Skyramp Testbot <testbot@skyramp.dev>'
           # which matches the job-level 'if' condition above
 
           # Optional: Customize other settings
-          # test_directory: 'tests'
-          # auto_commit: true
-          # post_pr_comment: true
+          # testDirectory: 'tests'
+          # autoCommit: true
+          # postPrComment: true
 
       # Optional: Check if execution was skipped
       - name: Check execution status

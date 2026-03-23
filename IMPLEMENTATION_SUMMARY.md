@@ -144,23 +144,23 @@ This document summarizes the implementation of the Skyramp Testbot GitHub Action
 ## 📊 Inputs Summary
 
 ### Required (2)
-- `skyramp_license_file` - Skyramp license content
-- `cursor_api_key` - Cursor API key
+- `skyrampLicenseFile` - Skyramp license content
+- `cursorApiKey` - Cursor API key
 
 ### Optional - High Priority (2)
-- `test_directory` (default: `tests`)
-- `target_setup_command` (default: `docker compose up -d`)
+- `testDirectory` (default: `tests`)
+- `targetSetupCommand` (default: `docker compose up -d`)
 
 ### Optional - Medium Priority (9)
-- `skyramp_executor_version` (default: `v1.3.3`)
-- `skyramp_mcp_version` (default: `latest`)
-- `node_version` (default: `lts`)
-- `skip_target_setup` (default: `false`)
-- `working_directory` (default: `.`)
-- `auto_commit` (default: `true`)
-- `commit_message` (default: `Skyramp Testbot: test maintenance suggestions`)
-- `post_pr_comment` (default: `true`)
-- `enable_debug` (default: `false`)
+- `skyrampExecutorVersion` (default: `v1.3.14`)
+- `skyrampMcpVersion` (default: `latest`)
+- `nodeVersion` (default: `lts/*`)
+- `skipTargetSetup` (default: `false`)
+- `workingDirectory` (default: `.`)
+- `autoCommit` (default: `true`)
+- `commitMessage` (default: `Skyramp Testbot: test maintenance suggestions`)
+- `postPrComment` (default: `true`)
+- `enableDebug` (default: `true`)
 
 ## 📤 Outputs Summary
 

@@ -66,7 +66,7 @@ export interface TargetServiceDetails {
 }
 
 /**
- * Target deployment details parsed from target_setup_command JSON output.
+ * Target deployment details parsed from targetSetupCommand JSON output.
  * Supports both single-service and multi-service repos.
  *
  * Single service:  {"baseUrl": "http://52.11.18.47:8000"}

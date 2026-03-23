@@ -55,7 +55,7 @@ export function buildDefaultHealthCheckCommand(services: WorkspaceServiceInfo[])
 export async function startServices(config: ResolvedConfig, workingDir: string): Promise<TargetDeploymentDetails | null> {
   return await withGroup('Starting services', async () => {
     if (config.skipTargetSetup) {
-      core.notice('Skipping service startup (skip_target_setup=true)')
+      core.notice('Skipping service startup (skipTargetSetup=true)')
       return null
     }
 
@@ -124,12 +124,12 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
 export async function teardownServices(config: ResolvedConfig, workingDir: string): Promise<void> {
   await withGroup('Tearing down services', async () => {
     if (config.skipTargetTeardown) {
-      core.notice('Skipping service teardown (skip_target_teardown=true)')
+      core.notice('Skipping service teardown (skipTargetTeardown=true)')
       return
     }
 
     if (!config.targetTeardownCommand) {
-      core.info('No target_teardown_command configured, skipping teardown')
+      core.info('No targetTeardownCommand configured, skipping teardown')
       return
     }
 

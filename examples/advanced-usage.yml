@@ -20,14 +20,14 @@ jobs:
         id: skyramp
         uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-          test_directory: 'api/tests'
-          target_setup_command: 'npm run start:services'
-          skyramp_executor_version: 'v1.3.3'
-          node_version: '20.x'
-          commit_message: 'chore: update API tests via Skyramp bot [skip ci]'
-          enable_debug: false
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+          testDirectory: 'api/tests'
+          targetSetupCommand: 'npm run start:services'
+          skyrampExecutorVersion: 'v1.3.14'
+          nodeVersion: '20.x'
+          commitMessage: 'chore: update API tests via Skyramp bot [skip ci]'
+          enableDebug: false
 
       - name: Report Results
         run: |

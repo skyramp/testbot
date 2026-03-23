@@ -40,12 +40,12 @@ jobs:
       - name: Run Skyramp Testbot for User Service
         uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-          test_directory: 'services/user-service/tests'
-          working_directory: 'services/user-service'
-          target_setup_command: 'docker compose -f services/user-service/docker-compose.yml up -d'
-          commit_message: 'test(user-service): update tests via Skyramp bot'
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+          testDirectory: 'services/user-service/tests'
+          workingDirectory: 'services/user-service'
+          targetSetupCommand: 'docker compose -f services/user-service/docker-compose.yml up -d'
+          commitMessage: 'test(user-service): update tests via Skyramp bot'
 
   # Run test maintenance for order service
   order-service-tests:
@@ -63,12 +63,12 @@ jobs:
       - name: Run Skyramp Testbot for Order Service
         uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-          test_directory: 'services/order-service/tests'
-          working_directory: 'services/order-service'
-          target_setup_command: 'docker compose -f services/order-service/docker-compose.yml up -d'
-          commit_message: 'test(order-service): update tests via Skyramp bot'
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+          testDirectory: 'services/order-service/tests'
+          workingDirectory: 'services/order-service'
+          targetSetupCommand: 'docker compose -f services/order-service/docker-compose.yml up -d'
+          commitMessage: 'test(order-service): update tests via Skyramp bot'
 
   # Run test maintenance for payment service
   payment-service-tests:
@@ -86,9 +86,9 @@ jobs:
       - name: Run Skyramp Testbot for Payment Service
         uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-          test_directory: 'services/payment-service/tests'
-          working_directory: 'services/payment-service'
-          target_setup_command: 'docker compose -f services/payment-service/docker-compose.yml up -d'
-          commit_message: 'test(payment-service): update tests via Skyramp bot'
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+          testDirectory: 'services/payment-service/tests'
+          workingDirectory: 'services/payment-service'
+          targetSetupCommand: 'docker compose -f services/payment-service/docker-compose.yml up -d'
+          commitMessage: 'test(payment-service): update tests via Skyramp bot'

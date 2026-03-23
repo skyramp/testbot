@@ -336,11 +336,11 @@ describe('Next Steps section', () => {
   it('renders agent-provided nextSteps', () => {
     const report: TestbotReport = {
       ...validReport,
-      nextSteps: ['Check your target_setup_command — endpoints returned 404'],
+      nextSteps: ['Check your targetSetupCommand — endpoints returned 404'],
     }
     const md = renderReport(report)
     expect(md).toContain('### 💡 Next Steps')
-    expect(md).toContain('- Check your target_setup_command — endpoints returned 404')
+    expect(md).toContain('- Check your targetSetupCommand — endpoints returned 404')
   })
 
   it('renders "review commit" when autoCommit is true and no issues', () => {
@@ -353,14 +353,14 @@ describe('Next Steps section', () => {
     expect(md).toContain('- Review the commit made by Skyramp Testbot.')
   })
 
-  it('suggests enabling auto_commit when autoCommit is false', () => {
+  it('suggests enabling autoCommit when autoCommit is false', () => {
     const report: TestbotReport = {
       ...validReport,
       issuesFound: [],
     }
     const md = renderReport(report)
     expect(md).toContain('### 💡 Next Steps')
-    expect(md).toContain('Enable `auto_commit: true`')
+    expect(md).toContain('Enable `autoCommit: true`')
   })
 
   it('does not render "review commit" when there are issues', () => {
@@ -372,11 +372,11 @@ describe('Next Steps section', () => {
   it('renders agent nextSteps even when autoCommit is true (no duplicate review message)', () => {
     const report: TestbotReport = {
       ...validReport,
-      nextSteps: ['Check your target_setup_command'],
+      nextSteps: ['Check your targetSetupCommand'],
       issuesFound: [],
     }
     const md = renderReport(report, { autoCommit: true })
-    expect(md).toContain('- Check your target_setup_command')
+    expect(md).toContain('- Check your targetSetupCommand')
     // Agent provided steps, so no auto "review commit" message
     expect(md).not.toContain('Review the commit')
   })

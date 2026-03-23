@@ -58,8 +58,8 @@ body:
       placeholder: |
         - uses: skyramp/testbot@v1
           with:
-            skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-            cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+            skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+            cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
     validations:
       required: true
 
@@ -67,7 +67,7 @@ body:
     id: logs
     attributes:
       label: Error Logs
-      description: Please paste relevant error logs (with enable_debug: true if possible)
+      description: Please paste relevant error logs (with enableDebug: true if possible)
       render: shell
       placeholder: Paste logs here
     validations:

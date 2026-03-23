@@ -32,7 +32,7 @@ const baseConfig = {
   authTokenCommand: '',
   targetTeardownCommand: '',
   skipTargetTeardown: false,
-  skyrampExecutorVersion: 'v1.3.3',
+  skyrampExecutorVersion: 'v1.3.14',
   skyrampMcpVersion: 'latest',
   skyrampMcpSource: 'npm',
   skyrampMcpGithubRef: '',
@@ -63,7 +63,7 @@ const baseInputs = {
   authTokenCommand: '',
   targetTeardownCommand: '',
   skipTargetTeardown: false,
-  skyrampExecutorVersion: 'v1.3.3',
+  skyrampExecutorVersion: 'v1.3.14',
   skyrampMcpVersion: 'latest',
   skyrampMcpSource: 'npm',
   skyrampMcpGithubToken: '',
@@ -197,6 +197,6 @@ describe('installMcp', () => {
     }
 
     await expect(installMcp(config, baseInputs, '/work'))
-      .rejects.toThrow("skyramp_mcp_github_token is required when skyramp_mcp_source is 'github'")
+      .rejects.toThrow("skyrampMcpGithubToken is required when skyrampMcpSource is 'github'")
   })
 })

@@ -37,7 +37,7 @@ This is a `runs.using: node24` action. The `action.yml` is a thin declarative wr
 13. **Progress update** — advances checkboxes to step 2
 14. **Testbot execution** (`agent.ts`) — runs agent with retry logic and timeout
 15. **Report processing** (`report.ts`) — reads summary, parses metrics, writes combined report
-16. **Artifact upload** — uploads debug NDJSON logs when `enable_debug=true`
+16. **Artifact upload** — uploads debug NDJSON logs when `enableDebug=true`
 17. **PR comment** (`progress.ts`) — appends report to progress comment (or posts standalone fallback)
 18. **Auto-commit** (`git.ts`) — stages matching files, commits, and pushes
 
@@ -72,7 +72,7 @@ Current agents:
    - `exportEnv()` — (optional override) export API key / env vars
    - Set `supportsNdjsonLog = true` if the agent produces NDJSON debug output
 5. **Register** the new class in `src/agents/index.ts` — add a `case` to `createAgent()` and export it.
-6. **Add the action input** to `action.yml` (e.g., `new_agent_api_key`).
+6. **Add the action input** to `action.yml` (e.g., `newAgentApiKey`).
 7. **Add tests** in `src/__tests__/agent.test.ts` for `buildAgentCommand(createAgent('newagent'), ...)` and `installAgentCli(createAgent('newagent'))`.
 
 No changes to `agent.ts`, `mcp.ts`, or `main.ts` are needed — they delegate to the strategy object.
@@ -82,10 +82,10 @@ No changes to `agent.ts`, `mcp.ts`, or `main.ts` are needed — they delegate to
 - **Self-trigger detection**: For `pull_request` events, uses `github.event.pull_request.head.sha` to get the actual commit author (not the merge commit)
 - **Progress comment**: Uses Octokit (`@actions/github`) for all comment CRUD. Comment ID is tracked as a local variable in `main.ts` (no env var passing)
 - **Stdout fallback**: Agent may print summary to stdout instead of writing to the output file. `agent-stdout.txt` is captured and used as fallback in `readSummary()`
-- **Debug mode**: When `enable_debug=true`, agents with `supportsNdjsonLog` (Cursor and Claude Code) produce NDJSON output — routed to log file, not used as text fallback. Debug messages use `core.info('[debug]')` because `core.debug()` requires `ACTIONS_STEP_DEBUG` set before the step starts.
+- **Debug mode**: When `enableDebug=true`, agents with `supportsNdjsonLog` (Cursor and Claude Code) produce NDJSON output — routed to log file, not used as text fallback. Debug messages use `core.info('[debug]')` because `core.debug()` requires `ACTIONS_STEP_DEBUG` set before the step starts.
 - **Graceful failure**: If the agent fails, the action continues to post partial results before calling `core.setFailed()`
-- **Agent timeout**: `testbot_timeout` (default 60 min) uses `Promise.race` as a safety net. Note: the child process is NOT killed on timeout (limitation of `@actions/exec`); it's cleaned up when the runner tears down the job.
-- **GitHub token**: Must be read from `core.getInput('github_token')`, not `process.env.GITHUB_TOKEN` — node24 actions don't inherit env vars like composite actions do.
+- **Agent timeout**: `testbotTimeout` (default 60 min) uses `Promise.race` as a safety net. Note: the child process is NOT killed on timeout (limitation of `@actions/exec`); it's cleaned up when the runner tears down the job.
+- **GitHub token**: Must be read from `core.getInput('githubToken')`, not `process.env.GITHUB_TOKEN` — node24 actions don't inherit env vars like composite actions do.
 
 ## Code Review Guidelines
 

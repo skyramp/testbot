@@ -22,7 +22,7 @@ import { loadConfig } from '../config'
 /**
  * Simulates action inputs as they come from core.getInput().
  * Fields without a `default:` in action.yml return '' when not set by the user.
- * test_directory, skyramp_executor_version, skyramp_mcp_version have no defaults
+ * testDirectory, skyrampExecutorVersion, skyrampMcpVersion have no defaults
  * in action.yml — they're resolved via workspace fallback + hardcoded defaults in config.ts.
  */
 function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
@@ -73,7 +73,7 @@ describe('loadConfig', () => {
 
     expect(config.testDirectory).toBe('tests')
     expect(config.targetSetupCommand).toBe('docker compose up -d')
-    expect(config.skyrampExecutorVersion).toBe('v1.3.12')
+    expect(config.skyrampExecutorVersion).toBe('v1.3.14')
     expect(config.skyrampMcpVersion).toBe('latest')
     expect(config.services).toEqual([])
   })

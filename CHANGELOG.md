@@ -8,15 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Breaking Changes
-- Renamed `service_startup_command` → `target_setup_command`
-- Renamed `skip_service_startup` → `skip_target_setup`
-- Renamed `health_check_command` → `target_ready_check_command`
-- Renamed `health_check_timeout` → `target_ready_check_timeout`
-- Renamed `health_check_diagnostics_command` → `target_ready_check_diagnostics_command`
+- **Action inputs use camelCase** (e.g. `testDirectory`, `targetSetupCommand`, `skyrampLicenseFile`, `githubToken`) to match `.skyramp/workspace.yml` service fields and `ActionInputs` — replace all snake_case input keys in workflows.
+- Renamed `service_startup_command` → `targetSetupCommand`
+- Renamed `skip_service_startup` → `skipTargetSetup`
+- Renamed `health_check_command` → `targetReadyCheckCommand`
+- Renamed `health_check_timeout` → `targetReadyCheckTimeout`
+- Renamed `health_check_diagnostics_command` → `targetReadyCheckDiagnosticsCommand`
 
 ### Added
-- `target_teardown_command` input for guaranteed service cleanup via GitHub Actions `post` step
-- `skip_target_teardown` input to disable teardown without removing the command
+- `targetTeardownCommand` input for guaranteed service cleanup via GitHub Actions `post` step
+- `skipTargetTeardown` input to disable teardown without removing the command
 - `dist/post.js` post-step entry point for teardown execution
 
 ### Planned
@@ -49,21 +50,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 - **Required Inputs:**
-  - `skyramp_license_file` - Skyramp license content
-  - `cursor_api_key` - Cursor API key
+  - `skyrampLicenseFile` - Skyramp license content
+  - `cursorApiKey` - Cursor API key
 
 - **Optional Inputs:**
-  - `test_directory` (default: `tests`)
+  - `testDirectory` (default: `tests`)
   - `service_startup_command` (default: `docker compose up -d`)
-  - `skyramp_executor_version` (default: `v1.3.3`)
-  - `skyramp_mcp_version` (default: `latest`)
-  - `node_version` (default: `lts`)
+  - `skyrampExecutorVersion` (default: `v1.3.14`)
+  - `skyrampMcpVersion` (default: `latest`)
+  - `nodeVersion` (default: `lts/*`)
   - `skip_service_startup` (default: `false`)
-  - `working_directory` (default: `.`)
-  - `auto_commit` (default: `true`)
-  - `commit_message` (default: `Skyramp Testbot: test maintenance suggestions`)
-  - `post_pr_comment` (default: `true`)
-  - `enable_debug` (default: `false`)
+  - `workingDirectory` (default: `.`)
+  - `autoCommit` (default: `true`)
+  - `commitMessage` (default: `Skyramp Testbot: test maintenance suggestions`)
+  - `postPrComment` (default: `true`)
+  - `enableDebug` (default: `false`)
 
 - **Outputs:**
   - `test_summary` - Full summary text

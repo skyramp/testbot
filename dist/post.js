@@ -27061,42 +27061,42 @@ var path5 = __toESM(require("path"));
 // src/inputs.ts
 function getInputs() {
   return {
-    skyrampLicenseFile: getInput("skyramp_license_file", { required: true }),
-    cursorApiKey: getInput("cursor_api_key"),
-    copilotApiKey: getInput("copilot_api_key"),
-    anthropicApiKey: getInput("anthropic_api_key"),
-    testDirectory: getInput("test_directory"),
-    targetSetupCommand: getInput("target_setup_command"),
-    authTokenCommand: getInput("auth_token_command"),
-    targetTeardownCommand: getInput("target_teardown_command"),
-    skipTargetTeardown: getBooleanInput("skip_target_teardown"),
-    skyrampExecutorVersion: getInput("skyramp_executor_version"),
-    skyrampMcpVersion: getInput("skyramp_mcp_version"),
-    skyrampMcpSource: getInput("skyramp_mcp_source"),
-    skyrampMcpGithubToken: getInput("skyramp_mcp_github_token"),
-    skyrampMcpGithubRef: getInput("skyramp_mcp_github_ref"),
-    nodeVersion: getInput("node_version"),
-    skipTargetSetup: getBooleanInput("skip_target_setup"),
-    targetReadyCheckCommand: getInput("target_ready_check_command"),
+    skyrampLicenseFile: getInput("skyrampLicenseFile", { required: true }),
+    cursorApiKey: getInput("cursorApiKey"),
+    copilotApiKey: getInput("copilotApiKey"),
+    anthropicApiKey: getInput("anthropicApiKey"),
+    testDirectory: getInput("testDirectory"),
+    targetSetupCommand: getInput("targetSetupCommand"),
+    authTokenCommand: getInput("authTokenCommand"),
+    targetTeardownCommand: getInput("targetTeardownCommand"),
+    skipTargetTeardown: getBooleanInput("skipTargetTeardown"),
+    skyrampExecutorVersion: getInput("skyrampExecutorVersion"),
+    skyrampMcpVersion: getInput("skyrampMcpVersion"),
+    skyrampMcpSource: getInput("skyrampMcpSource"),
+    skyrampMcpGithubToken: getInput("skyrampMcpGithubToken"),
+    skyrampMcpGithubRef: getInput("skyrampMcpGithubRef"),
+    nodeVersion: getInput("nodeVersion"),
+    skipTargetSetup: getBooleanInput("skipTargetSetup"),
+    targetReadyCheckCommand: getInput("targetReadyCheckCommand"),
     targetReadyCheckTimeout: (() => {
-      const raw = parseInt(getInput("target_ready_check_timeout"), 10) || 30;
+      const raw = parseInt(getInput("targetReadyCheckTimeout"), 10) || 30;
       if (raw < 1) {
-        warning(`target_ready_check_timeout must be at least 1 second, got ${raw}. Using 1s.`);
+        warning(`targetReadyCheckTimeout must be at least 1 second, got ${raw}. Using 1s.`);
         return 1;
       }
       return raw;
     })(),
-    targetReadyCheckDiagnosticsCommand: getInput("target_ready_check_diagnostics_command"),
-    workingDirectory: getInput("working_directory"),
-    autoCommit: getBooleanInput("auto_commit"),
-    commitMessage: getInput("commit_message"),
-    postPrComment: getBooleanInput("post_pr_comment"),
-    testExecutionTimeout: parseInt(getInput("test_execution_timeout"), 10) || 300,
-    testbotMaxRetries: parseInt(getInput("testbot_max_retries"), 10) || 3,
-    testbotRetryDelay: parseInt(getInput("testbot_retry_delay"), 10) || 10,
-    testbotTimeout: parseInt(getInput("testbot_timeout"), 10) || 60,
-    reportCollapsed: getBooleanInput("report_collapsed"),
-    enableDebug: getBooleanInput("enable_debug")
+    targetReadyCheckDiagnosticsCommand: getInput("targetReadyCheckDiagnosticsCommand"),
+    workingDirectory: getInput("workingDirectory"),
+    autoCommit: getBooleanInput("autoCommit"),
+    commitMessage: getInput("commitMessage"),
+    postPrComment: getBooleanInput("postPrComment"),
+    testExecutionTimeout: parseInt(getInput("testExecutionTimeout"), 10) || 300,
+    testbotMaxRetries: parseInt(getInput("testbotMaxRetries"), 10) || 3,
+    testbotRetryDelay: parseInt(getInput("testbotRetryDelay"), 10) || 10,
+    testbotTimeout: parseInt(getInput("testbotTimeout"), 10) || 60,
+    reportCollapsed: getBooleanInput("reportCollapsed"),
+    enableDebug: getBooleanInput("enableDebug")
   };
 }
 
@@ -27153,7 +27153,7 @@ async function loadConfig(inputs) {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
   if (!testDirectory) testDirectory = "tests";
-  if (!executorVersion) executorVersion = "v1.3.12";
+  if (!executorVersion) executorVersion = "v1.3.14";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,
@@ -27243,11 +27243,11 @@ async function withGroup(name, fn) {
 async function teardownServices(config, workingDir) {
   await withGroup("Tearing down services", async () => {
     if (config.skipTargetTeardown) {
-      notice("Skipping service teardown (skip_target_teardown=true)");
+      notice("Skipping service teardown (skipTargetTeardown=true)");
       return;
     }
     if (!config.targetTeardownCommand) {
-      info("No target_teardown_command configured, skipping teardown");
+      info("No targetTeardownCommand configured, skipping teardown");
       return;
     }
     info(`Running teardown command: ${config.targetTeardownCommand}`);

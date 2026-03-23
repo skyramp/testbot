@@ -19,10 +19,10 @@ jobs:
       - name: Run Skyramp Testbot (early access)
         uses: skyramp/testbot@archit/early-access
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 
           # Install @skyramp/mcp from the private GitHub repo
-          skyramp_mcp_source: github
-          skyramp_mcp_github_token: ${{ secrets.SKYRAMP_MCP_GITHUB_TOKEN }}
-          skyramp_mcp_github_ref: main  # branch, tag, or commit SHA
+          skyrampMcpSource: github
+          skyrampMcpGithubToken: ${{ secrets.SKYRAMP_MCP_GITHUB_TOKEN }}
+          skyrampMcpGithubRef: main  # branch, tag, or commit SHA

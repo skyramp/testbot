@@ -13,7 +13,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 Before creating a bug report:
 - Check the [troubleshooting guide](docs/troubleshooting.md)
 - Search [existing issues](https://github.com/skyramp/testbot/issues)
-- Try with `enable_debug: true` to gather more information
+- Try with `enableDebug: true` to gather more information
 
 When reporting a bug, include:
 - Action version (e.g., `@v1.0.0`)
@@ -104,8 +104,8 @@ Enhancement suggestions are welcome! Please:
          - uses: actions/checkout@v4
          - uses: ./.github/actions/testbot
            with:
-             skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-             cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+             skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+             cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
    ```
 
 4. **Push and test:**

@@ -27,7 +27,7 @@ async function run(): Promise<void> {
 
   // Provide the GitHub token to the progress module for Octokit calls.
   // node24 actions don't inherit GITHUB_TOKEN as an env var; read it from the action input instead.
-  const githubToken = core.getInput('github_token')
+  const githubToken = core.getInput('githubToken')
   setGitHubToken(githubToken)
 
   // Determine PR context based on event type
@@ -154,8 +154,8 @@ async function run(): Promise<void> {
   }
 
   if (!inputs.skyrampLicenseFile) {
-    await postValidationError(prNumber, 'skyramp_license_file is required but not provided')
-    throw new Error('skyramp_license_file is required but not provided')
+    await postValidationError(prNumber, 'skyrampLicenseFile is required but not provided')
+    throw new Error('skyrampLicenseFile is required but not provided')
   }
 
   // ── 3. Load config (.skyramp/workspace.yml merged with inputs) ──────
@@ -181,12 +181,12 @@ async function run(): Promise<void> {
 
   // Validate MCP source config
   if (config.skyrampMcpSource !== 'npm' && config.skyrampMcpSource !== 'github') {
-    await postValidationError(prNumber, `skyramp_mcp_source must be 'npm' or 'github', got '${config.skyrampMcpSource}'`)
-    throw new Error(`Invalid skyramp_mcp_source: ${config.skyrampMcpSource}`)
+    await postValidationError(prNumber, `skyrampMcpSource must be 'npm' or 'github', got '${config.skyrampMcpSource}'`)
+    throw new Error(`Invalid skyrampMcpSource: ${config.skyrampMcpSource}`)
   }
   if (config.skyrampMcpSource === 'github' && !inputs.skyrampMcpGithubToken) {
-    await postValidationError(prNumber, "skyramp_mcp_github_token is required when skyramp_mcp_source is 'github'")
-    throw new Error('skyramp_mcp_github_token required for github source')
+    await postValidationError(prNumber, "skyrampMcpGithubToken is required when skyrampMcpSource is 'github'")
+    throw new Error('skyrampMcpGithubToken required for github source')
   }
 
   // ── 4. Setup paths ─────────────────────────────────────────────────
@@ -233,7 +233,7 @@ async function run(): Promise<void> {
       if (prNumber) {
         await postStandaloneComment(
           prNumber,
-          `## :warning: Skyramp Testbot - License Error\n\n**Error:** ${msg}\n\nPlease ensure your \`skyramp_license_file\` secret is configured correctly.`
+          `## :warning: Skyramp Testbot - License Error\n\n**Error:** ${msg}\n\nPlease ensure your \`skyrampLicenseFile\` secret is configured correctly.`
         )
       }
       throw new Error(msg)
@@ -346,12 +346,12 @@ async function run(): Promise<void> {
         `**Error:** ${errMsg}`,
         '',
         '**How to fix:**',
-        `- Check that your \`target_setup_command\` is correct: \`${config.targetSetupCommand}\``,
+        `- Check that your \`targetSetupCommand\` is correct: \`${config.targetSetupCommand}\``,
         '- Verify the service names in your `docker-compose.yml` (or equivalent) match the command',
         '- Ensure all referenced Docker images exist and can be pulled',
         '- You can test locally by running the command manually',
         '',
-        'This setting can be configured in your workflow file (`target_setup_command` input) or in `.skyramp/workspace.yml`.',
+        'This setting can be configured in your workflow file (`targetSetupCommand` input) or in `.skyramp/workspace.yml` (`runtimeDetails.serverStartCommand`).',
       ].join('\n'))
     }
     throw err
@@ -360,12 +360,12 @@ async function run(): Promise<void> {
   // ── 13b. Export base URL env vars for test execution ─────────────────
   exportServiceBaseUrlEnvVars(config.services)
 
-  // Dynamic token (from auth_token_command) takes priority, then fall back
+  // Dynamic token (from authTokenCommand) takes priority, then fall back
   // to the static SKYRAMP_TEST_TOKEN env var set at the workflow level.
   const dynamicToken = await generateAuthToken(config, workingDir)
   const authToken = dynamicToken || process.env.SKYRAMP_TEST_TOKEN || ''
 
-  const tokenSource = dynamicToken ? 'auth_token_command' : process.env.SKYRAMP_TEST_TOKEN ? 'SKYRAMP_TEST_TOKEN env var' : 'none'
+  const tokenSource = dynamicToken ? 'authTokenCommand' : process.env.SKYRAMP_TEST_TOKEN ? 'SKYRAMP_TEST_TOKEN env var' : 'none'
   debug(`Auth token source: ${tokenSource}, length: ${authToken.length}`)
 
   // ── 14. Update progress (step 2: analyzing changes) ────────────────
@@ -462,7 +462,7 @@ async function run(): Promise<void> {
     if (commitResult.commitError) {
       const isHookFailure = /hook/i.test(commitResult.commitError)
       const issueDescription = isHookFailure
-        ? `Git pre-commit hook blocked the test commit. Error: \`${commitResult.commitError.split('\n')[0]}\`. Install the missing tool(s) in your testbot workflow (as a step before the Skyramp Testbot action), or configure \`auto_commit: false\` and commit manually.`
+        ? `Git pre-commit hook blocked the test commit. Error: \`${commitResult.commitError.split('\n')[0]}\`. Install the missing tool(s) in your testbot workflow (as a step before the Skyramp Testbot action), or configure \`autoCommit: false\` and commit manually.`
         : `Failed to commit generated tests. Error: \`${commitResult.commitError.split('\n')[0]}\`. Check your repository's git hooks or testbot workflow configuration.`
 
       if (report) {

@@ -21,27 +21,27 @@ jobs:
         uses: skyramp/testbot@v1
         with:
           # Required inputs
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           # Requires a PAT with "Copilot Requests" permission
-          copilot_api_key: ${{ secrets.COPILOT_PAT }}
+          copilotApiKey: ${{ secrets.COPILOT_PAT }}
 
           # Test configuration
-          test_directory: tests
+          testDirectory: tests
 
           # Service configuration
-          target_setup_command: docker compose up -d
-          skip_target_setup: false
+          targetSetupCommand: docker compose up -d
+          skipTargetSetup: false
 
           # Skyramp configuration
-          skyramp_executor_version: v1.3.3
-          skyramp_mcp_version: latest
+          skyrampExecutorVersion: v1.3.14
+          skyrampMcpVersion: latest
 
           # Workflow behavior
-          auto_commit: true
-          commit_message: 'Skyramp Testbot: test maintenance suggestions [Copilot]'
-          post_pr_comment: true
+          autoCommit: true
+          commitMessage: 'Skyramp Testbot: test maintenance suggestions [Copilot]'
+          postPrComment: true
 
           # Advanced settings
-          node_version: lts/*
-          working_directory: .
-          enable_debug: false
+          nodeVersion: lts/*
+          workingDirectory: .
+          enableDebug: false

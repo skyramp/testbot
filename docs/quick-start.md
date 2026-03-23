@@ -49,8 +49,8 @@ jobs:
 
       - uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
 ```
 
 ## Step 3: Commit and Push
@@ -112,9 +112,9 @@ If your tests are not in the `tests/` directory:
 ```yaml
 - uses: skyramp/testbot@v1
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    test_directory: 'api/tests'
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    testDirectory: 'api/tests'
 ```
 
 ### Custom Service Startup
@@ -124,9 +124,9 @@ If you don't use `docker compose up -d`:
 ```yaml
 - uses: skyramp/testbot@v1
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    target_setup_command: 'npm run start:services'
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    targetSetupCommand: 'npm run start:services'
 ```
 
 ### Disable Auto-commit
@@ -136,9 +136,9 @@ If you want to review changes before committing:
 ```yaml
 - uses: skyramp/testbot@v1
   with:
-    skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-    cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
-    auto_commit: false
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    autoCommit: false
 ```
 
 ## Troubleshooting
@@ -152,14 +152,14 @@ If you want to review changes before committing:
 ### "Cursor CLI installation fails"
 
 - Check your runner has internet access
-- Try enabling debug mode: `enable_debug: true`
+- Try enabling debug mode: `enableDebug: true`
 - See [troubleshooting guide](troubleshooting.md)
 
 ### "Service startup command failed"
 
 - Verify your `docker-compose.yml` exists
 - Check Docker is available on the runner
-- Try `skip_target_setup: true` if services aren't needed
+- Try `skipTargetSetup: true` if services aren't needed
 
 ### "No tests modified or created"
 

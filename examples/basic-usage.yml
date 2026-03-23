@@ -19,10 +19,10 @@ jobs:
       - name: Run Skyramp Testbot
         uses: skyramp/testbot@v1
         with:
-          skyramp_license_file: ${{ secrets.SKYRAMP_LICENSE }}
-          cursor_api_key: ${{ secrets.CURSOR_API_KEY }}
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
           # Optional: Customize behavior
-          # test_directory: 'tests'
-          # target_setup_command: 'docker compose up -d'
-          # auto_commit: true
-          # post_pr_comment: true
+          # testDirectory: 'tests'
+          # targetSetupCommand: 'docker compose up -d'
+          # autoCommit: true
+          # postPrComment: true

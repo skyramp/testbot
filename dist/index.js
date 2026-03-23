@@ -99311,42 +99311,42 @@ var client = new DefaultArtifactClient();
 // src/inputs.ts
 function getInputs() {
   return {
-    skyrampLicenseFile: getInput("skyramp_license_file", { required: true }),
-    cursorApiKey: getInput("cursor_api_key"),
-    copilotApiKey: getInput("copilot_api_key"),
-    anthropicApiKey: getInput("anthropic_api_key"),
-    testDirectory: getInput("test_directory"),
-    targetSetupCommand: getInput("target_setup_command"),
-    authTokenCommand: getInput("auth_token_command"),
-    targetTeardownCommand: getInput("target_teardown_command"),
-    skipTargetTeardown: getBooleanInput("skip_target_teardown"),
-    skyrampExecutorVersion: getInput("skyramp_executor_version"),
-    skyrampMcpVersion: getInput("skyramp_mcp_version"),
-    skyrampMcpSource: getInput("skyramp_mcp_source"),
-    skyrampMcpGithubToken: getInput("skyramp_mcp_github_token"),
-    skyrampMcpGithubRef: getInput("skyramp_mcp_github_ref"),
-    nodeVersion: getInput("node_version"),
-    skipTargetSetup: getBooleanInput("skip_target_setup"),
-    targetReadyCheckCommand: getInput("target_ready_check_command"),
+    skyrampLicenseFile: getInput("skyrampLicenseFile", { required: true }),
+    cursorApiKey: getInput("cursorApiKey"),
+    copilotApiKey: getInput("copilotApiKey"),
+    anthropicApiKey: getInput("anthropicApiKey"),
+    testDirectory: getInput("testDirectory"),
+    targetSetupCommand: getInput("targetSetupCommand"),
+    authTokenCommand: getInput("authTokenCommand"),
+    targetTeardownCommand: getInput("targetTeardownCommand"),
+    skipTargetTeardown: getBooleanInput("skipTargetTeardown"),
+    skyrampExecutorVersion: getInput("skyrampExecutorVersion"),
+    skyrampMcpVersion: getInput("skyrampMcpVersion"),
+    skyrampMcpSource: getInput("skyrampMcpSource"),
+    skyrampMcpGithubToken: getInput("skyrampMcpGithubToken"),
+    skyrampMcpGithubRef: getInput("skyrampMcpGithubRef"),
+    nodeVersion: getInput("nodeVersion"),
+    skipTargetSetup: getBooleanInput("skipTargetSetup"),
+    targetReadyCheckCommand: getInput("targetReadyCheckCommand"),
     targetReadyCheckTimeout: (() => {
-      const raw = parseInt(getInput("target_ready_check_timeout"), 10) || 30;
+      const raw = parseInt(getInput("targetReadyCheckTimeout"), 10) || 30;
       if (raw < 1) {
-        warning(`target_ready_check_timeout must be at least 1 second, got ${raw}. Using 1s.`);
+        warning(`targetReadyCheckTimeout must be at least 1 second, got ${raw}. Using 1s.`);
         return 1;
       }
       return raw;
     })(),
-    targetReadyCheckDiagnosticsCommand: getInput("target_ready_check_diagnostics_command"),
-    workingDirectory: getInput("working_directory"),
-    autoCommit: getBooleanInput("auto_commit"),
-    commitMessage: getInput("commit_message"),
-    postPrComment: getBooleanInput("post_pr_comment"),
-    testExecutionTimeout: parseInt(getInput("test_execution_timeout"), 10) || 300,
-    testbotMaxRetries: parseInt(getInput("testbot_max_retries"), 10) || 3,
-    testbotRetryDelay: parseInt(getInput("testbot_retry_delay"), 10) || 10,
-    testbotTimeout: parseInt(getInput("testbot_timeout"), 10) || 60,
-    reportCollapsed: getBooleanInput("report_collapsed"),
-    enableDebug: getBooleanInput("enable_debug")
+    targetReadyCheckDiagnosticsCommand: getInput("targetReadyCheckDiagnosticsCommand"),
+    workingDirectory: getInput("workingDirectory"),
+    autoCommit: getBooleanInput("autoCommit"),
+    commitMessage: getInput("commitMessage"),
+    postPrComment: getBooleanInput("postPrComment"),
+    testExecutionTimeout: parseInt(getInput("testExecutionTimeout"), 10) || 300,
+    testbotMaxRetries: parseInt(getInput("testbotMaxRetries"), 10) || 3,
+    testbotRetryDelay: parseInt(getInput("testbotRetryDelay"), 10) || 10,
+    testbotTimeout: parseInt(getInput("testbotTimeout"), 10) || 60,
+    reportCollapsed: getBooleanInput("reportCollapsed"),
+    enableDebug: getBooleanInput("enableDebug")
   };
 }
 function detectAgentType(inputs) {
@@ -99355,7 +99355,7 @@ function detectAgentType(inputs) {
   const hasClaude = !!inputs.anthropicApiKey;
   const count = [hasCursor, hasCopilot, hasClaude].filter(Boolean).length;
   if (count > 1) {
-    throw new Error("Multiple agent API keys provided. Please provide only one of: cursor_api_key, copilot_api_key, anthropic_api_key.");
+    throw new Error("Multiple agent API keys provided. Please provide only one of: cursorApiKey, copilotApiKey, anthropicApiKey.");
   }
   if (hasCursor) {
     notice("Using Cursor CLI agent");
@@ -99369,7 +99369,7 @@ function detectAgentType(inputs) {
     notice("Using Claude Code CLI agent");
     return "claude";
   }
-  throw new Error("No agent API key provided. Please provide one of: cursor_api_key, copilot_api_key, or anthropic_api_key.");
+  throw new Error("No agent API key provided. Please provide one of: cursorApiKey, copilotApiKey, or anthropicApiKey.");
 }
 
 // src/types.ts
@@ -99692,7 +99692,7 @@ async function loadConfig(inputs) {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
   if (!testDirectory) testDirectory = "tests";
-  if (!executorVersion) executorVersion = "v1.3.12";
+  if (!executorVersion) executorVersion = "v1.3.14";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,
@@ -99903,7 +99903,7 @@ async function installMcp(config, inputs, tempDir) {
     fs9.mkdirSync(mcpInstallDir, { recursive: true });
     if (config.skyrampMcpSource === "github") {
       if (!inputs.skyrampMcpGithubToken) {
-        throw new Error("skyramp_mcp_github_token is required when skyramp_mcp_source is 'github'");
+        throw new Error("skyrampMcpGithubToken is required when skyrampMcpSource is 'github'");
       }
       setSecret(inputs.skyrampMcpGithubToken);
       const mcpPkgDir = path9.join(mcpInstallDir, "node_modules", "@skyramp", "mcp");
@@ -100097,7 +100097,7 @@ function buildDefaultHealthCheckCommand(services) {
 async function startServices(config, workingDir) {
   return await withGroup("Starting services", async () => {
     if (config.skipTargetSetup) {
-      notice("Skipping service startup (skip_target_setup=true)");
+      notice("Skipping service startup (skipTargetSetup=true)");
       return null;
     }
     let setupStdout = "";
@@ -100417,7 +100417,7 @@ function renderReport(report, options = {}) {
     if (autoCommit2) {
       steps.push("Review the commit made by Skyramp Testbot.");
     } else {
-      steps.push("Enable `auto_commit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.");
+      steps.push("Enable `autoCommit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.");
     }
   }
   if (steps.length > 0) {
@@ -100485,7 +100485,7 @@ async function run() {
   setOutput("skipped_self_trigger", String(skip));
   if (skip) return;
   const inputs = getInputs();
-  const githubToken = getInput("github_token");
+  const githubToken = getInput("githubToken");
   setGitHubToken(githubToken);
   const isCommentTrigger = context2.eventName === "issue_comment";
   const isDispatchTrigger = context2.eventName === "workflow_dispatch";
@@ -100597,8 +100597,8 @@ async function run() {
     throw err;
   }
   if (!inputs.skyrampLicenseFile) {
-    await postValidationError(prNumber, "skyramp_license_file is required but not provided");
-    throw new Error("skyramp_license_file is required but not provided");
+    await postValidationError(prNumber, "skyrampLicenseFile is required but not provided");
+    throw new Error("skyrampLicenseFile is required but not provided");
   }
   const config = await loadConfig(inputs);
   setDebugEnabled(config.enableDebug);
@@ -100619,12 +100619,12 @@ async function run() {
     enableDebug: config.enableDebug
   }, null, 2)}`);
   if (config.skyrampMcpSource !== "npm" && config.skyrampMcpSource !== "github") {
-    await postValidationError(prNumber, `skyramp_mcp_source must be 'npm' or 'github', got '${config.skyrampMcpSource}'`);
-    throw new Error(`Invalid skyramp_mcp_source: ${config.skyrampMcpSource}`);
+    await postValidationError(prNumber, `skyrampMcpSource must be 'npm' or 'github', got '${config.skyrampMcpSource}'`);
+    throw new Error(`Invalid skyrampMcpSource: ${config.skyrampMcpSource}`);
   }
   if (config.skyrampMcpSource === "github" && !inputs.skyrampMcpGithubToken) {
-    await postValidationError(prNumber, "skyramp_mcp_github_token is required when skyramp_mcp_source is 'github'");
-    throw new Error("skyramp_mcp_github_token required for github source");
+    await postValidationError(prNumber, "skyrampMcpGithubToken is required when skyrampMcpSource is 'github'");
+    throw new Error("skyrampMcpGithubToken required for github source");
   }
   const tempDir = path10.join(process.env.RUNNER_TEMP ?? "/tmp", "skyramp");
   fs13.mkdirSync(tempDir, { recursive: true });
@@ -100660,7 +100660,7 @@ async function run() {
 
 **Error:** ${msg}
 
-Please ensure your \`skyramp_license_file\` secret is configured correctly.`
+Please ensure your \`skyrampLicenseFile\` secret is configured correctly.`
         );
       }
       throw new Error(msg);
@@ -100759,12 +100759,12 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
         `**Error:** ${errMsg}`,
         "",
         "**How to fix:**",
-        `- Check that your \`target_setup_command\` is correct: \`${config.targetSetupCommand}\``,
+        `- Check that your \`targetSetupCommand\` is correct: \`${config.targetSetupCommand}\``,
         "- Verify the service names in your `docker-compose.yml` (or equivalent) match the command",
         "- Ensure all referenced Docker images exist and can be pulled",
         "- You can test locally by running the command manually",
         "",
-        "This setting can be configured in your workflow file (`target_setup_command` input) or in `.skyramp/workspace.yml`."
+        "This setting can be configured in your workflow file (`targetSetupCommand` input) or in `.skyramp/workspace.yml` (`runtimeDetails.serverStartCommand`)."
       ].join("\n"));
     }
     throw err;
@@ -100772,7 +100772,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
   exportServiceBaseUrlEnvVars(config.services);
   const dynamicToken = await generateAuthToken(config, workingDir);
   const authToken = dynamicToken || process.env.SKYRAMP_TEST_TOKEN || "";
-  const tokenSource = dynamicToken ? "auth_token_command" : process.env.SKYRAMP_TEST_TOKEN ? "SKYRAMP_TEST_TOKEN env var" : "none";
+  const tokenSource = dynamicToken ? "authTokenCommand" : process.env.SKYRAMP_TEST_TOKEN ? "SKYRAMP_TEST_TOKEN env var" : "none";
   debug2(`Auth token source: ${tokenSource}, length: ${authToken.length}`);
   if (progressCommentId) {
     await updateProgress(progressCommentId, 2, isCommentTrigger);
@@ -100840,7 +100840,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     commitHasChanges = commitResult.hasChanges;
     if (commitResult.commitError) {
       const isHookFailure = /hook/i.test(commitResult.commitError);
-      const issueDescription = isHookFailure ? `Git pre-commit hook blocked the test commit. Error: \`${commitResult.commitError.split("\n")[0]}\`. Install the missing tool(s) in your testbot workflow (as a step before the Skyramp Testbot action), or configure \`auto_commit: false\` and commit manually.` : `Failed to commit generated tests. Error: \`${commitResult.commitError.split("\n")[0]}\`. Check your repository's git hooks or testbot workflow configuration.`;
+      const issueDescription = isHookFailure ? `Git pre-commit hook blocked the test commit. Error: \`${commitResult.commitError.split("\n")[0]}\`. Install the missing tool(s) in your testbot workflow (as a step before the Skyramp Testbot action), or configure \`autoCommit: false\` and commit manually.` : `Failed to commit generated tests. Error: \`${commitResult.commitError.split("\n")[0]}\`. Check your repository's git hooks or testbot workflow configuration.`;
       if (report) {
         report.issuesFound.push({ description: issueDescription });
         const reRendered = renderReport(report, renderOptions);
