@@ -90,7 +90,7 @@ describe('loadConfig', () => {
       },
       services: [{
         serviceName: 'api',
-        outputDir: 'tests/python',
+        testDirectory: 'tests/python',
         language: 'python',
         framework: 'pytest',
         api: { baseUrl: 'http://localhost:8000' },
@@ -112,7 +112,7 @@ describe('loadConfig', () => {
       language: 'python',
       framework: 'pytest',
       baseUrl: 'http://localhost:8000',
-      outputDir: 'tests/python',
+      testDirectory: 'tests/python',
     }])
   })
 
@@ -128,7 +128,7 @@ describe('loadConfig', () => {
       },
       services: [{
         serviceName: 'api',
-        outputDir: 'tests/python',
+        testDirectory: 'tests/python',
         language: 'python',
         framework: 'pytest',
         api: { baseUrl: 'http://localhost:8000' },
@@ -152,8 +152,8 @@ describe('loadConfig', () => {
     mockExists.mockResolvedValue(true)
     mockRead.mockResolvedValue({
       services: [
-        { serviceName: 'frontend', outputDir: 'tests/js' },
-        { serviceName: 'backend', outputDir: 'tests/python', language: 'python' },
+        { serviceName: 'frontend', testDirectory: 'tests/js' },
+        { serviceName: 'backend', testDirectory: 'tests/python', language: 'python' },
       ],
     })
 
@@ -180,7 +180,7 @@ describe('loadConfig', () => {
   it('uses input defaults for fields not present in workspace service', async () => {
     mockExists.mockResolvedValue(true)
     mockRead.mockResolvedValue({
-      services: [{ serviceName: 'minimal', outputDir: '' }],
+      services: [{ serviceName: 'minimal', testDirectory: '' }],
     })
 
     const config = await loadConfig(makeInputs({ testDirectory: 'custom-tests' }))
@@ -194,7 +194,7 @@ describe('loadConfig', () => {
     mockRead.mockResolvedValue({
       services: [{
         serviceName: 'api',
-        outputDir: 'tests/python',
+        testDirectory: 'tests/python',
         runtimeDetails: { serverStartCommand: 'docker compose up -d api', runtime: 'docker' },
       }],
     })
@@ -209,7 +209,7 @@ describe('loadConfig', () => {
     mockRead.mockResolvedValue({
       services: [{
         serviceName: 'api',
-        outputDir: 'tests/python',
+        testDirectory: 'tests/python',
         runtimeDetails: Object.assign(
           { serverStartCommand: 'docker compose up -d', runtime: 'docker' as const },
           { serverTeardownCommand: 'docker compose down -v' },
@@ -227,7 +227,7 @@ describe('loadConfig', () => {
     mockRead.mockResolvedValue({
       services: [{
         serviceName: 'api',
-        outputDir: 'tests/python',
+        testDirectory: 'tests/python',
         runtimeDetails: { serverStartCommand: 'docker compose up -d', runtime: 'docker' },
       }],
     })
@@ -240,7 +240,7 @@ describe('loadConfig', () => {
   it('testbot-specific fields always come from inputs', async () => {
     mockExists.mockResolvedValue(true)
     mockRead.mockResolvedValue({
-      services: [{ serviceName: 'api', outputDir: '' }],
+      services: [{ serviceName: 'api', testDirectory: '' }],
     })
 
     const config = await loadConfig(makeInputs({

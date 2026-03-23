@@ -48,7 +48,7 @@ services:
   - serviceName: "api"
     language: "python"
     framework: "pytest"
-    outputDir: "tests/python"
+    testDirectory: "tests/python"
     api:
       baseUrl: "http://localhost:8000"
       authType: "bearer"
@@ -62,7 +62,7 @@ services:
 
 | Workspace field | Testbot config field | Notes |
 |---|---|---|
-| `services[i].outputDir` | `testDirectory` | Fallback when `test_directory` input is empty |
+| `services[i].testDirectory` | `testDirectory` | Fallback when `test_directory` input is empty |
 | `services[i].runtimeDetails.serverStartCommand` | `targetSetupCommand` | Fallback when `target_setup_command` input is empty |
 | `services[i].runtimeDetails.serverTeardownCommand` | `targetTeardownCommand` | Fallback when `target_teardown_command` input is empty |
 | `services[i].language` | (passed to agent prompt) | Helps LLM generate appropriate tests |
@@ -75,7 +75,7 @@ services:
 
 All services defined in `.skyramp/workspace.yml` are passed to the agent prompt. The LLM receives each service's language, framework, base URL, and output directory, allowing it to generate and maintain tests for all services in a single run.
 
-The first service's `outputDir` and `runtimeDetails.serverStartCommand` are used as operational defaults (for `testDirectory` and `targetSetupCommand`). During auto-commit, files are staged from each service's `outputDir`.
+The first service's `testDirectory` and `runtimeDetails.serverStartCommand` are used as operational defaults (for `testDirectory` and `targetSetupCommand`). During auto-commit, files are staged from each service's `testDirectory`.
 
 ### Validation and Error Handling
 

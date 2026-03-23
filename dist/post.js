@@ -25592,7 +25592,7 @@ var require_workspace = __commonJS({
       serviceName: z.string(),
       language: z.enum(["python", "typescript", "javascript", "java"]).optional(),
       framework: z.enum(["playwright", "pytest", "robot", "junit"]).optional(),
-      outputDir: z.string().optional(),
+      testDirectory: z.string().optional(),
       api: z.object({
         schemaPath: z.string().optional(),
         authType: z.enum(["bearer", "basic", "oauth", "apiKey", "none"]).optional(),
