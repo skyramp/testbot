@@ -27,6 +27,10 @@ interface ResultEvent {
   durationApiMs: number;
   numTurns: number;
   costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
 }
 
 async function extractResultEvent(filePath: string): Promise<ResultEvent | null> {
@@ -40,11 +44,17 @@ async function extractResultEvent(filePath: string): Promise<ResultEvent | null>
     try {
       const obj = JSON.parse(line);
       if (obj.type === "result") {
+        // Token counts are nested under obj.usage
+        const u = obj.usage ?? {};
         return {
           durationMs: obj.duration_ms ?? 0,
           durationApiMs: obj.duration_api_ms ?? 0,
           numTurns: obj.num_turns ?? 0,
           costUsd: obj.total_cost_usd ?? 0,
+          inputTokens: u.input_tokens ?? 0,
+          outputTokens: u.output_tokens ?? 0,
+          cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
+          cacheReadInputTokens: u.cache_read_input_tokens ?? 0,
         };
       }
     } catch {
@@ -67,6 +77,10 @@ interface RunSummary {
   durationMs: number;
   durationApiMs: number;
   costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
   skyrampTools: string[];
   testGenTools: string[];
   testExecCalls: TestExecResult[];
@@ -315,6 +329,10 @@ function buildSummary(label: string, parsed: ParsedLog, result: ResultEvent | nu
   })();
   const durationApiMs = result?.durationApiMs ?? 0;
   const costUsd = result?.costUsd ?? 0;
+  const inputTokens = result?.inputTokens ?? 0;
+  const outputTokens = result?.outputTokens ?? 0;
+  const cacheCreationInputTokens = result?.cacheCreationInputTokens ?? 0;
+  const cacheReadInputTokens = result?.cacheReadInputTokens ?? 0;
 
   const skyrampTools = skyrampCalls.map(c => c.toolName);
   const testGenTools = calls.filter(c => TEST_GEN_TOOLS.has(c.toolName)).map(c => extractTestType(c.toolName));
@@ -346,6 +364,10 @@ function buildSummary(label: string, parsed: ParsedLog, result: ResultEvent | nu
     summaryLine,
     durationApiMs,
     costUsd,
+    inputTokens,
+    outputTokens,
+    cacheCreationInputTokens,
+    cacheReadInputTokens,
     fileChanges,
     endpointsFound,
     utilityToolCalls
@@ -390,6 +412,10 @@ function renderComparison(a: RunSummary, b: RunSummary): void {
   row("Duration", formatDuration(a.durationMs), formatDuration(b.durationMs));
   row("API time", formatDuration(a.durationApiMs), formatDuration(b.durationApiMs));
   row("Cost", a.costUsd > 0 ? `$${a.costUsd.toFixed(2)}` : "?", b.costUsd > 0 ? `$${b.costUsd.toFixed(2)}` : "?");
+  row("Input tokens", a.inputTokens > 0 ? a.inputTokens.toLocaleString() : "?", b.inputTokens > 0 ? b.inputTokens.toLocaleString() : "?");
+  row("Output tokens", a.outputTokens > 0 ? a.outputTokens.toLocaleString() : "?", b.outputTokens > 0 ? b.outputTokens.toLocaleString() : "?");
+  row("Cache read", a.cacheReadInputTokens > 0 ? a.cacheReadInputTokens.toLocaleString() : "?", b.cacheReadInputTokens > 0 ? b.cacheReadInputTokens.toLocaleString() : "?");
+  row("Cache create", a.cacheCreationInputTokens > 0 ? a.cacheCreationInputTokens.toLocaleString() : "?", b.cacheCreationInputTokens > 0 ? b.cacheCreationInputTokens.toLocaleString() : "?");
   row("Agent turns", String(a.turns), String(b.turns));
   row("Total tool calls", String(a.totalCalls), String(b.totalCalls));
   row("Skyramp MCP calls", String(a.skyrampCalls), String(b.skyrampCalls));

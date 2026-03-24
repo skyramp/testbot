@@ -179,13 +179,14 @@ describe('buildAgentCommand', () => {
     expect(cmd.args[mcpIdx + 1]).toMatch(/^@/)
   })
 
-  it('returns claude command with model flag', () => {
+  it('returns claude command with stream-json always enabled', () => {
     const cmd = buildAgentCommand(createAgent('claude'), false)
     expect(cmd.command).toBe('claude')
-    expect(cmd.args).toEqual(['--dangerously-skip-permissions', '--model', 'sonnet', '-p'])
+    expect(cmd.args).toEqual(['--dangerously-skip-permissions', '--model', 'sonnet', '-p', '--output-format', 'stream-json'])
+    expect(cmd.args).not.toContain('--verbose')
   })
 
-  it('returns claude command with debug flags', () => {
+  it('returns claude command with verbose in debug mode', () => {
     const cmd = buildAgentCommand(createAgent('claude'), true)
     expect(cmd.command).toBe('claude')
     expect(cmd.args).toContain('--output-format')

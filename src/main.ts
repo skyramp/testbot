@@ -14,6 +14,7 @@ import { installAgentCli, initializeAgent, buildAgentCommand, buildPrompt, runAg
 import { startServices, exportServiceBaseUrlEnvVars, generateAuthToken } from './services'
 import { generateGitDiff, configureGitIdentity, autoCommit } from './git'
 import { readSummary, renderReport, parseMetrics } from './report'
+import { extractAgentLogSummary, pushAgentUsageEvent } from './telemetry'
 import { exec, withRetry, withGroup, setDebugEnabled, debug } from './utils'
 
 async function run(): Promise<void> {
@@ -392,15 +393,17 @@ async function run(): Promise<void> {
       prNumber,
     })
 
-    const useDebugLog = agent.supportsNdjsonLog && config.enableDebug
+    // Capture NDJSON log when the agent command actually outputs stream-json.
+    // Claude always does (for telemetry); Cursor only in debug mode.
+    const useNdjsonLog = agentCmd.args.includes('stream-json')
 
     debug(`Agent command: ${agentCmd.command} ${agentCmd.args.join(' ')}`)
-    debug(`Agent log file: ${useDebugLog ? paths.agentLogPath : 'none (streaming to console)'}`)
+    debug(`Agent log file: ${useNdjsonLog ? paths.agentLogPath : 'none (streaming to console)'}`)
     debug(`Prompt length: ${prompt.length} chars`)
 
     const agentResult = await runAgentWithRetry(agentCmd, prompt, config, {
-      logFile: useDebugLog ? paths.agentLogPath : undefined,
-      stdoutFile: useDebugLog ? undefined : paths.agentStdoutPath,
+      logFile: useNdjsonLog ? paths.agentLogPath : undefined,
+      stdoutFile: useNdjsonLog ? undefined : paths.agentStdoutPath,
     })
 
     // Clean up temp diff file
@@ -413,12 +416,15 @@ async function run(): Promise<void> {
       core.notice('Skyramp Testbot completed successfully')
     }
 
-    // Log agent's auto-selected model if available in NDJSON logs
-    if (useDebugLog && fs.existsSync(paths.agentLogPath)) {
-      const logContent = fs.readFileSync(paths.agentLogPath, 'utf-8')
-      const modelMatch = logContent.match(/"model"\s*:\s*"([^"]+)"/)
-      if (modelMatch) {
-        core.notice(`${agent.label} auto-selected model: ${modelMatch[1]}`)
+    // Extract model and token usage from NDJSON logs (single streaming pass)
+    if (useNdjsonLog && fs.existsSync(paths.agentLogPath)) {
+      const { model, usage } = await extractAgentLogSummary(paths.agentLogPath)
+      if (model) {
+        core.notice(`${agent.label} auto-selected model: ${model}`)
+      }
+      if (usage) {
+        debug(`Agent usage: ${usage.inputTokens} input, ${usage.outputTokens} output, ${usage.cacheReadInputTokens} cache-read, ${usage.cacheCreationInputTokens} cache-create, ${usage.numTurns} turns, $${usage.totalCostUsd.toFixed(4)}`)
+        pushAgentUsageEvent(usage, model ?? 'unknown', paths.licensePath).catch(err => debug(`Telemetry push failed: ${err}`))
       }
     }
 

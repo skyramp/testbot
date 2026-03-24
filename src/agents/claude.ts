@@ -57,9 +57,10 @@ export class ClaudeAgent extends AgentStrategy {
       '--dangerously-skip-permissions',
       '--model', 'sonnet',
       '-p',
+      '--output-format', 'stream-json', // always on for telemetry (token usage)
     ]
     if (enableDebug) {
-      args.push('--output-format', 'stream-json', '--verbose')
+      args.push('--verbose')
     }
     return { command: 'claude', args }
   }
