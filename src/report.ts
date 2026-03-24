@@ -124,6 +124,9 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
       const desc = t.description ? `: ${t.description}` : ''
       const file = t.fileName ? (t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\``) : ''
       lines.push(`- ${t.testType}${endpoint}${desc}${file}`)
+      if (t.testId) {
+        lines.push(`  \`${t.testId}\``)
+      }
     }
     sectionEnd()
   }
@@ -140,12 +143,14 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     lines.push('To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).')
     lines.push('')
     for (const rec of sorted) {
-      const priority = rec.priority === 'high' ? 'HIGH' : rec.priority === 'medium' ? 'MEDIUM' : 'LOW'
       const endpoint = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path
         ? `\`${rec.steps[0].method} ${rec.steps[0].path}\``
         : ''
       const endpointSuffix = endpoint ? ` — ${endpoint}` : ''
-      lines.push(`- ${rec.testType} (${priority})${endpointSuffix}: ${rec.description}`)
+      lines.push(`- **${rec.testType}**${endpointSuffix}: ${rec.description}`)
+      if (rec.testId) {
+        lines.push(`  \`${rec.testId}\``)
+      }
     }
     sectionEnd()
   }
