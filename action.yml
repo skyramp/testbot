@@ -8,121 +8,121 @@ branding:
 
 inputs:
   # GitHub token (automatically provided by the runner)
-  github_token:
+  githubToken:
     description: 'GitHub token for PR comments and API access. Defaults to the automatic GITHUB_TOKEN.'
     required: false
     default: ${{ github.token }}
 
   # Required inputs
-  skyramp_license_file:
+  skyrampLicenseFile:
     description: 'Skyramp license file content (store in GitHub Secrets)'
     required: true
-  cursor_api_key:
+  cursorApiKey:
     description: 'Cursor API key for AI agent access (store in GitHub Secrets)'
     required: false
-  copilot_api_key:
+  copilotApiKey:
     description: 'Copilot API key for AI agent access. Requires a GitHub PAT with "Copilot Requests" permission.'
     required: false
-  anthropic_api_key:
+  anthropicApiKey:
     description: 'Anthropic API key for Claude Code agent access (store in GitHub Secrets)'
     required: false
 
-  # High priority optional inputs
-  test_directory:
+  # High priority optional inputs (names align with .skyramp/workspace.yml service fields where applicable, e.g. testDirectory)
+  testDirectory:
     description: 'Directory containing Skyramp tests. Falls back to workspace.yml testDirectory, then "tests".'
     required: false
-  target_setup_command:
+  targetSetupCommand:
     description: 'Command to start services before test maintenance. Can optionally emit a JSON object as its last stdout line to override workspace baseUrl at runtime (e.g., {"baseUrl": "http://remote-host:8000"} for single-service, or {"services": {"backend": {"baseUrl": "..."}, "frontend": {"baseUrl": "..."}}} for multi-service). Sets SKYRAMP_TEST_BASE_URL (single) or SKYRAMP_TEST_SERVICE_URL_<NAME> (multi) env vars for test execution.'
     required: false
     default: 'docker compose up -d'
-  auth_token_command:
+  authTokenCommand:
     description: 'Shell command to generate an authentication token. Runs after services start; stdout is captured and set as SKYRAMP_TEST_TOKEN for test execution.'
     required: false
     default: ''
-  target_teardown_command:
+  targetTeardownCommand:
     description: 'Command to tear down services after test execution (runs in post step, guaranteed even on failure/cancellation)'
     required: false
     default: ''
-  skip_target_teardown:
+  skipTargetTeardown:
     description: 'Skip running service teardown command'
     required: false
     default: 'false'
 
   # Medium priority optional inputs
-  skyramp_executor_version:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.12".'
+  skyrampExecutorVersion:
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.14".'
     required: false
-  skyramp_mcp_version:
+  skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
     required: false
-  skyramp_mcp_source:
+  skyrampMcpSource:
     description: 'Source for Skyramp MCP package: "npm" or "github"'
     required: false
     default: 'npm'
-  skyramp_mcp_github_token:
+  skyrampMcpGithubToken:
     description: 'GitHub PAT with read access to letsramp/mcp (required when source is "github")'
     required: false
-  skyramp_mcp_github_ref:
+  skyrampMcpGithubRef:
     description: 'Git ref (branch/tag/commit) for letsramp/mcp (used when source is "github")'
     required: false
     default: 'main'
-  node_version:
+  nodeVersion:
     description: 'Node.js version to use'
     required: false
     default: 'lts/*'
-  skip_target_setup:
+  skipTargetSetup:
     description: 'Skip running target setup command'
     required: false
     default: 'false'
-  target_ready_check_command:
+  targetReadyCheckCommand:
     description: 'Shell command to verify services are ready (retried until success or timeout). When empty (default), auto-generates curl health checks against service base URLs from workspace config.'
     required: false
     default: ''
-  target_ready_check_timeout:
+  targetReadyCheckTimeout:
     description: 'Maximum seconds to wait for ready check command to succeed'
     required: false
     default: '30'
-  target_ready_check_diagnostics_command:
-    description: 'Shell command to collect diagnostics on ready check timeout. Runs when target_ready_check_command times out.'
+  targetReadyCheckDiagnosticsCommand:
+    description: 'Shell command to collect diagnostics on ready check timeout. Runs when targetReadyCheckCommand times out.'
     required: false
     default: "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' && docker ps -a --format '{{.Names}}' | while read name; do [ -n \"$name\" ] && echo \"--- logs $name (last 30) ---\" && docker logs --tail 30 \"$name\"; done"
-  working_directory:
+  workingDirectory:
     description: 'Working directory for the action'
     required: false
     default: '.'
-  auto_commit:
+  autoCommit:
     description: 'Automatically commit test changes'
     required: false
     default: 'true'
-  commit_message:
+  commitMessage:
     description: 'Commit message for test changes'
     required: false
     default: 'Skyramp Testbot: test maintenance suggestions'
-  post_pr_comment:
+  postPrComment:
     description: 'Post summary as PR comment'
     required: false
     default: 'true'
-  testbot_max_retries:
+  testbotMaxRetries:
     description: 'Maximum number of retries for transient agent CLI errors (e.g., Cursor "Connection stalled")'
     required: false
     default: '3'
-  testbot_retry_delay:
+  testbotRetryDelay:
     description: 'Delay in seconds between agent retry attempts'
     required: false
     default: '10'
-  test_execution_timeout:
+  testExecutionTimeout:
     description: 'Timeout in seconds for individual MCP tool calls (e.g., test execution). Increase if tests take longer than 5 minutes.'
     required: false
     default: '300'
-  testbot_timeout:
+  testbotTimeout:
     description: 'Timeout in minutes for the agent execution (safety net; does not kill the child process)'
     required: false
     default: '60'
-  report_collapsed:
+  reportCollapsed:
     description: 'Wrap report sections in collapsible <details> blocks with a summary line'
     required: false
     default: 'true'
-  enable_debug:
+  enableDebug:
     description: 'Enable debug logging'
     required: false
     default: 'true'
