@@ -118,6 +118,14 @@ inputs:
     description: 'Timeout in minutes for the agent execution (safety net; does not kill the child process)'
     required: false
     default: '60'
+  targetSetupRetries:
+    description: 'Number of retries for target_setup_command on failure (e.g. transient DockerHub 502 errors)'
+    required: false
+    default: '3'
+  targetSetupRetryDelay:
+    description: 'Delay in seconds between target_setup_command retries'
+    required: false
+    default: '10'
   reportCollapsed:
     description: 'Wrap report sections in collapsible <details> blocks with a summary line'
     required: false

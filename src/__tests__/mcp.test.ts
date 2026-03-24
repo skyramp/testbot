@@ -48,6 +48,8 @@ const baseConfig = {
   testbotMaxRetries: 3,
   testbotRetryDelay: 10,
   testbotTimeout: 10,
+  targetSetupRetries: 3,
+  targetSetupRetryDelay: 10,
   reportCollapsed: false,
   enableDebug: false,
   services: [],
@@ -81,6 +83,8 @@ const baseInputs = {
   testbotMaxRetries: 3,
   testbotRetryDelay: 10,
   testbotTimeout: 10,
+  targetSetupRetries: 3,
+  targetSetupRetryDelay: 10,
   reportCollapsed: false,
   enableDebug: false,
 } satisfies ActionInputs

@@ -5,13 +5,17 @@ import { startServices, teardownServices, parseTargetDeploymentDetails, exportSe
 import { exec } from '../utils'
 import type { ResolvedConfig, TargetDeploymentDetails } from '../types'
 
-vi.mock('../utils', () => ({
-  exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
-  sleep: vi.fn(),
-  withGroup: vi.fn(async (_name: string, fn: () => Promise<void>) => fn()),
-  secondsToMilliseconds: (s: number) => s * 1000,
-  debug: vi.fn(),
-}))
+vi.mock('../utils', async () => {
+  const actual = await vi.importActual<typeof import('../utils')>('../utils')
+  return {
+    exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+    sleep: vi.fn(),
+    withGroup: vi.fn(async (_name: string, fn: () => Promise<void>) => fn()),
+    withRetry: actual.withRetry,
+    secondsToMilliseconds: (s: number) => s * 1000,
+    debug: vi.fn(),
+  }
+})
 
 const baseConfig: ResolvedConfig = {
   testDirectory: 'tests',
@@ -35,6 +39,8 @@ const baseConfig: ResolvedConfig = {
   testbotMaxRetries: 3,
   testbotRetryDelay: 10,
   testbotTimeout: 10,
+  targetSetupRetries: 3,
+  targetSetupRetryDelay: 0,
   reportCollapsed: false,
   enableDebug: false,
   services: [],
@@ -49,7 +55,7 @@ describe('startServices', () => {
   })
 
   it('throws on service startup command failure', async () => {
-    mockExec.mockRejectedValueOnce(new Error("The process '/usr/bin/bash' failed with exit code 1"))
+    mockExec.mockRejectedValue(new Error("The process '/usr/bin/bash' failed with exit code 1"))
 
     await expect(startServices(baseConfig, '/work'))
       .rejects.toThrow('Service startup failed — all subsequent tests will likely fail')
@@ -57,7 +63,7 @@ describe('startServices', () => {
 
   it('includes the failing command in the error message', async () => {
     const config = { ...baseConfig, targetSetupCommand: 'docker compose up -d bad-service' }
-    mockExec.mockRejectedValueOnce(new Error('exit code 1'))
+    mockExec.mockRejectedValue(new Error('exit code 1'))
 
     await expect(startServices(config, '/work'))
       .rejects.toThrow('docker compose up -d bad-service')
@@ -65,7 +71,7 @@ describe('startServices', () => {
 
   it('preserves the original error as cause', async () => {
     const originalErr = new Error('exit code 1')
-    mockExec.mockRejectedValueOnce(originalErr)
+    mockExec.mockRejectedValue(originalErr)
 
     try {
       await startServices(baseConfig, '/work')
@@ -88,6 +94,34 @@ describe('startServices', () => {
     mockExec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
 
     await expect(startServices(baseConfig, '/work')).resolves.toBeNull()
+  })
+
+  it('retries on transient failure and succeeds on subsequent attempt', async () => {
+    // First call (setup) fails, second call (setup retry) succeeds, third call (health check) succeeds
+    mockExec
+      .mockRejectedValueOnce(new Error('502 Bad Gateway'))
+      .mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
+
+    await expect(startServices(baseConfig, '/work')).resolves.toBeNull()
+
+    // Setup called twice (1 fail + 1 success) + 1 health check = 3 exec calls
+    const setupCalls = mockExec.mock.calls.filter(
+      ([cmd, args]) => cmd === 'bash' && args?.[1] === baseConfig.targetSetupCommand,
+    )
+    expect(setupCalls).toHaveLength(2)
+  })
+
+  it('throws after exhausting all retries', async () => {
+    mockExec.mockRejectedValue(new Error('502 Bad Gateway'))
+
+    await expect(startServices(baseConfig, '/work'))
+      .rejects.toThrow('Service startup failed')
+
+    // Setup called 3 times (matching targetSetupRetries: 3)
+    const setupCalls = mockExec.mock.calls.filter(
+      ([cmd, args]) => cmd === 'bash' && args?.[1] === baseConfig.targetSetupCommand,
+    )
+    expect(setupCalls).toHaveLength(3)
   })
 })
 

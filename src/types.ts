@@ -30,6 +30,8 @@ export interface SharedConfig {
   testbotMaxRetries: number
   testbotRetryDelay: number
   testbotTimeout: number
+  targetSetupRetries: number
+  targetSetupRetryDelay: number
   reportCollapsed: boolean
   enableDebug: boolean
 }

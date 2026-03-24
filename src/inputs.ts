@@ -37,6 +37,8 @@ export function getInputs(): ActionInputs {
     testbotMaxRetries: parseInt(core.getInput('testbotMaxRetries'), 10) || 3,
     testbotRetryDelay: parseInt(core.getInput('testbotRetryDelay'), 10) || 10,
     testbotTimeout: parseInt(core.getInput('testbotTimeout'), 10) || 60,
+    targetSetupRetries: parseInt(core.getInput('targetSetupRetries'), 10) || 3,
+    targetSetupRetryDelay: parseInt(core.getInput('targetSetupRetryDelay'), 10) || 10,
     reportCollapsed: core.getBooleanInput('reportCollapsed'),
     enableDebug: core.getBooleanInput('enableDebug'),
   }

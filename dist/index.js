@@ -100348,6 +100348,8 @@ function getInputs() {
     testbotMaxRetries: parseInt(getInput("testbotMaxRetries"), 10) || 3,
     testbotRetryDelay: parseInt(getInput("testbotRetryDelay"), 10) || 10,
     testbotTimeout: parseInt(getInput("testbotTimeout"), 10) || 60,
+    targetSetupRetries: parseInt(getInput("targetSetupRetries"), 10) || 3,
+    targetSetupRetryDelay: parseInt(getInput("targetSetupRetryDelay"), 10) || 10,
     reportCollapsed: getBooleanInput("reportCollapsed"),
     enableDebug: getBooleanInput("enableDebug")
   };
@@ -100722,6 +100724,8 @@ async function loadConfig(inputs) {
     testbotMaxRetries: inputs.testbotMaxRetries,
     testbotRetryDelay: inputs.testbotRetryDelay,
     testbotTimeout: inputs.testbotTimeout,
+    targetSetupRetries: inputs.targetSetupRetries,
+    targetSetupRetryDelay: inputs.targetSetupRetryDelay,
     reportCollapsed: inputs.reportCollapsed,
     enableDebug: inputs.enableDebug,
     services
@@ -101109,7 +101113,10 @@ async function startServices(config, workingDir) {
     let setupStdout = "";
     info(`Running command: ${config.targetSetupCommand}`);
     try {
-      const { stdout } = await exec2("bash", ["-c", config.targetSetupCommand], { cwd: workingDir });
+      const { stdout } = await withRetry(
+        () => exec2("bash", ["-c", config.targetSetupCommand], { cwd: workingDir }),
+        { retries: config.targetSetupRetries, delay: config.targetSetupRetryDelay, label: "Service startup" }
+      );
       setupStdout = stdout;
       notice("Services started successfully");
     } catch (err) {

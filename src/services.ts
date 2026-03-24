@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
 import type { ResolvedConfig, TargetDeploymentDetails, WorkspaceServiceInfo } from './types'
-import { exec, sleep, withGroup, secondsToMilliseconds, debug } from './utils'
+import { exec, sleep, withGroup, withRetry, secondsToMilliseconds, debug } from './utils'
 
 /** Fallback health check when no service base URLs are available. */
 const NAIVE_HEALTH_CHECK = 'sleep 5'
@@ -62,7 +62,10 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
     let setupStdout = ''
     core.info(`Running command: ${config.targetSetupCommand}`)
     try {
-      const { stdout } = await exec('bash', ['-c', config.targetSetupCommand], { cwd: workingDir })
+      const { stdout } = await withRetry(
+        () => exec('bash', ['-c', config.targetSetupCommand], { cwd: workingDir }),
+        { retries: config.targetSetupRetries, delay: config.targetSetupRetryDelay, label: 'Service startup' },
+      )
       setupStdout = stdout
       core.notice('Services started successfully')
     } catch (err) {
