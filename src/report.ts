@@ -120,13 +120,11 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
   if (report.newTestsCreated.length > 0) {
     sectionStart('💡 Test Recommendations Implemented')
     for (const t of report.newTestsCreated) {
+      const id = t.testId ? ` [\`${t.testId}\`]` : ''
       const endpoint = t.endpoint ? ` — \`${t.endpoint}\`` : ''
       const desc = t.description ? `: ${t.description}` : ''
       const file = t.fileName ? (t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\``) : ''
-      lines.push(`- ${t.testType}${endpoint}${desc}${file}`)
-      if (t.testId) {
-        lines.push(`  \`${t.testId}\``)
-      }
+      lines.push(`- ${t.testType}${id}${endpoint}${desc}${file}`)
     }
     sectionEnd()
   }
@@ -147,10 +145,8 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
         ? `\`${rec.steps[0].method} ${rec.steps[0].path}\``
         : ''
       const endpointSuffix = endpoint ? ` — ${endpoint}` : ''
-      lines.push(`- **${rec.testType}**${endpointSuffix}: ${rec.description}`)
-      if (rec.testId) {
-        lines.push(`  \`${rec.testId}\``)
-      }
+      const id = rec.testId ? ` [\`${rec.testId}\`]` : ''
+      lines.push(`- **${rec.testType}**${id}${endpointSuffix}: ${rec.description}`)
     }
     sectionEnd()
   }
