@@ -5111,8 +5111,8 @@ var require_formdata_parser = __commonJS({
         return false;
       }
       for (let i = 0; i < length; ++i) {
-        const cp = boundary.charCodeAt(i);
-        if (!(cp >= 48 && cp <= 57 || cp >= 65 && cp <= 90 || cp >= 97 && cp <= 122 || cp === 39 || cp === 45 || cp === 95)) {
+        const cp2 = boundary.charCodeAt(i);
+        if (!(cp2 >= 48 && cp2 <= 57 || cp2 >= 65 && cp2 <= 90 || cp2 >= 97 && cp2 <= 122 || cp2 === 39 || cp2 === 45 || cp2 === 95)) {
           return false;
         }
       }
@@ -62785,10 +62785,10 @@ var ToolRunner = class extends events.EventEmitter {
           return reject(new Error(`The cwd: ${this.options.cwd} does not exist!`));
         }
         const fileName = this._getSpawnFileName();
-        const cp = child.spawn(fileName, this._getSpawnArgs(optionsNonNull), this._getSpawnOptions(this.options, fileName));
+        const cp2 = child.spawn(fileName, this._getSpawnArgs(optionsNonNull), this._getSpawnOptions(this.options, fileName));
         let stdbuffer = "";
-        if (cp.stdout) {
-          cp.stdout.on("data", (data) => {
+        if (cp2.stdout) {
+          cp2.stdout.on("data", (data) => {
             if (this.options.listeners && this.options.listeners.stdout) {
               this.options.listeners.stdout(data);
             }
@@ -62803,8 +62803,8 @@ var ToolRunner = class extends events.EventEmitter {
           });
         }
         let errbuffer = "";
-        if (cp.stderr) {
-          cp.stderr.on("data", (data) => {
+        if (cp2.stderr) {
+          cp2.stderr.on("data", (data) => {
             state3.processStderr = true;
             if (this.options.listeners && this.options.listeners.stderr) {
               this.options.listeners.stderr(data);
@@ -62820,19 +62820,19 @@ var ToolRunner = class extends events.EventEmitter {
             });
           });
         }
-        cp.on("error", (err) => {
+        cp2.on("error", (err) => {
           state3.processError = err.message;
           state3.processExited = true;
           state3.processClosed = true;
           state3.CheckComplete();
         });
-        cp.on("exit", (code) => {
+        cp2.on("exit", (code) => {
           state3.processExitCode = code;
           state3.processExited = true;
           this._debug(`Exit code ${code} received from tool '${this.toolPath}'`);
           state3.CheckComplete();
         });
-        cp.on("close", (code) => {
+        cp2.on("close", (code) => {
           state3.processExitCode = code;
           state3.processExited = true;
           state3.processClosed = true;
@@ -62846,7 +62846,7 @@ var ToolRunner = class extends events.EventEmitter {
           if (errbuffer.length > 0) {
             this.emit("errline", errbuffer);
           }
-          cp.removeAllListeners();
+          cp2.removeAllListeners();
           if (error2) {
             reject(error2);
           } else {
@@ -62854,10 +62854,10 @@ var ToolRunner = class extends events.EventEmitter {
           }
         });
         if (this.options.input) {
-          if (!cp.stdin) {
+          if (!cp2.stdin) {
             throw new Error("child process missing stdin");
           }
-          cp.stdin.end(this.options.input);
+          cp2.stdin.end(this.options.input);
         }
       }));
     });
@@ -100348,6 +100348,8 @@ function getInputs() {
     testbotMaxRetries: parseInt(getInput("testbotMaxRetries"), 10) || 3,
     testbotRetryDelay: parseInt(getInput("testbotRetryDelay"), 10) || 10,
     testbotTimeout: parseInt(getInput("testbotTimeout"), 10) || 60,
+    targetSetupRetries: parseInt(getInput("targetSetupRetries"), 10) || 3,
+    targetSetupRetryDelay: parseInt(getInput("targetSetupRetryDelay"), 10) || 10,
     reportCollapsed: getBooleanInput("reportCollapsed"),
     enableDebug: getBooleanInput("enableDebug")
   };
@@ -100391,6 +100393,7 @@ var fs6 = __toESM(require("fs"));
 var path6 = __toESM(require("path"));
 
 // src/utils.ts
+var cp = __toESM(require("child_process"));
 async function exec2(command, args = [], options = {}) {
   let stdout = "";
   let stderr = "";
@@ -100410,17 +100413,42 @@ async function exec2(command, args = [], options = {}) {
     }
   };
   if (options.timeout) {
-    let timer;
-    const exitCode2 = await Promise.race([
-      exec(command, args, execOptions),
-      new Promise((_2, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`Command timed out after ${Math.round(options.timeout / 6e4)}m: ${command}`)),
-          options.timeout
-        );
-      })
-    ]).finally(() => clearTimeout(timer));
-    return { exitCode: exitCode2, stdout, stderr };
+    return new Promise((resolve5, reject) => {
+      const child2 = cp.spawn(command, args, {
+        cwd: options.cwd,
+        env: options.env ? { ...process.env, ...options.env } : process.env,
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: false
+      });
+      child2.stdout?.on("data", (data) => {
+        stdout += data.toString();
+        if (!options.silent) process.stdout.write(data);
+      });
+      child2.stderr?.on("data", (data) => {
+        stderr += data.toString();
+        if (!options.silent) process.stderr.write(data);
+      });
+      if (options.input) {
+        child2.stdin?.end(options.input);
+      }
+      const timer = setTimeout(() => {
+        child2.kill("SIGTERM");
+        reject(new Error(`Command timed out after ${Math.round(options.timeout / 6e4)}m: ${command}`));
+      }, options.timeout);
+      child2.on("close", (code) => {
+        clearTimeout(timer);
+        const exitCode2 = code ?? 1;
+        if (exitCode2 !== 0 && !options.ignoreReturnCode) {
+          reject(new Error(`The process '${command}' failed with exit code ${exitCode2}`));
+        } else {
+          resolve5({ exitCode: exitCode2, stdout, stderr });
+        }
+      });
+      child2.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
   }
   const exitCode = await exec(command, args, execOptions);
   return { exitCode, stdout, stderr };
@@ -100698,7 +100726,7 @@ async function loadConfig(inputs) {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
   if (!testDirectory) testDirectory = "tests";
-  if (!executorVersion) executorVersion = "v1.3.14";
+  if (!executorVersion) executorVersion = "v1.3.15";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,
@@ -100722,6 +100750,8 @@ async function loadConfig(inputs) {
     testbotMaxRetries: inputs.testbotMaxRetries,
     testbotRetryDelay: inputs.testbotRetryDelay,
     testbotTimeout: inputs.testbotTimeout,
+    targetSetupRetries: inputs.targetSetupRetries,
+    targetSetupRetryDelay: inputs.targetSetupRetryDelay,
     reportCollapsed: inputs.reportCollapsed,
     enableDebug: inputs.enableDebug,
     services
@@ -100913,32 +100943,43 @@ async function installMcp(config, inputs, tempDir) {
       }
       setSecret(inputs.skyrampMcpGithubToken);
       const mcpPkgDir = path9.join(mcpInstallDir, "node_modules", "@skyramp", "mcp");
-      fs9.mkdirSync(path9.dirname(mcpPkgDir), { recursive: true });
       const repoUrl = `https://x-access-token:${inputs.skyrampMcpGithubToken}@github.com/letsramp/mcp.git`;
       const ref = config.skyrampMcpGithubRef;
-      const isSha = /^[0-9a-fA-F]{7,40}$/.test(ref);
-      if (isSha) {
-        info(`Fetching @skyramp/mcp from github.com/letsramp/mcp at commit ${ref}`);
-        await exec2("git", ["init", mcpPkgDir]);
-        await exec2("git", ["-C", mcpPkgDir, "remote", "add", "origin", repoUrl]);
-        await exec2("git", ["-C", mcpPkgDir, "fetch", "--depth", "1", "origin", ref]);
-        await exec2("git", ["-C", mcpPkgDir, "checkout", "FETCH_HEAD"]);
-      } else {
-        info(`Cloning @skyramp/mcp from github.com/letsramp/mcp (ref: ${ref})`);
-        await exec2("git", ["clone", "--depth", "1", "--branch", ref, repoUrl, mcpPkgDir]);
+      try {
+        await withRetry(async () => {
+          fs9.rmSync(mcpPkgDir, { recursive: true, force: true });
+          fs9.mkdirSync(path9.dirname(mcpPkgDir), { recursive: true });
+          const isSha = /^[0-9a-fA-F]{7,40}$/.test(ref);
+          if (isSha) {
+            info(`Fetching @skyramp/mcp from github.com/letsramp/mcp at commit ${ref}`);
+            await exec2("git", ["init", mcpPkgDir]);
+            await exec2("git", ["-C", mcpPkgDir, "remote", "add", "origin", repoUrl]);
+            await exec2("git", ["-C", mcpPkgDir, "fetch", "--depth", "1", "origin", ref]);
+            await exec2("git", ["-C", mcpPkgDir, "checkout", "FETCH_HEAD"]);
+          } else {
+            info(`Cloning @skyramp/mcp from github.com/letsramp/mcp (ref: ${ref})`);
+            await exec2("git", ["clone", "--depth", "1", "--branch", ref, repoUrl, mcpPkgDir]);
+          }
+          const { stdout: commitSha } = await exec2("git", ["-C", mcpPkgDir, "rev-parse", "HEAD"], { silent: true });
+          notice(`@skyramp/mcp commit: ${commitSha.trim()} (ref: ${ref})`);
+          fs9.rmSync(path9.join(mcpPkgDir, ".git"), { recursive: true, force: true });
+          info("Installing dependencies and building...");
+          await exec2("npm", ["install", "--include=dev"], { cwd: mcpPkgDir, timeout: NPM_INSTALL_TIMEOUT_MS });
+          await exec2("npm", ["run", "build"], { cwd: mcpPkgDir });
+        }, { retries: 3, delay: 10, label: "MCP install (github)" });
+      } catch (err) {
+        fs9.rmSync(mcpPkgDir, { recursive: true, force: true });
+        throw err;
       }
-      const { stdout: commitSha } = await exec2("git", ["-C", mcpPkgDir, "rev-parse", "HEAD"], { silent: true });
-      notice(`@skyramp/mcp commit: ${commitSha.trim()} (ref: ${ref})`);
-      fs9.rmSync(path9.join(mcpPkgDir, ".git"), { recursive: true, force: true });
-      info("Installing dependencies and building...");
-      await exec2("npm", ["install", "--include=dev"], { cwd: mcpPkgDir, timeout: NPM_INSTALL_TIMEOUT_MS });
-      await exec2("npm", ["run", "build"], { cwd: mcpPkgDir });
       command = "node";
       args = path9.join(mcpPkgDir, "build", "index.js");
       exportVariable("NODE_PATH", path9.join(mcpPkgDir, "node_modules"));
     } else {
       const pkg = config.skyrampMcpVersion === "latest" ? "@skyramp/mcp" : `@skyramp/mcp@${config.skyrampMcpVersion}`;
-      await exec2("npm", ["install", pkg], { cwd: mcpInstallDir, timeout: NPM_INSTALL_TIMEOUT_MS });
+      await withRetry(
+        () => exec2("npm", ["install", pkg], { cwd: mcpInstallDir, timeout: NPM_INSTALL_TIMEOUT_MS }),
+        { retries: 3, delay: 10, label: "MCP install (npm)" }
+      );
       const mcpPkgDir = path9.join(mcpInstallDir, "node_modules", "@skyramp", "mcp");
       command = "node";
       args = path9.join(mcpPkgDir, "build", "index.js");
@@ -101109,7 +101150,10 @@ async function startServices(config, workingDir) {
     let setupStdout = "";
     info(`Running command: ${config.targetSetupCommand}`);
     try {
-      const { stdout } = await exec2("bash", ["-c", config.targetSetupCommand], { cwd: workingDir });
+      const { stdout } = await withRetry(
+        () => exec2("bash", ["-c", config.targetSetupCommand], { cwd: workingDir }),
+        { retries: config.targetSetupRetries, delay: config.targetSetupRetryDelay, label: "Service startup" }
+      );
       setupStdout = stdout;
       notice("Services started successfully");
     } catch (err) {
@@ -101743,14 +101787,17 @@ Please ensure your \`skyrampLicenseFile\` secret is configured correctly.`
   mcp.licensePath = paths.licensePath;
   await withGroup("Validating Skyramp license", async () => {
     try {
-      await exec2("node", ["-e", `
-        const { SkyrampClient } = require('@skyramp/skyramp');
-        const client = new SkyrampClient();
-        client.login().then(r => { console.log(r); }).catch(e => { console.error(e.message); process.exit(1); });
-      `], {
-        cwd: workingDir,
-        env: { LICENSE_FILE: paths.licensePath, CI: "true" }
-      });
+      await withRetry(
+        () => exec2("node", ["-e", `
+          const { SkyrampClient } = require('@skyramp/skyramp');
+          const client = new SkyrampClient();
+          client.login().then(r => { console.log(r); }).catch(e => { console.error(e.message); process.exit(1); });
+        `], {
+          cwd: workingDir,
+          env: { LICENSE_FILE: paths.licensePath, CI: "true" }
+        }),
+        { retries: 3, delay: 5, label: "License validation" }
+      );
       notice("License validation successful");
     } catch {
       const msg = "Skyramp license validation failed";
