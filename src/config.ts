@@ -75,7 +75,7 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
 
   // Apply hardcoded defaults for fields that are still empty
   if (!testDirectory) testDirectory = 'tests'
-  if (!executorVersion) executorVersion = 'v1.3.14'
+  if (!executorVersion) executorVersion = 'v1.3.15'
   if (!mcpVersion) mcpVersion = 'latest'
 
   const config: ResolvedConfig = {

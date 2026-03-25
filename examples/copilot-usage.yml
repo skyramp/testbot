@@ -33,7 +33,7 @@ jobs:
           skipTargetSetup: false
 
           # Skyramp configuration
-          skyrampExecutorVersion: v1.3.14
+          skyrampExecutorVersion: v1.3.15
           skyrampMcpVersion: latest
 
           # Workflow behavior

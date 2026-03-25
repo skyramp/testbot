@@ -106,7 +106,7 @@ Before using this action, ensure you have:
 | Input | Description | Default |
 |-------|-------------|---------|
 | `testDirectory` | Directory containing Skyramp tests | `tests` |
-| `skyrampExecutorVersion` | Skyramp Executor Docker image version | `v1.3.14` |
+| `skyrampExecutorVersion` | Skyramp Executor Docker image version | `v1.3.15` |
 | `skyrampMcpVersion` | Skyramp MCP package version | `latest` |
 | `nodeVersion` | Node.js version to use | `lts/*` |
 | `workingDirectory` | Working directory for the action | `.` |

@@ -24,7 +24,7 @@ jobs:
           cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
           testDirectory: 'api/tests'
           targetSetupCommand: 'npm run start:services'
-          skyrampExecutorVersion: 'v1.3.14'
+          skyrampExecutorVersion: 'v1.3.15'
           nodeVersion: '20.x'
           commitMessage: 'chore: update API tests via Skyramp bot [skip ci]'
           enableDebug: false

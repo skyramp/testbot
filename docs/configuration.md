@@ -21,7 +21,7 @@ The configuration system follows this precedence order (highest to lowest):
 
 1. **GitHub Action workflow inputs** — Explicitly set values in the workflow file
 2. **`.skyramp/workspace.yml` values** — Service-level configuration (test directory, startup command, versions)
-3. **Hardcoded defaults** — Built-in fallback values (e.g., `tests`, `v1.3.14`, `latest`)
+3. **Hardcoded defaults** — Built-in fallback values (e.g., `tests`, `v1.3.15`, `latest`)
 
 When a workflow input is explicitly provided, it always takes precedence over workspace values. When a workflow input is omitted, workspace values fill in the gap. If neither is set, hardcoded defaults are used. Testbot-specific settings (timeouts, debug, auto-commit, retries, etc.) always come from action inputs.
 
@@ -40,7 +40,7 @@ workspace:
 metadata:
   schemaVersion: "v1"
   mcpVersion: "0.0.55"
-  executorVersion: "v1.3.14"
+  executorVersion: "v1.3.15"
   createdAt: "2026-01-15T10:00:00Z"
   updatedAt: "2026-02-18T14:30:00Z"
 
@@ -373,7 +373,7 @@ with:
 
 **Type:** String
 
-**Default:** `v1.3.14`
+**Default:** `v1.3.15`
 
 **Example:**
 ```yaml
@@ -955,7 +955,7 @@ jobs:
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE_PROD }}
     cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
-    skyrampExecutorVersion: 'v1.3.14'  # Pinned version
+    skyrampExecutorVersion: 'v1.3.15'  # Pinned version
     skyrampMcpVersion: '1.0.0'  # Pinned version
     autoCommit: true
     enableDebug: false
@@ -970,7 +970,7 @@ For production, pin action and dependency versions:
 ```yaml
 - uses: skyramp/testbot@v1.0.0  # Exact version
   with:
-    skyrampExecutorVersion: 'v1.3.14'
+    skyrampExecutorVersion: 'v1.3.15'
     skyrampMcpVersion: '1.0.0'
     nodeVersion: '20.x'
 ```
@@ -1094,7 +1094,7 @@ jobs:
           skipTargetSetup: false
 
           # Versions
-          skyrampExecutorVersion: 'v1.3.14'
+          skyrampExecutorVersion: 'v1.3.15'
           skyrampMcpVersion: 'latest'
           nodeVersion: 'lts/*'
 

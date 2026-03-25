@@ -50,7 +50,7 @@ inputs:
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.14".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.15".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'

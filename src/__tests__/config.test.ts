@@ -75,7 +75,7 @@ describe('loadConfig', () => {
 
     expect(config.testDirectory).toBe('tests')
     expect(config.targetSetupCommand).toBe('docker compose up -d')
-    expect(config.skyrampExecutorVersion).toBe('v1.3.14')
+    expect(config.skyrampExecutorVersion).toBe('v1.3.15')
     expect(config.skyrampMcpVersion).toBe('latest')
     expect(config.services).toEqual([])
   })
