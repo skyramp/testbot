@@ -5,8 +5,16 @@ import type { ActionInputs, ResolvedConfig } from '../types'
 
 vi.mock('../utils', () => ({
   exec: vi.fn().mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' }),
+  sleep: vi.fn(),
   debug: vi.fn(),
   withGroup: vi.fn(async (_name: string, fn: () => Promise<unknown>) => fn()),
+  withRetry: vi.fn(async (fn: () => Promise<unknown>, opts: { retries: number }) => {
+    for (let attempt = 1; attempt <= opts.retries; attempt++) {
+      try { return await fn() } catch (err) {
+        if (attempt === opts.retries) throw err
+      }
+    }
+  }),
   secondsToMilliseconds: (s: number) => s * 1000,
 }))
 
@@ -202,5 +210,45 @@ describe('installMcp', () => {
 
     await expect(installMcp(config, baseInputs, '/work'))
       .rejects.toThrow("skyrampMcpGithubToken is required when skyrampMcpSource is 'github'")
+  })
+
+  it('retries npm install on transient failure and succeeds', async () => {
+    const config = { ...baseConfig, skyrampMcpSource: 'npm' as const }
+
+    let npmCallCount = 0
+    mockExec.mockImplementation(async (cmd) => {
+      if (cmd === 'npm') {
+        npmCallCount++
+        if (npmCallCount === 1) throw new Error('502 Bad Gateway')
+      }
+      return { exitCode: 0, stdout: '', stderr: '' }
+    })
+
+    await expect(installMcp(config, baseInputs, '/work')).resolves.toBeDefined()
+    expect(npmCallCount).toBe(2)
+  })
+
+  it('retries github clone on transient failure and succeeds', async () => {
+    const config = {
+      ...baseConfig,
+      skyrampMcpSource: 'github' as const,
+      skyrampMcpGithubRef: 'main',
+    }
+    const inputs = { ...baseInputs, skyrampMcpGithubToken: 'ghp_test123' }
+
+    let gitCloneCount = 0
+    mockExec.mockImplementation(async (cmd, args) => {
+      if (cmd === 'git' && args?.includes('clone')) {
+        gitCloneCount++
+        if (gitCloneCount === 1) throw new Error('Connection reset by peer')
+      }
+      if (cmd === 'git' && args?.includes('rev-parse')) {
+        return { exitCode: 0, stdout: 'abc123\n', stderr: '' }
+      }
+      return { exitCode: 0, stdout: '', stderr: '' }
+    })
+
+    await expect(installMcp(config, inputs, '/work')).resolves.toBeDefined()
+    expect(gitCloneCount).toBe(2)
   })
 })

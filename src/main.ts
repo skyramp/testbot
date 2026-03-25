@@ -249,14 +249,17 @@ async function run(): Promise<void> {
   // ── 9. Validate license via MCP/Skyramp ────────────────────────────
   await withGroup('Validating Skyramp license', async () => {
     try {
-      await exec('node', ['-e', `
-        const { SkyrampClient } = require('@skyramp/skyramp');
-        const client = new SkyrampClient();
-        client.login().then(r => { console.log(r); }).catch(e => { console.error(e.message); process.exit(1); });
-      `], {
-        cwd: workingDir,
-        env: { LICENSE_FILE: paths.licensePath, CI: 'true' },
-      })
+      await withRetry(
+        () => exec('node', ['-e', `
+          const { SkyrampClient } = require('@skyramp/skyramp');
+          const client = new SkyrampClient();
+          client.login().then(r => { console.log(r); }).catch(e => { console.error(e.message); process.exit(1); });
+        `], {
+          cwd: workingDir,
+          env: { LICENSE_FILE: paths.licensePath, CI: 'true' },
+        }),
+        { retries: 3, delay: 5, label: 'License validation' },
+      )
       core.notice('License validation successful')
     } catch {
       const msg = 'Skyramp license validation failed'

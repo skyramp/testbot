@@ -5107,8 +5107,8 @@ var require_formdata_parser = __commonJS({
         return false;
       }
       for (let i = 0; i < length; ++i) {
-        const cp = boundary.charCodeAt(i);
-        if (!(cp >= 48 && cp <= 57 || cp >= 65 && cp <= 90 || cp >= 97 && cp <= 122 || cp === 39 || cp === 45 || cp === 95)) {
+        const cp2 = boundary.charCodeAt(i);
+        if (!(cp2 >= 48 && cp2 <= 57 || cp2 >= 65 && cp2 <= 90 || cp2 >= 97 && cp2 <= 122 || cp2 === 39 || cp2 === 45 || cp2 === 95)) {
           return false;
         }
       }
@@ -26782,10 +26782,10 @@ var ToolRunner = class extends events.EventEmitter {
           return reject(new Error(`The cwd: ${this.options.cwd} does not exist!`));
         }
         const fileName = this._getSpawnFileName();
-        const cp = child.spawn(fileName, this._getSpawnArgs(optionsNonNull), this._getSpawnOptions(this.options, fileName));
+        const cp2 = child.spawn(fileName, this._getSpawnArgs(optionsNonNull), this._getSpawnOptions(this.options, fileName));
         let stdbuffer = "";
-        if (cp.stdout) {
-          cp.stdout.on("data", (data) => {
+        if (cp2.stdout) {
+          cp2.stdout.on("data", (data) => {
             if (this.options.listeners && this.options.listeners.stdout) {
               this.options.listeners.stdout(data);
             }
@@ -26800,8 +26800,8 @@ var ToolRunner = class extends events.EventEmitter {
           });
         }
         let errbuffer = "";
-        if (cp.stderr) {
-          cp.stderr.on("data", (data) => {
+        if (cp2.stderr) {
+          cp2.stderr.on("data", (data) => {
             state.processStderr = true;
             if (this.options.listeners && this.options.listeners.stderr) {
               this.options.listeners.stderr(data);
@@ -26817,19 +26817,19 @@ var ToolRunner = class extends events.EventEmitter {
             });
           });
         }
-        cp.on("error", (err) => {
+        cp2.on("error", (err) => {
           state.processError = err.message;
           state.processExited = true;
           state.processClosed = true;
           state.CheckComplete();
         });
-        cp.on("exit", (code) => {
+        cp2.on("exit", (code) => {
           state.processExitCode = code;
           state.processExited = true;
           this._debug(`Exit code ${code} received from tool '${this.toolPath}'`);
           state.CheckComplete();
         });
-        cp.on("close", (code) => {
+        cp2.on("close", (code) => {
           state.processExitCode = code;
           state.processExited = true;
           state.processClosed = true;
@@ -26843,7 +26843,7 @@ var ToolRunner = class extends events.EventEmitter {
           if (errbuffer.length > 0) {
             this.emit("errline", errbuffer);
           }
-          cp.removeAllListeners();
+          cp2.removeAllListeners();
           if (error2) {
             reject(error2);
           } else {
@@ -26851,10 +26851,10 @@ var ToolRunner = class extends events.EventEmitter {
           }
         });
         if (this.options.input) {
-          if (!cp.stdin) {
+          if (!cp2.stdin) {
             throw new Error("child process missing stdin");
           }
-          cp.stdin.end(this.options.input);
+          cp2.stdin.end(this.options.input);
         }
       }));
     });
@@ -27200,6 +27200,7 @@ async function loadConfig(inputs) {
 }
 
 // src/utils.ts
+var cp = __toESM(require("child_process"));
 async function exec2(command, args = [], options = {}) {
   let stdout = "";
   let stderr = "";
@@ -27219,17 +27220,42 @@ async function exec2(command, args = [], options = {}) {
     }
   };
   if (options.timeout) {
-    let timer;
-    const exitCode2 = await Promise.race([
-      exec(command, args, execOptions),
-      new Promise((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`Command timed out after ${Math.round(options.timeout / 6e4)}m: ${command}`)),
-          options.timeout
-        );
-      })
-    ]).finally(() => clearTimeout(timer));
-    return { exitCode: exitCode2, stdout, stderr };
+    return new Promise((resolve4, reject) => {
+      const child2 = cp.spawn(command, args, {
+        cwd: options.cwd,
+        env: options.env ? { ...process.env, ...options.env } : process.env,
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: false
+      });
+      child2.stdout?.on("data", (data) => {
+        stdout += data.toString();
+        if (!options.silent) process.stdout.write(data);
+      });
+      child2.stderr?.on("data", (data) => {
+        stderr += data.toString();
+        if (!options.silent) process.stderr.write(data);
+      });
+      if (options.input) {
+        child2.stdin?.end(options.input);
+      }
+      const timer = setTimeout(() => {
+        child2.kill("SIGTERM");
+        reject(new Error(`Command timed out after ${Math.round(options.timeout / 6e4)}m: ${command}`));
+      }, options.timeout);
+      child2.on("close", (code) => {
+        clearTimeout(timer);
+        const exitCode2 = code ?? 1;
+        if (exitCode2 !== 0 && !options.ignoreReturnCode) {
+          reject(new Error(`The process '${command}' failed with exit code ${exitCode2}`));
+        } else {
+          resolve4({ exitCode: exitCode2, stdout, stderr });
+        }
+      });
+      child2.on("error", (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
   }
   const exitCode = await exec(command, args, execOptions);
   return { exitCode, stdout, stderr };

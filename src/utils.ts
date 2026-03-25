@@ -1,5 +1,6 @@
 import * as core from '@actions/core'
 import * as actionsExec from '@actions/exec'
+import * as cp from 'child_process'
 
 interface ExecResult {
   exitCode: number
@@ -36,17 +37,45 @@ export async function exec(
   }
 
   if (options.timeout) {
-    let timer: ReturnType<typeof setTimeout>
-    const exitCode = await Promise.race([
-      actionsExec.exec(command, args, execOptions),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`Command timed out after ${Math.round(options.timeout! / 60_000)}m: ${command}`)),
-          options.timeout,
-        )
-      }),
-    ]).finally(() => clearTimeout(timer!))
-    return { exitCode, stdout, stderr }
+    // Use child_process.spawn directly so we can kill the process on timeout.
+    // @actions/exec doesn't expose the child process handle, so timed-out
+    // processes would be orphaned until the runner tears down the job.
+    return new Promise<ExecResult>((resolve, reject) => {
+      const child = cp.spawn(command, args, {
+        cwd: options.cwd,
+        env: options.env ? { ...process.env, ...options.env } : process.env,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: false,
+      })
+      child.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString()
+        if (!options.silent) process.stdout.write(data)
+      })
+      child.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString()
+        if (!options.silent) process.stderr.write(data)
+      })
+      if (options.input) {
+        child.stdin?.end(options.input)
+      }
+      const timer = setTimeout(() => {
+        child.kill('SIGTERM')
+        reject(new Error(`Command timed out after ${Math.round(options.timeout! / 60_000)}m: ${command}`))
+      }, options.timeout)
+      child.on('close', (code) => {
+        clearTimeout(timer)
+        const exitCode = code ?? 1
+        if (exitCode !== 0 && !options.ignoreReturnCode) {
+          reject(new Error(`The process '${command}' failed with exit code ${exitCode}`))
+        } else {
+          resolve({ exitCode, stdout, stderr })
+        }
+      })
+      child.on('error', (err) => {
+        clearTimeout(timer)
+        reject(err)
+      })
+    })
   }
 
   const exitCode = await actionsExec.exec(command, args, execOptions)
