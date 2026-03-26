@@ -104510,10 +104510,11 @@ function renderReport(report, options = {}) {
   if (report.newTestsCreated.length > 0) {
     sectionStart("\u{1F4A1} Test Recommendations Implemented");
     for (const t of report.newTestsCreated) {
+      const id = t.testId ? ` [\`Test ID-${t.testId}\`]` : "";
       const endpoint2 = t.endpoint ? ` \u2014 \`${t.endpoint}\`` : "";
       const desc = t.description ? `: ${t.description}` : "";
       const file = t.fileName ? t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\`` : "";
-      lines.push(`- ${t.testType}${endpoint2}${desc}${file}`);
+      lines.push(`- ${t.testType}${id}${endpoint2}${desc}${file}`);
     }
     sectionEnd();
   }
@@ -104526,10 +104527,10 @@ function renderReport(report, options = {}) {
     lines.push("To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).");
     lines.push("");
     for (const rec of sorted) {
-      const priority = rec.priority === "high" ? "HIGH" : rec.priority === "medium" ? "MEDIUM" : "LOW";
       const endpoint2 = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path ? `\`${rec.steps[0].method} ${rec.steps[0].path}\`` : "";
       const endpointSuffix = endpoint2 ? ` \u2014 ${endpoint2}` : "";
-      lines.push(`- ${rec.testType} (${priority})${endpointSuffix}: ${rec.description}`);
+      const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : "";
+      lines.push(`- **${rec.testType}**${id}${endpointSuffix}: ${rec.description}`);
     }
     sectionEnd();
   }
