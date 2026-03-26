@@ -3,15 +3,17 @@ import * as fs from 'fs'
 import * as github from '@actions/github'
 import * as path from 'path'
 import { DefaultArtifactClient } from '@actions/artifact'
-import type { Paths } from './types'
+import type { Paths, StartServicesResult, TargetDeploymentDetails } from './types'
 import { getInputs, detectAgentType } from './inputs'
 import { createAgent } from './agents'
 import { loadConfig } from './config'
 import { checkSelfTrigger } from './self-trigger'
-import { setGitHubToken, postInitialProgress, updateProgress, appendReportToProgress, postStandaloneComment, postValidationError } from './progress'
+import { setGitHubToken, postInitialProgress, updateProgress, appendReportToProgress, postStandaloneComment, postValidationError, replaceProgressWithFailure } from './progress'
 import { installMcp, configureMcp } from './mcp'
 import { installAgentCli, initializeAgent, buildAgentCommand, buildPrompt, runAgentWithRetry } from './agent'
 import { startServices, exportServiceBaseUrlEnvVars, generateAuthToken } from './services'
+import { StartupError, analyzeStartupError, formatStartupFailureComment, lastLines } from './startup-errors'
+import { runPreflightCheck } from './preflight'
 import { generateGitDiff, configureGitIdentity, autoCommit } from './git'
 import { readSummary, renderReport, parseMetrics } from './report'
 import { extractAgentLogSummary, pushAgentUsageEvent } from './telemetry'
@@ -313,8 +315,15 @@ async function run(): Promise<void> {
   const agentCmd = buildAgentCommand(agent, config.enableDebug)
 
   // ── 13. Start services & generate auth token ───────────────────────
+  let healthCheckPassed = true
+  let healthCheckOutput = ''
+  let deploymentDetails: TargetDeploymentDetails | null = null
   try {
-    const setupOutput = await startServices(config, workingDir)
+    const startResult: StartServicesResult = await startServices(config, workingDir)
+    healthCheckPassed = startResult.healthCheckPassed
+    healthCheckOutput = startResult.healthCheckOutput
+    deploymentDetails = startResult.details
+    const setupOutput = startResult.details
     if (setupOutput) {
       if (config.services.length === 0) {
         // No workspace.yml — create service entries from setup output
@@ -342,21 +351,26 @@ async function run(): Promise<void> {
       }
     }
   } catch (err) {
-    const errMsg = (err as Error).message
-    if (prNumber) {
-      await postStandaloneComment(prNumber, [
-        `### :x: Skyramp Testbot — Service Startup Failed`,
-        '',
-        `**Error:** ${errMsg}`,
-        '',
-        '**How to fix:**',
-        `- Check that your \`targetSetupCommand\` is correct: \`${config.targetSetupCommand}\``,
-        '- Verify the service names in your `docker-compose.yml` (or equivalent) match the command',
-        '- Ensure all referenced Docker images exist and can be pulled',
-        '- You can test locally by running the command manually',
-        '',
-        'This setting can be configured in your workflow file (`targetSetupCommand` input) or in `.skyramp/workspace.yml` (`runtimeDetails.serverStartCommand`).',
-      ].join('\n'))
+    const stdout = err instanceof StartupError ? err.stdout : ''
+    const stderr = err instanceof StartupError ? err.stderr : ''
+    const analysis = analyzeStartupError(`${stderr}\n${stdout}`)
+    const workflowUrl =
+      `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}` +
+      `/${process.env.GITHUB_REPOSITORY ?? github.context.repo.owner + '/' + github.context.repo.repo}` +
+      `/actions/runs/${process.env.GITHUB_RUN_ID ?? github.context.runId}`
+    const body = formatStartupFailureComment({
+      command: config.targetSetupCommand,
+      stdout,
+      stderr,
+      analysis,
+      workflowUrl,
+    })
+
+    if (progressCommentId) {
+      // Replace the stale "Analyzing PR…" spinner with the failure details in-place.
+      await replaceProgressWithFailure(progressCommentId, body)
+    } else if (prNumber) {
+      await postStandaloneComment(prNumber, body)
     }
     throw err
   }
@@ -372,12 +386,91 @@ async function run(): Promise<void> {
   const tokenSource = dynamicToken ? 'authTokenCommand' : process.env.SKYRAMP_TEST_TOKEN ? 'SKYRAMP_TEST_TOKEN env var' : 'none'
   debug(`Auth token source: ${tokenSource}, length: ${authToken.length}`)
 
-  // ── 14. Update progress (step 2: analyzing changes) ────────────────
+  // ── 14. SUT pre-flight validation ──────────────────────────────────
+  // Runs whenever service baseUrls are available; skips internally when none
+  // are configured or the diff has no extractable routes.  Guarding on
+  // skipTargetSetup would wrongly disable the check for already-running
+  // deployments, which is a common reason to set that flag.
+
+  const workflowUrl =
+    `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}` +
+    `/${process.env.GITHUB_REPOSITORY ?? github.context.repo.owner + '/' + github.context.repo.repo}` +
+    `/actions/runs/${process.env.GITHUB_RUN_ID ?? github.context.runId}`
+
+  const formatPreflightFailureBody = (issueBlocks: string[], diagnostics: string) => {
+    const tail = diagnostics ? lastLines(diagnostics, 20) : ''
+    const outputSection = tail
+      ? '\n<details>\n<summary>Debug logs for Pre-flight validation failure</summary>\n\n```\n' + tail + '\n```\n</details>\n'
+      : ''
+    return [
+      '### :x: Skyramp Testbot — SUT Pre-flight Validation Failed',
+      '',
+      issueBlocks.join('\n\n---\n\n'),
+      outputSection,
+      `[View full workflow logs ↗](${workflowUrl})`,
+    ].join('\n')
+  }
+
+  const postPreflightFailure = async (body: string) => {
+    if (progressCommentId) {
+      await replaceProgressWithFailure(progressCommentId, body)
+    } else if (prNumber) {
+      await postStandaloneComment(prNumber, body)
+    }
+  }
+
+  // Short-circuit: health check timed out → SUT is known-unready, no HTTP probes needed.
+  if (!healthCheckPassed) {
+    const probeableServices = config.services.filter(svc => svc.baseUrl)
+    const issueBlocks = probeableServices.map(svc => {
+      const url = svc.baseUrl!
+      return [
+        `**Service not reachable:** Service at ${url} did not respond before the health-check timeout. ` +
+        `The service may still be starting, or the startup command may not have brought it up at all.`,
+        '',
+        '**Fix:** Check that `targetSetupCommand` actually starts this service and listens on the expected port. ' +
+        'If the command is correct but the service is slow to start, increase `targetReadyCheckTimeout`. ' +
+        'For a more reliable readiness signal, configure `targetReadyCheckCommand` to probe a specific health endpoint.',
+      ].join('\n')
+    })
+    await postPreflightFailure(formatPreflightFailureBody(issueBlocks, healthCheckOutput))
+    throw new Error('SUT health check timed out — service did not become ready before the configured timeout')
+  }
+
+  {
+    const diffContent = fs.existsSync(paths.gitDiffPath)
+      ? fs.readFileSync(paths.gitDiffPath, 'utf8')
+      : ''
+    const preflight = await runPreflightCheck({
+      diffContent,
+      services: config.services,
+      authToken,
+      anthropicApiKey: inputs.anthropicApiKey,
+      targetDeploymentDetails: deploymentDetails,
+    })
+
+    if (!preflight.skipped && !preflight.ready) {
+      const kindLabel: Record<string, string> = {
+        NOT_DEPLOYED: 'Service not reachable',
+        STALE_IMAGE:  'Endpoint not found (404)',
+        AUTH_FAILURE: 'Authentication failed',
+        UNHEALTHY:    'Service unhealthy',
+      }
+      const issueBlocks = preflight.issues.map(i => {
+        const label = kindLabel[i.kind] ?? i.kind
+        return [`**${label}:** ${i.message}`, '', `**Fix:** ${i.recommendation}`].join('\n')
+      })
+      await postPreflightFailure(formatPreflightFailureBody(issueBlocks, ''))
+      throw new Error(`SUT pre-flight validation failed: ${preflight.issues.map(i => i.kind).join(', ')}`)
+    }
+  }
+
+  // ── 15. Update progress (step 2: analyzing changes) ────────────────
   if (progressCommentId) {
     await updateProgress(progressCommentId, 2, isCommentTrigger)
   }
 
-  // ── 15. Run Skyramp Testbot ─────────────────────────────────────────
+  // ── 16. Run Skyramp Testbot ─────────────────────────────────────────
   const result = await withGroup('Running Skyramp Testbot', async () => {
     // Copy git diff to working directory for consistent agent access
     const localDiffPath = path.join(workingDir, '.skyramp_git_diff')
@@ -457,6 +550,24 @@ async function run(): Promise<void> {
   debug(`Agent log file exists: ${fs.existsSync(paths.agentLogPath)}`)
   debug(`Agent stdout file exists: ${fs.existsSync(paths.agentStdoutPath)}`)
   debug(`Combined result file exists: ${fs.existsSync(paths.combinedResultPath)}`)
+
+  // When the agent succeeded but produced no output (Issue #18: no skip indication),
+  // write a "no tests generated" message so the PR comment is never left blank.
+  const emptySummary = !summary || summary.trim() === '' || summary.trim() === 'No summary available'
+  if (result.success && emptySummary) {
+    const noTestsMsg = [
+      '<!-- skyramp-testbot -->',
+      '### Skyramp Testbot — No Tests Generated',
+      '',
+      'Testbot analyzed this PR and determined that no new tests were required.',
+      'This typically happens when the changes are non-functional (e.g. documentation, configuration, CI/deployment).',
+      '',
+      'To request tests explicitly, comment with `@skyramp-testbot` followed by your request.',
+    ].join('\n')
+    fs.writeFileSync(paths.combinedResultPath, noTestsMsg)
+    core.setOutput('test_summary', noTestsMsg)
+    core.notice('Agent produced no output — posting skip indication to PR')
+  }
 
   // ── 18. Auto-commit test changes ───────────────────────────────────
   // Run before PR comment so commit errors can be included in the report.

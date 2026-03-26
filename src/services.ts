@@ -1,5 +1,6 @@
 import * as core from '@actions/core'
-import type { ResolvedConfig, TargetDeploymentDetails, WorkspaceServiceInfo } from './types'
+import type { ResolvedConfig, TargetDeploymentDetails, WorkspaceServiceInfo, StartServicesResult } from './types'
+import { StartupError } from './startup-errors'
 import { exec, sleep, withGroup, withRetry, secondsToMilliseconds, debug } from './utils'
 
 /** Fallback health check when no service base URLs are available. */
@@ -50,29 +51,45 @@ export function buildDefaultHealthCheckCommand(services: WorkspaceServiceInfo[])
 
 /**
  * Start user-defined services (e.g., docker compose up).
- * Returns parsed JSON from the setup command's stdout (last line), or null.
  */
-export async function startServices(config: ResolvedConfig, workingDir: string): Promise<TargetDeploymentDetails | null> {
+export async function startServices(config: ResolvedConfig, workingDir: string): Promise<StartServicesResult> {
   return await withGroup('Starting services', async () => {
+    debug(`startServices called.`)
     if (config.skipTargetSetup) {
       core.notice('Skipping service startup (skipTargetSetup=true)')
-      return null
+      return { details: null, healthCheckPassed: true, healthCheckOutput: '' }
     }
 
     let setupStdout = ''
     core.info(`Running command: ${config.targetSetupCommand}`)
+
+    // Track the last captured output across retries so it is available in StartupError.
+    let lastStdout = ''
+    let lastStderr = ''
     try {
-      const { stdout } = await withRetry(
-        () => exec('bash', ['-c', config.targetSetupCommand], { cwd: workingDir }),
+      const result = await withRetry(
+        async () => {
+          const r = await exec('bash', ['-c', config.targetSetupCommand], {
+            cwd: workingDir,
+            ignoreReturnCode: true,
+          })
+          lastStdout = r.stdout
+          lastStderr = r.stderr
+          if (r.exitCode !== 0) throw new Error(`exit code ${r.exitCode}`)
+          return r
+        },
         { retries: config.targetSetupRetries, delay: config.targetSetupRetryDelay, label: 'Service startup' },
       )
-      setupStdout = stdout
+      setupStdout = result.stdout
       core.notice('Services started successfully')
-    } catch (err) {
+    } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err)
       core.error(`Service startup command failed: ${errMsg}`)
-      throw new Error(
-        `Service startup failed — all subsequent tests will likely fail. Command: ${config.targetSetupCommand}`,
+      throw new StartupError(
+        `Service startup failed. Command: ${config.targetSetupCommand}`,
+        config.targetSetupCommand,
+        lastStdout,
+        lastStderr,
         { cause: err },
       )
     }
@@ -86,37 +103,54 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
     const timeoutMs = secondsToMilliseconds(config.targetReadyCheckTimeout)
     const pollInterval = 2
     let attempt = 0
+    let lastHealthCheckStdout = ''
+    let lastHealthCheckStderr = ''
 
     while (Date.now() - startTime < timeoutMs) {
       attempt++
-      const { exitCode } = await exec('bash', ['-c', healthCheckCommand], {
+      const { exitCode, stdout, stderr } = await exec('bash', ['-c', healthCheckCommand], {
         cwd: workingDir,
         ignoreReturnCode: true,
       })
+      lastHealthCheckStdout = stdout
+      lastHealthCheckStderr = stderr
       if (exitCode === 0) {
         core.notice(`Health check passed on attempt ${attempt}`)
-        return parseTargetDeploymentDetails(setupStdout)
+        return { details: parseTargetDeploymentDetails(setupStdout), healthCheckPassed: true, healthCheckOutput: '' }
       }
       const elapsed = Math.round((Date.now() - startTime) / 1000)
       core.info(`Health check attempt ${attempt} failed (${elapsed}s / ${config.targetReadyCheckTimeout}s), retrying in ${pollInterval}s...`)
       await sleep(pollInterval)
     }
 
-    core.warning(`Health check timed out after ${config.targetReadyCheckTimeout}s, continuing anyway...`)
+    core.warning(
+      `Service health check timed out after ${config.targetReadyCheckTimeout}s — ` +
+      `pre-flight validation will report NOT_DEPLOYED and halt the agent run.`,
+    )
 
-    // Run diagnostics command to help debug service startup issues
-    try {
-      core.info('--- Diagnostics ---')
-      await exec('bash', ['-c', config.targetReadyCheckDiagnosticsCommand], {
-        cwd: workingDir,
-        ignoreReturnCode: true,
-      })
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err)
-      core.warning(`Could not retrieve diagnostics: ${errMsg}`)
+    // Run diagnostics command and capture its output for the PR comment
+    let diagnosticsOutput = ''
+    if (config.targetReadyCheckDiagnosticsCommand) {
+      try {
+        core.info('--- Diagnostics ---')
+        const { stdout, stderr } = await exec('bash', ['-c', config.targetReadyCheckDiagnosticsCommand], {
+          cwd: workingDir,
+          ignoreReturnCode: true,
+        })
+        diagnosticsOutput = [stderr, stdout].filter(s => s.trim()).join('\n')
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        core.warning(`Could not retrieve diagnostics: ${errMsg}`)
+      }
     }
 
-    return parseTargetDeploymentDetails(setupStdout)
+    const healthCheckOutput = [
+      diagnosticsOutput,
+      lastHealthCheckStderr,
+      lastHealthCheckStdout,
+    ].filter(s => s.trim()).join('\n')
+
+    return { details: parseTargetDeploymentDetails(setupStdout), healthCheckPassed: false, healthCheckOutput }
   })
 }
 

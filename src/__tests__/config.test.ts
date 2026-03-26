@@ -239,6 +239,52 @@ describe('loadConfig', () => {
     expect(config.targetTeardownCommand).toBe('npm run teardown')
   })
 
+  it('resolves relative schemaPath to an absolute path under workingDirectory', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{
+        serviceName: 'api',
+        testDirectory: 'tests',
+        api: { baseUrl: 'http://localhost:8000', schemaPath: '.skyramp/openapi.yaml' },
+      }],
+    })
+
+    const config = await loadConfig(makeInputs({ workingDirectory: '/repo/services/api' }))
+
+    // Relative path must be resolved against workingDirectory, not process.cwd()
+    expect(config.services[0].schemaPath).toBe('/repo/services/api/.skyramp/openapi.yaml')
+  })
+
+  it('leaves an absolute schemaPath unchanged', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{
+        serviceName: 'api',
+        testDirectory: 'tests',
+        api: { baseUrl: 'http://localhost:8000', schemaPath: '/absolute/path/openapi.json' },
+      }],
+    })
+
+    const config = await loadConfig(makeInputs({ workingDirectory: '/repo' }))
+
+    expect(config.services[0].schemaPath).toBe('/absolute/path/openapi.json')
+  })
+
+  it('leaves a URL schemaPath unchanged', async () => {
+    mockExists.mockResolvedValue(true)
+    mockRead.mockResolvedValue({
+      services: [{
+        serviceName: 'api',
+        testDirectory: 'tests',
+        api: { baseUrl: 'http://localhost:8000', schemaPath: 'https://api.example.com/openapi.json' },
+      }],
+    })
+
+    const config = await loadConfig(makeInputs())
+
+    expect(config.services[0].schemaPath).toBe('https://api.example.com/openapi.json')
+  })
+
   it('testbot-specific fields always come from inputs', async () => {
     mockExists.mockResolvedValue(true)
     mockRead.mockResolvedValue({

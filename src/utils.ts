@@ -144,3 +144,14 @@ const S_TO_MS = 1000;
 export function secondsToMilliseconds(seconds: number): number {
   return seconds * S_TO_MS;
 }
+
+/**
+ * Create an AbortSignal that fires after `timeoutMs` milliseconds.
+ * Returns `cancel()` to clear the timer when the operation completes before
+ * the deadline — call it in both the success and error paths to avoid leaks.
+ */
+export function abortAfter(timeoutMs: number): { signal: AbortSignal; cancel: () => void } {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  return { signal: controller.signal, cancel: () => clearTimeout(timer) }
+}

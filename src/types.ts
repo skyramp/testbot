@@ -52,6 +52,9 @@ export interface WorkspaceServiceInfo {
   framework?: string
   baseUrl?: string
   testDirectory?: string
+  /** Path or URL to an OpenAPI/Swagger schema in JSON or YAML format. Used by
+   *  pre-flight to resolve partial route segments to full paths. */
+  schemaPath?: string
 }
 
 /** Configuration resolved from .skyramp/workspace.yml merged with action inputs. */
@@ -137,6 +140,31 @@ export interface TestbotReport {
   commitMessage?: string
 }
 
+export type PreflightIssueKind = 'NOT_DEPLOYED' | 'STALE_IMAGE' | 'AUTH_FAILURE' | 'UNHEALTHY'
+
+export interface PreflightIssue {
+  kind: PreflightIssueKind
+  endpoint: string
+  statusCode?: number
+  message: string
+  recommendation: string
+}
+
+export interface PreflightResult {
+  /**
+   * False when any issue was detected (NOT_DEPLOYED, STALE_IMAGE, AUTH_FAILURE,
+   * or UNHEALTHY).  Callers should halt the agent run when false — all issue
+   * kinds indicate the SUT is not in a state where test results would be valid.
+   * True only when every probe returned a status that the probe classifier
+   * considers healthy (for example, 2xx, 400, 405, and some other 4xx such as 422).
+   */
+  ready: boolean
+  /** True when the check was skipped (no base URLs or no endpoints in diff). */
+  skipped: boolean
+  issues: PreflightIssue[]
+  probedEndpoints: string[]
+}
+
 export interface Paths {
   tempDir: string
   licensePath: string
@@ -174,4 +202,21 @@ export abstract class AgentStrategy {
     const key = inputs[this.apiKeyField]
     if (key) core.exportVariable(this.envVar, key)
   }
+}
+
+export interface StartServicesResult {
+  /** Parsed JSON from the last line of the setup command stdout, or null. */
+  details: TargetDeploymentDetails | null
+  /**
+   * True when the health check passed (or was skipped because setup was skipped).
+   * False when the health check timed out — callers should surface this as a
+   * pre-flight `NOT_DEPLOYED` issue rather than running the agent on a half-started SUT.
+   */
+  healthCheckPassed: boolean
+  /**
+   * Combined stdout + stderr from the last health-check attempt and the diagnostics
+   * command.  Populated only when the health check timed out; empty string otherwise.
+   * Callers can include this in the pre-flight failure PR comment.
+   */
+  healthCheckOutput: string
 }

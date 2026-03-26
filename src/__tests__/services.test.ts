@@ -54,55 +54,80 @@ describe('startServices', () => {
     mockExec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
   })
 
-  it('throws on service startup command failure', async () => {
-    mockExec.mockRejectedValue(new Error("The process '/usr/bin/bash' failed with exit code 1"))
+  it('throws a StartupError on service startup command failure', async () => {
+    mockExec.mockResolvedValue({ exitCode: 1, stdout: 'out', stderr: 'port is already allocated' })
 
     await expect(startServices(baseConfig, '/work'))
-      .rejects.toThrow('Service startup failed — all subsequent tests will likely fail')
+      .rejects.toThrow('Service startup failed')
   })
 
-  it('includes the failing command in the error message', async () => {
+  it('includes the failing command in the StartupError', async () => {
     const config = { ...baseConfig, targetSetupCommand: 'docker compose up -d bad-service' }
-    mockExec.mockRejectedValue(new Error('exit code 1'))
+    mockExec.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'err' })
 
     await expect(startServices(config, '/work'))
-      .rejects.toThrow('docker compose up -d bad-service')
+      .rejects.toMatchObject({ command: 'docker compose up -d bad-service' })
   })
 
-  it('preserves the original error as cause', async () => {
-    const originalErr = new Error('exit code 1')
-    mockExec.mockRejectedValue(originalErr)
+  it('captures stdout and stderr in the StartupError', async () => {
+    mockExec.mockResolvedValue({ exitCode: 1, stdout: 'captured-out', stderr: 'captured-err' })
 
     try {
       await startServices(baseConfig, '/work')
       expect.fail('should have thrown')
     } catch (err) {
-      expect((err as Error).cause).toBe(originalErr)
+      expect((err as { stdout: string; stderr: string }).stdout).toBe('captured-out')
+      expect((err as { stdout: string; stderr: string }).stderr).toBe('captured-err')
     }
   })
 
   it('skips startup when skipTargetSetup is true', async () => {
     const config = { ...baseConfig, skipTargetSetup: true }
 
-    await startServices(config, '/work')
+    const result = await startServices(config, '/work')
 
     expect(mockExec).not.toHaveBeenCalled()
+    // healthCheckPassed=true because no setup means we assume the SUT is already ready
+    expect(result.healthCheckPassed).toBe(true)
+    expect(result.details).toBeNull()
   })
 
-  it('succeeds when startup and health check both pass', async () => {
-    // startup command succeeds, health check succeeds
+  it('returns healthCheckPassed=true when startup and health check both pass', async () => {
     mockExec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
 
-    await expect(startServices(baseConfig, '/work')).resolves.toBeNull()
+    const result = await startServices(baseConfig, '/work')
+    expect(result.healthCheckPassed).toBe(true)
+    expect(result.details).toBeNull()
+  })
+
+  it('returns healthCheckPassed=false when health check times out', async () => {
+    mockExec
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' }) // startup
+      .mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' })     // health check (all attempts)
+
+    const config = { ...baseConfig, targetReadyCheckTimeout: 0 }
+    const result = await startServices(config, '/work')
+
+    expect(result.healthCheckPassed).toBe(false)
+  })
+
+  it('does not throw when health check times out', async () => {
+    mockExec
+      .mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' })
+      .mockResolvedValue({ exitCode: 1, stdout: '', stderr: '' })
+
+    const config = { ...baseConfig, targetReadyCheckTimeout: 0 }
+    await expect(startServices(config, '/work')).resolves.toBeDefined()
   })
 
   it('retries on transient failure and succeeds on subsequent attempt', async () => {
-    // First call (setup) fails, second call (setup retry) succeeds, third call (health check) succeeds
+    // First setup call fails (exitCode 1), second succeeds, health check succeeds
     mockExec
-      .mockRejectedValueOnce(new Error('502 Bad Gateway'))
+      .mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'transient error' })
       .mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
 
-    await expect(startServices(baseConfig, '/work')).resolves.toBeNull()
+    const result = await startServices(baseConfig, '/work')
+    expect(result.healthCheckPassed).toBe(true)
 
     // Setup called twice (1 fail + 1 success) + 1 health check = 3 exec calls
     const setupCalls = mockExec.mock.calls.filter(
@@ -112,7 +137,7 @@ describe('startServices', () => {
   })
 
   it('throws after exhausting all retries', async () => {
-    mockExec.mockRejectedValue(new Error('502 Bad Gateway'))
+    mockExec.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'persistent error' })
 
     await expect(startServices(baseConfig, '/work'))
       .rejects.toThrow('Service startup failed')

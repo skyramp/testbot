@@ -43,12 +43,19 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
 
       // Collect all services
       for (const svc of wsConfig.services ?? []) {
+        // Resolve a relative schemaPath against workingDir so pre-flight can locate
+        // the file regardless of what process.cwd() is at runtime.
+        const rawSchemaPath = svc.api?.schemaPath
+        const schemaPath = rawSchemaPath && !rawSchemaPath.startsWith('http://') && !rawSchemaPath.startsWith('https://')
+          ? path.resolve(workingDir, rawSchemaPath)
+          : rawSchemaPath
         services.push({
           serviceName: svc.serviceName,
           language: svc.language,
           framework: svc.framework,
           baseUrl: svc.api?.baseUrl,
           testDirectory: svc.testDirectory,
+          schemaPath,
         })
       }
 

@@ -130,6 +130,25 @@ export async function postStandaloneComment(prNumber: number, bodyOrFile: string
 }
 
 /**
+ * Replace an existing progress comment with a failure body.
+ * Used to turn the "Analyzing PR…" spinner into an error message in-place,
+ * so no stale in-progress comment is left behind.
+ * Non-fatal: logs a warning on failure so the caller can still re-throw the original error.
+ */
+export async function replaceProgressWithFailure(commentId: number, body: string): Promise<void> {
+  try {
+    const octokit = getOctokit()
+    await octokit.rest.issues.updateComment({
+      ...github.context.repo,
+      comment_id: commentId,
+      body,
+    })
+  } catch (err) {
+    core.warning(`Failed to update progress comment with failure details: ${err}`)
+  }
+}
+
+/**
  * Post a validation error as a PR comment.
  */
 export async function postValidationError(prNumber: number | undefined, errorMsg: string): Promise<void> {
