@@ -119,11 +119,11 @@ inputs:
     required: false
     default: '60'
   targetSetupRetries:
-    description: 'Number of retries for target_setup_command on failure (e.g. transient DockerHub 502 errors)'
+    description: 'Number of retries for targetSetupCommand on failure (e.g. transient DockerHub 502 errors)'
     required: false
     default: '3'
   targetSetupRetryDelay:
-    description: 'Delay in seconds between target_setup_command retries'
+    description: 'Delay in seconds between targetSetupCommand retries'
     required: false
     default: '10'
   reportCollapsed:

@@ -27127,12 +27127,15 @@ async function loadConfig(inputs) {
         }
       }
       for (const svc of wsConfig.services ?? []) {
+        const rawSchemaPath = svc.api?.schemaPath;
+        const schemaPath = rawSchemaPath && !rawSchemaPath.startsWith("http://") && !rawSchemaPath.startsWith("https://") ? path4.resolve(workingDir, rawSchemaPath) : rawSchemaPath;
         services.push({
           serviceName: svc.serviceName,
           language: svc.language,
           framework: svc.framework,
           baseUrl: svc.api?.baseUrl,
-          testDirectory: svc.testDirectory
+          testDirectory: svc.testDirectory,
+          schemaPath
         });
       }
       const first = (wsConfig.services ?? [])[0];
