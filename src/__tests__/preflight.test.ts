@@ -94,6 +94,27 @@ describe('extractEndpointsFromDiff', () => {
     const diff = "+app.use('/api/*', middleware)"
     expect(extractEndpointsFromDiff(diff).some(p => p.includes('*'))).toBe(false)
   })
+
+  it('returns ["/"] for Django path() with only parameterised segments', () => {
+    const diff = [
+      '+    path(',
+      '+        "workspaces/<str:slug>/projects/<uuid:project_id>/work-items/stats/",',
+      '+        WorkItemStatsAPIEndpoint.as_view(http_method_names=["get"]),',
+      '+        name="work-item-stats",',
+      '+    ),',
+    ].join('\n')
+    expect(extractEndpointsFromDiff(diff)).toEqual(['/'])
+  })
+
+  it('returns static paths when Django diff also contains probeable routes', () => {
+    const diff = [
+      '+    path("workspaces/<str:slug>/work-items/stats/", StatsView.as_view()),',
+      "+router.get('/api/health', handler)",
+    ].join('\n')
+    const result = extractEndpointsFromDiff(diff)
+    expect(result).toContain('/api/health')
+    expect(result).not.toContain('/')  // root fallback not used when static paths exist
+  })
 })
 
 // ── extractChangedPaths / deriveServiceSourceRoot / serviceOwnsChangedPaths ───
@@ -205,6 +226,22 @@ describe('classifyProbe', () => {
       const issue = classifyProbe('/p', { statusCode: status })
       expect(issue?.recommendation).toBeTruthy()
     }
+  })
+
+  it('returns null (OK) for "/" with 404 — root alive-probe must not be classified as STALE_IMAGE', () => {
+    expect(classifyProbe('/', { statusCode: 404 })).toBeNull()
+  })
+
+  it('returns null (OK) for "/" with 401 — root alive-probe must not be classified as AUTH_FAILURE', () => {
+    expect(classifyProbe('/', { statusCode: 401 })).toBeNull()
+  })
+
+  it('returns null (OK) for "/" with 500 — root alive-probe must not be classified as UNHEALTHY', () => {
+    expect(classifyProbe('/', { statusCode: 500 })).toBeNull()
+  })
+
+  it('returns NOT_DEPLOYED for "/" with statusCode 0 — unreachable service is always a failure', () => {
+    expect(classifyProbe('/', { statusCode: 0, error: 'connection refused' })?.kind).toBe('NOT_DEPLOYED')
   })
 })
 
@@ -375,6 +412,20 @@ describe('resolvePathsViaOpenApi', () => {
     // Should return raw segments; Anthropic API must not be called
     expect(result).toEqual(['/search'])
     expect(fetchSpy.mock.calls.every((c: unknown[]) => !String(c[0]).includes('anthropic'))).toBe(true)
+  })
+
+  it('does not resolve "/" to arbitrary OpenAPI paths that end with "/"', async () => {
+    // '/' is the alive-probe fallback for parameterised-only diffs; it must pass
+    // through unchanged so classifyProbe handles it as a reachability check.
+    // Without the seg.length > 1 guard, sp.endsWith('/') matches every trailing-
+    // slash path in the spec and the probe would hit a random endpoint instead.
+    vi.stubGlobal('fetch', vi.fn(async () => spec([
+      '/api/workspaces/',
+      '/api/projects/',
+      '/api/work-items/stats/',
+    ])))
+    const result = await resolvePathsViaOpenApi('http://localhost:8000', ['/'], '')
+    expect(result).toEqual(['/'])
   })
 })
 

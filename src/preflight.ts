@@ -18,8 +18,13 @@ const MAX_ENDPOINTS = 3
  * so the probe targets the most likely "does this exist?" endpoint first.
  *
  * Best-effort and framework-agnostic: covers Express, FastAPI, NestJS/n8n
- * decorators, Spring, and plain string literals.  Returns [] when nothing
- * looks like a new route — callers must skip the check gracefully.
+ * decorators, Spring, Django, and plain string literals.
+ *
+ * Django `path()` strings lack a leading `/` and use `<type:name>` parameter
+ * syntax.  When these are the only route additions in the diff (all paths are
+ * parameterised and cannot be probed directly), the function returns `['/']`
+ * so that the pre-flight check still runs a basic alive probe rather than
+ * skipping entirely.  Returns `[]` only when nothing looks like a new route.
  */
 export function extractEndpointsFromDiff(diffContent: string): string[] {
   const addedLines = diffContent
@@ -28,6 +33,7 @@ export function extractEndpointsFromDiff(diffContent: string): string[] {
     .map(line => line.slice(1))
 
   const candidates = new Set<string>()
+  let hasRouteRegistrations = false
   // Match any single- or double-quoted string that contains a `/`
   const pathLiteral = /['"`]([^'"`\s]*\/[^'"`\s]*)['"`]/g
 
@@ -39,11 +45,31 @@ export function extractEndpointsFromDiff(diffContent: string): string[] {
       const raw = m[1]
       // Ignore absolute URLs like "https://example.com/path"
       if (raw.includes('://')) continue
+      // Detect Django-style angle-bracket path parameters (<type:name> or <name>).
+      // Django path() strings also lack a leading `/`.  These are unambiguous route
+      // registrations even though they cannot be probed directly without real values.
+      if (/<\w+[:\w]*>/.test(raw)) {
+        hasRouteRegistrations = true
+        continue
+      }
       // Require a leading `/` so we only consider route-like strings
-      if (!raw.startsWith('/')) continue
-      const path = raw
-      // Skip route-param segments — probing them needs real IDs
-      if (path.includes(':') || path.includes('{') || path.includes('*')) continue
+      // Normalise Django-style relative paths inside path()/re_path() by
+      // prepending a leading `/` so they become probeable candidates.
+      let path = raw
+      if (!path.startsWith('/')) {
+        const isDjangoRouteContext = /\b(re_)?path\s*\(/.test(line)
+        if (isDjangoRouteContext) {
+          path = '/' + path
+        }
+      }
+      // Require a leading `/` so we only consider route-like strings
+      if (!path.startsWith('/')) continue
+      // Parameterised paths (Express :id, FastAPI/OpenAPI {id}) can't be probed without
+      // real values, but they still signal that this PR touches an API route.
+      if (path.includes(':') || path.includes('{') || path.includes('*')) {
+        hasRouteRegistrations = true
+        continue
+      }
       // Skip file-system-looking paths and version strings
       if (path.includes('..') || /\/v\d+\.\d+/.test(path)) continue
       // Skip obvious static assets / docs (images, html, markdown, etc.)
@@ -52,9 +78,21 @@ export function extractEndpointsFromDiff(diffContent: string): string[] {
     }
   }
 
-  return [...candidates]
-    .sort((a, b) => a.split('/').length - b.split('/').length)
-    .slice(0, MAX_ENDPOINTS)
+  if (candidates.size > 0) {
+    return [...candidates]
+      .sort((a, b) => a.split('/').length - b.split('/').length)
+      .slice(0, MAX_ENDPOINTS)
+  }
+
+  // Diff has route registrations (e.g. Django path() with <type:param> segments,
+  // or Express/FastAPI routes with :id / {id} params) but no directly-probeable
+  // static paths.  Return '/' so the pre-flight check performs a basic alive probe
+  // instead of skipping the service entirely.
+  if (hasRouteRegistrations) {
+    return ['/']
+  }
+
+  return []
 }
 
 /**
@@ -161,6 +199,12 @@ export function classifyProbe(
     }
   }
 
+  // '/' is a pure reachability fallback used when the diff contains only
+  // parameterised routes (e.g. Django <type:param>) that cannot be probed
+  // directly.  Any HTTP response means the service is alive — a 404 or 401
+  // on the root is normal for many APIs and must not be treated as a failure.
+  if (path === '/') return null
+
   const kind: PreflightIssueKind | null =
     outcome.statusCode === 404 ? 'STALE_IMAGE' :
     outcome.statusCode === 401 || outcome.statusCode === 403 ? 'AUTH_FAILURE' :
@@ -207,7 +251,9 @@ function matchSegmentsToSpecPaths(segments: string[], specPaths: string[]): stri
   const resolved = new Set<string>()
   for (const seg of segments) {
     for (const sp of unparam) {
-      if (sp === seg || sp.endsWith(seg)) resolved.add(sp)
+      // endsWith only when seg is a meaningful sub-path (length > 1); a bare '/'
+      // would otherwise match every trailing-slash path in the spec.
+      if (sp === seg || (seg.length > 1 && sp.endsWith(seg))) resolved.add(sp)
     }
   }
   return [...resolved].slice(0, MAX_ENDPOINTS)

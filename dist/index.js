@@ -101388,7 +101388,8 @@ async function startServices(config, workingDir) {
         info("--- Diagnostics ---");
         const { stdout, stderr } = await exec2("bash", ["-c", config.targetReadyCheckDiagnosticsCommand], {
           cwd: workingDir,
-          ignoreReturnCode: true
+          ignoreReturnCode: true,
+          silent: true
         });
         diagnosticsOutput = [stderr, stdout].filter((s) => s.trim()).join("\n");
       } catch (err) {
@@ -104039,6 +104040,7 @@ var MAX_ENDPOINTS = 3;
 function extractEndpointsFromDiff(diffContent) {
   const addedLines = diffContent.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).map((line) => line.slice(1));
   const candidates = /* @__PURE__ */ new Set();
+  let hasRouteRegistrations = false;
   const pathLiteral = /['"`]([^'"`\s]*\/[^'"`\s]*)['"`]/g;
   for (const line of addedLines) {
     pathLiteral.lastIndex = 0;
@@ -104046,15 +104048,34 @@ function extractEndpointsFromDiff(diffContent) {
     while ((m = pathLiteral.exec(line)) !== null) {
       const raw = m[1];
       if (raw.includes("://")) continue;
-      if (!raw.startsWith("/")) continue;
-      const path11 = raw;
-      if (path11.includes(":") || path11.includes("{") || path11.includes("*")) continue;
+      if (/<\w+[:\w]*>/.test(raw)) {
+        hasRouteRegistrations = true;
+        continue;
+      }
+      let path11 = raw;
+      if (!path11.startsWith("/")) {
+        const isDjangoRouteContext = /\b(re_)?path\s*\(/.test(line);
+        if (isDjangoRouteContext) {
+          path11 = "/" + path11;
+        }
+      }
+      if (!path11.startsWith("/")) continue;
+      if (path11.includes(":") || path11.includes("{") || path11.includes("*")) {
+        hasRouteRegistrations = true;
+        continue;
+      }
       if (path11.includes("..") || /\/v\d+\.\d+/.test(path11)) continue;
       if (/\.(png|jpe?g|gif|svg|webp|ico|css|js|html?|md|txt|pdf)(\?|$)/i.test(path11)) continue;
       candidates.add(path11);
     }
   }
-  return [...candidates].sort((a, b) => a.split("/").length - b.split("/").length).slice(0, MAX_ENDPOINTS);
+  if (candidates.size > 0) {
+    return [...candidates].sort((a, b) => a.split("/").length - b.split("/").length).slice(0, MAX_ENDPOINTS);
+  }
+  if (hasRouteRegistrations) {
+    return ["/"];
+  }
+  return [];
 }
 function extractChangedPaths(diffContent) {
   const paths = /* @__PURE__ */ new Set();
@@ -104101,6 +104122,7 @@ function classifyProbe(path11, outcome) {
       recommendation: "Confirm the route is registered, the server restarted after the code change, and the service is still running."
     };
   }
+  if (path11 === "/") return null;
   const kind = outcome.statusCode === 404 ? "STALE_IMAGE" : outcome.statusCode === 401 || outcome.statusCode === 403 ? "AUTH_FAILURE" : outcome.statusCode >= 500 ? "UNHEALTHY" : null;
   if (!kind) return null;
   const messages = {
@@ -104123,7 +104145,7 @@ function matchSegmentsToSpecPaths(segments, specPaths) {
   const resolved = /* @__PURE__ */ new Set();
   for (const seg of segments) {
     for (const sp of unparam) {
-      if (sp === seg || sp.endsWith(seg)) resolved.add(sp);
+      if (sp === seg || seg.length > 1 && sp.endsWith(seg)) resolved.add(sp);
     }
   }
   return [...resolved].slice(0, MAX_ENDPOINTS);
