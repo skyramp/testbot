@@ -105,7 +105,7 @@ export interface SummaryMetrics {
 
 export interface TestbotReport {
   businessCaseAnalysis: string
-  newTestsCreated: { testType: string; endpoint: string; fileName: string; description?: string; scenarioFile?: string; traceFile?: string; frontendTrace?: string }[]
+  newTestsCreated: { testId?: string; testType: string; endpoint: string; fileName: string; description?: string; scenarioFile?: string; traceFile?: string; frontendTrace?: string }[]
   testMaintenance: (
     | { description: string }
     | {
@@ -119,6 +119,7 @@ export interface TestbotReport {
   )[]
   testResults: { testType: string; endpoint: string; status: string; details: string }[]
   additionalRecommendations?: {
+    testId?: string
     testType: string
     scenarioName: string
     steps: {

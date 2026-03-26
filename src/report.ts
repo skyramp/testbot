@@ -120,10 +120,11 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
   if (report.newTestsCreated.length > 0) {
     sectionStart('💡 Test Recommendations Implemented')
     for (const t of report.newTestsCreated) {
+      const id = t.testId ? ` [\`Test ID-${t.testId}\`]` : ''
       const endpoint = t.endpoint ? ` — \`${t.endpoint}\`` : ''
       const desc = t.description ? `: ${t.description}` : ''
       const file = t.fileName ? (t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\``) : ''
-      lines.push(`- ${t.testType}${endpoint}${desc}${file}`)
+      lines.push(`- ${t.testType}${id}${endpoint}${desc}${file}`)
     }
     sectionEnd()
   }
@@ -140,12 +141,12 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     lines.push('To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).')
     lines.push('')
     for (const rec of sorted) {
-      const priority = rec.priority === 'high' ? 'HIGH' : rec.priority === 'medium' ? 'MEDIUM' : 'LOW'
       const endpoint = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path
         ? `\`${rec.steps[0].method} ${rec.steps[0].path}\``
         : ''
       const endpointSuffix = endpoint ? ` — ${endpoint}` : ''
-      lines.push(`- ${rec.testType} (${priority})${endpointSuffix}: ${rec.description}`)
+      const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : ''
+      lines.push(`- **${rec.testType}**${id}${endpointSuffix}: ${rec.description}`)
     }
     sectionEnd()
   }
