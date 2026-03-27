@@ -1,6 +1,6 @@
 import './mocks/core'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { extractEndpointsFromDiff, extractChangedPaths, deriveServiceSourceRoot, serviceOwnsChangedPaths, classifyProbe, resolvePathsViaOpenApi, resolvePathsViaLlm, resolvePathsFromCode, runPreflightCheck } from '../preflight'
+import { extractEndpointsFromDiff, extractParamHintsFromDiff, extractChangedPaths, deriveServiceSourceRoot, serviceOwnsChangedPaths, classifyProbe, resolvePathsViaOpenApi, resolvePathsViaLlm, resolvePathsFromCode, runPreflightCheck } from '../preflight'
 import type { WorkspaceServiceInfo } from '../types'
 
 vi.mock('../utils', async () => {
@@ -9,6 +9,7 @@ vi.mock('../utils', async () => {
     ...actual,
     withGroup: vi.fn(async (_name: string, fn: () => Promise<unknown>) => fn()),
     debug: vi.fn(),
+    sleep: vi.fn(async () => {}),
   }
 })
 
@@ -114,6 +115,59 @@ describe('extractEndpointsFromDiff', () => {
     const result = extractEndpointsFromDiff(diff)
     expect(result).toContain('/api/health')
     expect(result).not.toContain('/')  // root fallback not used when static paths exist
+  })
+})
+
+// ── extractParamHintsFromDiff ─────────────────────────────────────────────────
+
+describe('extractParamHintsFromDiff', () => {
+  it('returns empty array when no parameterised routes in diff', () => {
+    expect(extractParamHintsFromDiff("+router.get('/api/items', h)")).toEqual([])
+  })
+
+  it('returns the stem before the first param segment', () => {
+    const diff = "+@router.put(\"/orders/{order_id}\", h)"
+    expect(extractParamHintsFromDiff(diff)).toContain('/orders')
+  })
+
+  it('returns stem for multi-segment paths with params', () => {
+    const diff = "+@router.get('/api/v1/users/{user_id}', h)"
+    expect(extractParamHintsFromDiff(diff)).toContain('/api/v1/users')
+  })
+
+  it('returns the raw literal for bare /{param} (no useful stem)', () => {
+    const diff = "+@router.put(\"/{order_id}\", h)"
+    const result = extractParamHintsFromDiff(diff)
+    expect(result).toContain('/{order_id}')
+  })
+
+  it('handles colon-style params (:id)', () => {
+    const diff = "+router.get('/users/:id', h)"
+    expect(extractParamHintsFromDiff(diff)).toContain('/users')
+  })
+
+  it('returns empty array for lines not starting with +', () => {
+    const diff = " router.put('/orders/{id}', h)"   // context line
+    expect(extractParamHintsFromDiff(diff)).toEqual([])
+  })
+
+  it('deduplicates identical stems', () => {
+    const diff = [
+      "+@router.put(\"/orders/{order_id}\")",
+      "+@router.delete(\"/orders/{order_id}\")",
+    ].join('\n')
+    const result = extractParamHintsFromDiff(diff)
+    expect(result.filter(h => h === '/orders').length).toBe(1)
+  })
+
+  it('limits results to MAX_ENDPOINTS (3)', () => {
+    const diff = [
+      "+router.put('/a/{id}')",
+      "+router.put('/b/{id}')",
+      "+router.put('/c/{id}')",
+      "+router.put('/d/{id}')",
+    ].join('\n')
+    expect(extractParamHintsFromDiff(diff).length).toBeLessThanOrEqual(3)
   })
 })
 
@@ -549,7 +603,7 @@ describe('runPreflightCheck', () => {
   })
 
   it('returns STALE_IMAGE and ready=false when endpoint → 404', async () => {
-    mockFetch([{ status: 404 }])
+    mockFetch([{ status: 404 }, { status: 404 }, { status: 404 }])
 
     const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
     expect(result.ready).toBe(false)
@@ -557,19 +611,52 @@ describe('runPreflightCheck', () => {
   })
 
   it('returns AUTH_FAILURE issue and ready=false (blocking)', async () => {
-    mockFetch([{ status: 401 }])
+    mockFetch([{ status: 401 }, { status: 401 }, { status: 401 }])
 
     const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
     expect(result.ready).toBe(false)
     expect(result.issues.some(i => i.kind === 'AUTH_FAILURE')).toBe(true)
   })
 
-  it('returns UNHEALTHY issue and ready=false (blocking)', async () => {
-    mockFetch([{ status: 500 }])
+  it('returns UNHEALTHY issue and ready=false when all retries return 500', async () => {
+    // PROBE_RETRIES = 2, so 3 calls total (1 initial + 2 retries)
+    mockFetch([{ status: 500 }, { status: 500 }, { status: 500 }])
 
     const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
     expect(result.ready).toBe(false)
     expect(result.issues.some(i => i.kind === 'UNHEALTHY')).toBe(true)
+  })
+
+  it('returns STALE_IMAGE issue and ready=false when all retries return 404', async () => {
+    mockFetch([{ status: 404 }, { status: 404 }, { status: 404 }])
+
+    const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
+    expect(result.ready).toBe(false)
+    expect(result.issues.some(i => i.kind === 'STALE_IMAGE')).toBe(true)
+  })
+
+  it('returns AUTH_FAILURE issue and ready=false when all retries return 401', async () => {
+    mockFetch([{ status: 401 }, { status: 401 }, { status: 401 }])
+
+    const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
+    expect(result.ready).toBe(false)
+    expect(result.issues.some(i => i.kind === 'AUTH_FAILURE')).toBe(true)
+  })
+
+  it('returns ready=true when endpoint recovers from a transient 500 on retry', async () => {
+    mockFetch([{ status: 500 }, { status: 200 }])
+
+    const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
+    expect(result.ready).toBe(true)
+    expect(result.issues).toHaveLength(0)
+  })
+
+  it('returns ready=true when endpoint recovers from a transient 404 on retry', async () => {
+    mockFetch([{ status: 404 }, { status: 200 }])
+
+    const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
+    expect(result.ready).toBe(true)
+    expect(result.issues).toHaveLength(0)
   })
 
   it('returns ready=true and no issues when all endpoints → 200', async () => {
@@ -692,6 +779,76 @@ describe('runPreflightCheck', () => {
 
     const probed = fetchSpy.mock.calls.map((c: unknown[]) => String(c[0]))
     expect(probed.some(u => u.startsWith('http://localhost:8000'))).toBe(true)
+  })
+
+  // ── parameterised-only diffs ───────────────────────────────────────────────
+
+  it('probes the collection endpoint when diff only adds a parameterised route with a useful stem', async () => {
+    // e.g. PUT "/orders/{order_id}" → stem "/orders" → resolves to /api/v1/orders via spec
+    const paramDiff = [
+      'diff --git a/backend/src/routers/orders.py b/backend/src/routers/orders.py',
+      '+@router.put("/orders/{order_id}", response_model=OrderRead)',
+    ].join('\n')
+    const backendServices: WorkspaceServiceInfo[] = [
+      { serviceName: 'backend', baseUrl: 'http://localhost:8000', testDirectory: 'backend/tests' },
+    ]
+
+    const specWithOrders = JSON.stringify({ paths: { '/api/v1/orders': {}, '/api/v1/orders/{order_id}': {} } })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).endsWith('/openapi.json')) return { ok: true, text: async () => specWithOrders }
+      return { status: 200 }
+    }))
+
+    const result = await runPreflightCheck({ diffContent: paramDiff, services: backendServices, authToken: '' })
+    expect(result.skipped).toBe(false)
+    expect(result.probedEndpoints.some(u => u.includes('/api/v1/orders'))).toBe(true)
+    // The parameterised path itself must never be probed
+    expect(result.probedEndpoints.some(u => u.includes('{'))).toBe(false)
+  })
+
+  it('falls back to alive probe at / when hints cannot be resolved, and reports NOT_DEPLOYED if unreachable', async () => {
+    // Bare "/{order_id}" — no spec, no LLM — cannot be resolved to a static path.
+    // Service is also unreachable (ECONNREFUSED), so NOT_DEPLOYED should be reported.
+    const paramDiff = [
+      'diff --git a/backend/src/routers/orders.py b/backend/src/routers/orders.py',
+      '+@router.put("/{order_id}", response_model=OrderRead)',
+    ].join('\n')
+    const backendServices: WorkspaceServiceInfo[] = [
+      { serviceName: 'backend', baseUrl: 'http://localhost:8000', testDirectory: 'backend/tests' },
+    ]
+
+    // All fetch calls fail — no spec available, and service is unreachable
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED') }))
+
+    const result = await runPreflightCheck({ diffContent: paramDiff, services: backendServices, authToken: '' })
+    // A parameterised URL must never be probed directly
+    expect(result.probedEndpoints.some(u => u.includes('{'))).toBe(false)
+    // Alive probe at / must have fired
+    expect(result.probedEndpoints.some(u => u.endsWith('/'))).toBe(true)
+    // Unreachable service must be reported as NOT_DEPLOYED
+    expect(result.ready).toBe(false)
+    expect(result.issues.some(i => i.kind === 'NOT_DEPLOYED')).toBe(true)
+  })
+
+  it('falls back to alive probe at / when hints cannot be resolved, and passes if service responds', async () => {
+    const paramDiff = [
+      'diff --git a/backend/src/routers/orders.py b/backend/src/routers/orders.py',
+      '+@router.put("/{order_id}", response_model=OrderRead)',
+    ].join('\n')
+    const backendServices: WorkspaceServiceInfo[] = [
+      { serviceName: 'backend', baseUrl: 'http://localhost:8000', testDirectory: 'backend/tests' },
+    ]
+
+    // spec fetch fails but the alive probe returns 200
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('openapi')) throw new Error('ECONNREFUSED')
+      return { status: 200 }
+    }))
+
+    const result = await runPreflightCheck({ diffContent: paramDiff, services: backendServices, authToken: '' })
+    expect(result.probedEndpoints.some(u => u.includes('{'))).toBe(false)
+    expect(result.probedEndpoints.some(u => u.endsWith('/'))).toBe(true)
+    expect(result.ready).toBe(true)
   })
 
 })

@@ -39,6 +39,7 @@ export type StartupErrorKind =
   | 'MISSING_FILE'
   | 'PERMISSION_DENIED'
   | 'COMMAND_NOT_FOUND'
+  | 'APP_STARTUP_ERROR'
   | 'UNKNOWN'
 
 export interface StartupErrorAnalysis {
@@ -150,6 +151,17 @@ const ERROR_PATTERNS: ErrorPattern[] = [
       'Check that the command name is spelled correctly and is in `$PATH`.',
     ],
   },
+  {
+    // Python tracebacks, FastAPI/uvicorn, Node.js/Vite, JVM exceptions
+    pattern: /Traceback \(most recent call last\)|NameError:|ImportError:|ModuleNotFoundError:|SyntaxError:|AttributeError:|IndentationError:|TypeError:|ValueError:|ReferenceError:|Application startup failed|Error: Cannot find module|Cannot find package|error during build:|✘ \[ERROR\]|\[plugin:vite:|Exception in thread "main"/i,
+    kind: 'APP_STARTUP_ERROR',
+    summary: 'The application crashed during startup due to a code error.',
+    fixes: [
+      'Check the error line in the container logs above for the root cause.',
+      'Run the container locally (`docker compose up`) to reproduce and debug.',
+      'Ensure all dependencies are installed and the code is free of syntax errors.',
+    ],
+  },
 ]
 
 /**
@@ -182,6 +194,76 @@ export function lastLines(text: string, n: number): string {
     .filter(l => l.trim().length > 0)
     .slice(-n)
     .join('\n')
+}
+
+/**
+ * Extract a window of lines around the crash point from diagnostics output.
+ * Finds the first traceback / error marker and returns up to `maxLines` lines
+ * starting a couple of lines before it, so the PR comment shows the relevant
+ * section rather than the tail of the output (which may be unrelated logs).
+ * Falls back to `lastLines(output, maxLines)` when no marker is found.
+ */
+export function extractCrashContext(output: string, maxLines = 25): string {
+  const lines = output.split('\n')
+  const CRASH_MARKERS = [
+    /Traceback \(most recent call last\)/,
+    /NameError:|ImportError:|ModuleNotFoundError:|SyntaxError:|AttributeError:|IndentationError:|TypeError:|ValueError:|ReferenceError:/,
+    /Application startup failed/,
+    /Error: Cannot find module/,
+    /Exception in thread "main"/,
+    /✘ \[ERROR\]|error during build:/,
+  ]
+
+  let startIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (CRASH_MARKERS.some(p => p.test(lines[i]))) {
+      startIdx = i
+      break
+    }
+  }
+
+  if (startIdx === -1) {
+    // No known crash marker — look for any line containing error/exception/failed keywords.
+    // This surfaces useful diagnostics even when the exact pattern isn't in CRASH_MARKERS,
+    // rather than showing healthy infra logs (Redis, otel-collector) at the tail.
+    const GENERIC_ERROR = /\b(error|exception|failed|fatal)\b/i
+    for (let i = 0; i < lines.length; i++) {
+      if (GENERIC_ERROR.test(lines[i])) {
+        startIdx = i
+        break
+      }
+    }
+  }
+
+  if (startIdx === -1) return lastLines(output, maxLines)
+
+  // Scan forward from the error line to find where unrelated infra logs begin:
+  // timestamp-prefixed otel/container lines, docker ps headers, or section separators.
+  // Cap the forward scan at maxLines so we never dump the entire file when no
+  // boundary is found (e.g. diagnostics command omits docker ps / section headers).
+  const INFRA_LOG = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}|^--- logs |^NAMES\s/
+  const forwardLimit = Math.min(lines.length, startIdx + maxLines)
+  let errorSectionEnd = startIdx + 1
+  while (errorSectionEnd < forwardLimit && !INFRA_LOG.test(lines[errorSectionEnd])) {
+    errorSectionEnd++
+  }
+
+  // Fill the remaining line budget with context before the error line.
+  const afterCount = errorSectionEnd - startIdx
+  const contextBefore = Math.max(0, maxLines - afterCount)
+  const from = Math.max(0, startIdx - contextBefore)
+  return lines.slice(from, errorSectionEnd).join('\n').trim()
+}
+
+/**
+ * Extract the most descriptive error line from app crash output.
+ * Returns the first line matching a known error prefix, e.g. `NameError: name 'X' is not defined`.
+ * Falls back to an empty string if no line matches.
+ */
+export function extractAppErrorLine(output: string): string {
+  const ERROR_LINE = /^\s*((?:NameError|ImportError|ModuleNotFoundError|SyntaxError|AttributeError|IndentationError|TypeError|ValueError|RuntimeError|KeyError|FileNotFoundError|OSError|ReferenceError|Error): .+)/m
+  const m = ERROR_LINE.exec(output)
+  return m ? m[1].trim() : ''
 }
 
 /**

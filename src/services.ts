@@ -136,7 +136,6 @@ export async function startServices(config: ResolvedConfig, workingDir: string):
         const { stdout, stderr } = await exec('bash', ['-c', config.targetReadyCheckDiagnosticsCommand], {
           cwd: workingDir,
           ignoreReturnCode: true,
-          silent: true,
         })
         diagnosticsOutput = [stderr, stdout].filter(s => s.trim()).join('\n')
       } catch (err: unknown) {

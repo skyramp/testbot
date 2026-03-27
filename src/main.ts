@@ -12,7 +12,7 @@ import { setGitHubToken, postInitialProgress, updateProgress, appendReportToProg
 import { installMcp, configureMcp } from './mcp'
 import { installAgentCli, initializeAgent, buildAgentCommand, buildPrompt, runAgentWithRetry } from './agent'
 import { startServices, exportServiceBaseUrlEnvVars, generateAuthToken } from './services'
-import { StartupError, analyzeStartupError, formatStartupFailureComment, lastLines } from './startup-errors'
+import { StartupError, analyzeStartupError, formatStartupFailureComment, extractAppErrorLine } from './startup-errors'
 import { runPreflightCheck } from './preflight'
 import { generateGitDiff, configureGitIdentity, autoCommit } from './git'
 import { readSummary, renderReport, parseMetrics } from './report'
@@ -397,16 +397,16 @@ async function run(): Promise<void> {
     `/${process.env.GITHUB_REPOSITORY ?? github.context.repo.owner + '/' + github.context.repo.repo}` +
     `/actions/runs/${process.env.GITHUB_RUN_ID ?? github.context.runId}`
 
-  const formatPreflightFailureBody = (issueBlocks: string[], diagnostics: string) => {
-    const tail = diagnostics ? lastLines(diagnostics, 20) : ''
-    const outputSection = tail
-      ? '\n<details>\n<summary>Debug logs for Pre-flight validation failure</summary>\n\n```\n' + tail + '\n```\n</details>\n'
-      : ''
+  const formatPreflightFailureBody = (issueBlocks: string[]) => {
+    // const tail = diagnostics ? extractCrashContext(diagnostics, 20) : ''
+    // const outputSection = tail
+    //   ? '\n<details>\n<summary>Debug logs for Pre-flight validation failure</summary>\n\n```\n' + tail + '\n```\n</details>\n'
+    //   : ''
     return [
       '### :x: Skyramp Testbot — SUT Pre-flight Validation Failed',
       '',
       issueBlocks.join('\n\n---\n\n'),
-      outputSection,
+      "",
       `[View full workflow logs ↗](${workflowUrl})`,
     ].join('\n')
   }
@@ -421,19 +421,50 @@ async function run(): Promise<void> {
 
   // Short-circuit: health check timed out → SUT is known-unready, no HTTP probes needed.
   if (!healthCheckPassed) {
+    // Upload diagnostics captured during the health check as a downloadable artifact.
+    if (healthCheckOutput) {
+      const diagPath = path.join(tempDir, 'preflight-diagnostics.txt')
+      fs.writeFileSync(diagPath, healthCheckOutput)
+      try {
+        const artifact = new DefaultArtifactClient()
+        await artifact.uploadArtifact('skyramp-preflight-diagnostics', [diagPath], tempDir)
+      } catch (err) {
+        core.warning(`Failed to upload preflight diagnostics artifact: ${err}`)
+      }
+    }
+
+    const appCrashAnalysis = analyzeStartupError(healthCheckOutput)
     const probeableServices = config.services.filter(svc => svc.baseUrl)
-    const issueBlocks = probeableServices.map(svc => {
-      const url = svc.baseUrl!
-      return [
-        `**Service not reachable:** Service at ${url} did not respond before the health-check timeout. ` +
+    let issueBlocks: string[]
+
+    if (appCrashAnalysis.kind === 'APP_STARTUP_ERROR') {
+      // An app crash takes down all services — one consolidated block is clearer than
+      // repeating the same error for every service URL individually.
+      const errorLine = extractAppErrorLine(healthCheckOutput)
+      const affectedUrls = probeableServices.map(svc => svc.baseUrl!).join(', ')
+      issueBlocks = [[
+        `**Application crash detected:** Services (${affectedUrls}) failed to start due to a code error.`,
+        errorLine ? `\n**Error:** \`${errorLine}\`` : '',
+        '',
+        '**Fix:** ' + appCrashAnalysis.fixes.join(' '),
+      ].filter(Boolean).join('\n')]
+    } else {
+      issueBlocks = probeableServices.map(svc => [
+        `**Service not reachable:** Service at ${svc.baseUrl!} did not respond before the health-check timeout. ` +
         `The service may still be starting, or the startup command may not have brought it up at all.`,
         '',
         '**Fix:** Check that `targetSetupCommand` actually starts this service and listens on the expected port. ' +
         'If the command is correct but the service is slow to start, increase `targetReadyCheckTimeout`. ' +
         'For a more reliable readiness signal, configure `targetReadyCheckCommand` to probe a specific health endpoint.',
-      ].join('\n')
-    })
-    await postPreflightFailure(formatPreflightFailureBody(issueBlocks, healthCheckOutput))
+      ].join('\n'))
+    }
+
+    // When an app crash is detected, show the traceback context rather than the
+    // tail of the full diagnostics (which may be unrelated container logs).
+    // const displayDiagnostics = appCrashAnalysis.kind === 'APP_STARTUP_ERROR'
+    //   ? extractCrashContext(healthCheckOutput)
+    //   : healthCheckOutput
+    await postPreflightFailure(formatPreflightFailureBody(issueBlocks))
     throw new Error('SUT health check timed out — service did not become ready before the configured timeout')
   }
 
@@ -460,7 +491,34 @@ async function run(): Promise<void> {
         const label = kindLabel[i.kind] ?? i.kind
         return [`**${label}:** ${i.message}`, '', `**Fix:** ${i.recommendation}`].join('\n')
       })
-      await postPreflightFailure(formatPreflightFailureBody(issueBlocks, ''))
+
+      // Collect service diagnostics (docker logs, etc.) to help debug the failure
+      let preflightDiagnostics = ''
+      if (config.targetReadyCheckDiagnosticsCommand) {
+        try {
+          const { stdout, stderr } = await exec(
+            'bash', ['-c', config.targetReadyCheckDiagnosticsCommand],
+            { cwd: workingDir, ignoreReturnCode: true },
+          )
+          preflightDiagnostics = [stderr, stdout].filter(s => s.trim()).join('\n')
+        } catch (err) {
+          core.warning(`Could not retrieve preflight diagnostics: ${err}`)
+        }
+      }
+
+      // Upload diagnostics as a downloadable artifact
+      if (preflightDiagnostics) {
+        const diagPath = path.join(tempDir, 'preflight-diagnostics.txt')
+        fs.writeFileSync(diagPath, preflightDiagnostics)
+        try {
+          const artifact = new DefaultArtifactClient()
+          await artifact.uploadArtifact('skyramp-preflight-diagnostics', [diagPath], tempDir)
+        } catch (err) {
+          core.warning(`Failed to upload preflight diagnostics artifact: ${err}`)
+        }
+      }
+
+      await postPreflightFailure(formatPreflightFailureBody(issueBlocks))
       throw new Error(`SUT pre-flight validation failed: ${preflight.issues.map(i => i.kind).join(', ')}`)
     }
   }

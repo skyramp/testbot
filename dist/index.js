@@ -101240,6 +101240,17 @@ var ERROR_PATTERNS = [
       "Install the required tool in a step before the testbot step.",
       "Check that the command name is spelled correctly and is in `$PATH`."
     ]
+  },
+  {
+    // Python tracebacks, FastAPI/uvicorn, Node.js/Vite, JVM exceptions
+    pattern: /Traceback \(most recent call last\)|NameError:|ImportError:|ModuleNotFoundError:|SyntaxError:|AttributeError:|IndentationError:|TypeError:|ValueError:|ReferenceError:|Application startup failed|Error: Cannot find module|Cannot find package|error during build:|✘ \[ERROR\]|\[plugin:vite:|Exception in thread "main"/i,
+    kind: "APP_STARTUP_ERROR",
+    summary: "The application crashed during startup due to a code error.",
+    fixes: [
+      "Check the error line in the container logs above for the root cause.",
+      "Run the container locally (`docker compose up`) to reproduce and debug.",
+      "Ensure all dependencies are installed and the code is free of syntax errors."
+    ]
   }
 ];
 function analyzeStartupError(output) {
@@ -101260,6 +101271,11 @@ function analyzeStartupError(output) {
 }
 function lastLines(text, n) {
   return text.split("\n").filter((l) => l.trim().length > 0).slice(-n).join("\n");
+}
+function extractAppErrorLine(output) {
+  const ERROR_LINE = /^\s*((?:NameError|ImportError|ModuleNotFoundError|SyntaxError|AttributeError|IndentationError|TypeError|ValueError|RuntimeError|KeyError|FileNotFoundError|OSError|ReferenceError|Error): .+)/m;
+  const m = ERROR_LINE.exec(output);
+  return m ? m[1].trim() : "";
 }
 function formatStartupFailureComment(opts) {
   const { command, stdout, stderr, analysis, workflowUrl } = opts;
@@ -101389,8 +101405,7 @@ async function startServices(config, workingDir) {
         info("--- Diagnostics ---");
         const { stdout, stderr } = await exec2("bash", ["-c", config.targetReadyCheckDiagnosticsCommand], {
           cwd: workingDir,
-          ignoreReturnCode: true,
-          silent: true
+          ignoreReturnCode: true
         });
         diagnosticsOutput = [stderr, stdout].filter((s) => s.trim()).join("\n");
       } catch (err) {
@@ -104038,6 +104053,11 @@ var safeDump = renamed("safeDump", "dump");
 // src/preflight.ts
 var PROBE_TIMEOUT_MS = 5e3;
 var MAX_ENDPOINTS = 3;
+var PROBE_RETRIES = 2;
+var PROBE_RETRY_DELAY_S = 2;
+function isRetryableStatus(status) {
+  return status === 404 || status === 401 || status === 403 || status >= 500;
+}
 function extractEndpointsFromDiff(diffContent) {
   const addedLines = diffContent.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).map((line) => line.slice(1));
   const candidates = /* @__PURE__ */ new Set();
@@ -104078,6 +104098,29 @@ function extractEndpointsFromDiff(diffContent) {
   }
   return [];
 }
+function extractParamHintsFromDiff(diffContent) {
+  const addedLines = diffContent.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).map((line) => line.slice(1));
+  const hints = /* @__PURE__ */ new Set();
+  const pathLiteral = /['"`]([^'"`\s]*\/[^'"`\s]*)['"`]/g;
+  for (const line of addedLines) {
+    pathLiteral.lastIndex = 0;
+    let m;
+    while ((m = pathLiteral.exec(line)) !== null) {
+      const raw = m[1];
+      if (raw.includes("://")) continue;
+      if (!raw.startsWith("/")) continue;
+      if (!raw.includes("{") && !raw.includes(":") && !raw.includes("*")) continue;
+      const segments = raw.split("/");
+      const firstParamIdx = segments.findIndex((s) => /[{:*]/.test(s));
+      if (firstParamIdx > 1) {
+        hints.add(segments.slice(0, firstParamIdx).join("/"));
+      } else {
+        hints.add(raw);
+      }
+    }
+  }
+  return [...hints].slice(0, MAX_ENDPOINTS);
+}
 function extractChangedPaths(diffContent) {
   const paths = /* @__PURE__ */ new Set();
   const pattern = /^diff --git a\/(\S+)/gm;
@@ -104099,20 +104142,29 @@ function serviceOwnsChangedPaths(svc, changedPaths) {
   return [...changedPaths].some((p) => p === root || p.startsWith(root + "/"));
 }
 async function probeUrl(url2, authToken, timeoutMs = PROBE_TIMEOUT_MS) {
-  const { signal, cancel: cancel3 } = abortAfter(timeoutMs);
   const headers = { Accept: "application/json" };
   if (authToken) {
     headers["Authorization"] = authToken.startsWith("Bearer ") ? authToken : `Bearer ${authToken}`;
   }
-  try {
-    const res = await fetch(url2, { method: "GET", headers, signal });
-    cancel3();
-    return { statusCode: res.status };
-  } catch (err) {
-    cancel3();
-    const msg = err instanceof Error ? err.message : String(err);
-    return { statusCode: 0, error: msg.includes("abort") ? "timeout" : msg };
+  let lastOutcome = { statusCode: 0 };
+  for (let attempt = 0; attempt <= PROBE_RETRIES; attempt++) {
+    if (attempt > 0) {
+      debug2(`Pre-flight: ${url2} returned ${lastOutcome.statusCode}, retrying (${attempt}/${PROBE_RETRIES})...`);
+      await sleep(PROBE_RETRY_DELAY_S);
+    }
+    const { signal, cancel: cancel3 } = abortAfter(timeoutMs);
+    try {
+      const res = await fetch(url2, { method: "GET", headers, signal });
+      cancel3();
+      lastOutcome = { statusCode: res.status };
+      if (!isRetryableStatus(res.status)) return lastOutcome;
+    } catch (err) {
+      cancel3();
+      const msg = err instanceof Error ? err.message : String(err);
+      return { statusCode: 0, error: msg.includes("abort") ? "timeout" : msg };
+    }
   }
+  return lastOutcome;
 }
 function classifyProbe(path11, outcome) {
   if (outcome.statusCode === 0) {
@@ -104238,7 +104290,7 @@ async function resolvePathsViaOpenApi(baseUrl2, segments, authToken, opts = {}) 
       return resolved;
     }
   }
-  return segments;
+  return segments.filter((p) => !p.includes("{") && !p.includes(":") && !p.includes("*"));
 }
 async function resolvePathsViaLlm(segments, diffContent, anthropicApiKey) {
   const prompt = `You are analyzing a git diff to determine the full HTTP API URL paths for newly added routes.
@@ -104253,9 +104305,10 @@ ${diffContent.slice(0, 8e3)}
 
 Instructions:
 - Trace the full router prefix chain (e.g. app.include_router + APIRouter prefix + method decorator path).
-- Return ONLY a JSON array of complete paths, e.g. ["/api/v1/products/search"].
-- Exclude paths with route parameters ({id}, :id).
-- If you cannot determine the full path for a segment, include it unchanged.
+- Return ONLY a JSON array of complete, non-parameterised paths, e.g. ["/api/v1/orders"].
+- If a segment is parameterised (e.g. "/{order_id}", "/users/{id}"), return the collection endpoint instead \u2014 the non-parameterised parent path resolved through the prefix chain (e.g. "/{order_id}" + prefix "/api/v1/orders" \u2192 "/api/v1/orders").
+- Exclude all paths that still contain route parameters ({id}, :id) in the final result.
+- If you cannot determine the full path for a segment, omit it.
 - Maximum ${MAX_ENDPOINTS} paths total.`;
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -104327,10 +104380,21 @@ async function runPreflightCheck(opts) {
       info("No service base URLs configured \u2014 skipping pre-flight check");
       return { ready: true, skipped: true, issues: [], probedEndpoints: [] };
     }
-    const endpoints = extractEndpointsFromDiff(diffContent);
+    let endpoints = extractEndpointsFromDiff(diffContent);
     if (endpoints.length === 0) {
-      info("No new API routes detected in diff \u2014 skipping pre-flight check");
-      return { ready: true, skipped: true, issues: [], probedEndpoints: [] };
+      const paramHints = extractParamHintsFromDiff(diffContent);
+      if (paramHints.length === 0) {
+        info("No new API routes detected in diff \u2014 skipping pre-flight check");
+        return { ready: true, skipped: true, issues: [], probedEndpoints: [] };
+      }
+      debug2(`Pre-flight: no static routes found; using ${paramHints.length} parameterised hint(s) to resolve collection endpoint(s)`);
+      endpoints = paramHints;
+    } else if (endpoints.length === 1 && endpoints[0] === "/") {
+      const paramHints = extractParamHintsFromDiff(diffContent);
+      if (paramHints.length > 0) {
+        debug2(`Pre-flight: diff has only parameterised routes; using ${paramHints.length} hint(s) to resolve collection endpoint(s)`);
+        endpoints = paramHints;
+      }
     }
     const changedPaths = extractChangedPaths(diffContent);
     const relevantServices = changedPaths.size === 0 ? probeableServices : probeableServices.filter((svc) => serviceOwnsChangedPaths(svc, changedPaths));
@@ -104348,7 +104412,16 @@ async function runPreflightCheck(opts) {
         diffContent,
         anthropicApiKey
       });
-      const probeResults = await Promise.all(probePaths.map(async (path11) => {
+      const probeablePaths = probePaths.filter((p) => !p.includes("{") && !p.includes(":") && !p.includes("*"));
+      if (probeablePaths.length === 0) {
+        debug2(`Pre-flight: ${svc.serviceName} \u2014 could not resolve parameterised hint(s); falling back to alive probe at /`);
+        const outcome = await probeUrl(`${baseUrl2}/`, authToken);
+        svcProbed.push(`${baseUrl2}/`);
+        const issue2 = classifyProbe("/", outcome);
+        if (issue2) svcIssues.push(issue2);
+        return { svcIssues, svcProbed };
+      }
+      const probeResults = await Promise.all(probeablePaths.map(async (path11) => {
         const url2 = `${baseUrl2}${path11}`;
         const outcome = await probeUrl(url2, authToken);
         return { path: path11, url: url2, outcome };
@@ -105039,14 +105112,12 @@ ${stdout}`);
   const tokenSource = dynamicToken ? "authTokenCommand" : process.env.SKYRAMP_TEST_TOKEN ? "SKYRAMP_TEST_TOKEN env var" : "none";
   debug2(`Auth token source: ${tokenSource}, length: ${authToken.length}`);
   const workflowUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${process.env.GITHUB_REPOSITORY ?? context2.repo.owner + "/" + context2.repo.repo}/actions/runs/${process.env.GITHUB_RUN_ID ?? context2.runId}`;
-  const formatPreflightFailureBody = (issueBlocks, diagnostics) => {
-    const tail = diagnostics ? lastLines(diagnostics, 20) : "";
-    const outputSection = tail ? "\n<details>\n<summary>Debug logs for Pre-flight validation failure</summary>\n\n```\n" + tail + "\n```\n</details>\n" : "";
+  const formatPreflightFailureBody = (issueBlocks) => {
     return [
       "### :x: Skyramp Testbot \u2014 SUT Pre-flight Validation Failed",
       "",
       issueBlocks.join("\n\n---\n\n"),
-      outputSection,
+      "",
       `[View full workflow logs \u2197](${workflowUrl})`
     ].join("\n");
   };
@@ -105058,16 +105129,37 @@ ${stdout}`);
     }
   };
   if (!healthCheckPassed) {
+    if (healthCheckOutput) {
+      const diagPath = path10.join(tempDir, "preflight-diagnostics.txt");
+      fs15.writeFileSync(diagPath, healthCheckOutput);
+      try {
+        const artifact = new DefaultArtifactClient();
+        await artifact.uploadArtifact("skyramp-preflight-diagnostics", [diagPath], tempDir);
+      } catch (err) {
+        warning(`Failed to upload preflight diagnostics artifact: ${err}`);
+      }
+    }
+    const appCrashAnalysis = analyzeStartupError(healthCheckOutput);
     const probeableServices = config.services.filter((svc) => svc.baseUrl);
-    const issueBlocks = probeableServices.map((svc) => {
-      const url2 = svc.baseUrl;
-      return [
-        `**Service not reachable:** Service at ${url2} did not respond before the health-check timeout. The service may still be starting, or the startup command may not have brought it up at all.`,
+    let issueBlocks;
+    if (appCrashAnalysis.kind === "APP_STARTUP_ERROR") {
+      const errorLine = extractAppErrorLine(healthCheckOutput);
+      const affectedUrls = probeableServices.map((svc) => svc.baseUrl).join(", ");
+      issueBlocks = [[
+        `**Application crash detected:** Services (${affectedUrls}) failed to start due to a code error.`,
+        errorLine ? `
+**Error:** \`${errorLine}\`` : "",
+        "",
+        "**Fix:** " + appCrashAnalysis.fixes.join(" ")
+      ].filter(Boolean).join("\n")];
+    } else {
+      issueBlocks = probeableServices.map((svc) => [
+        `**Service not reachable:** Service at ${svc.baseUrl} did not respond before the health-check timeout. The service may still be starting, or the startup command may not have brought it up at all.`,
         "",
         "**Fix:** Check that `targetSetupCommand` actually starts this service and listens on the expected port. If the command is correct but the service is slow to start, increase `targetReadyCheckTimeout`. For a more reliable readiness signal, configure `targetReadyCheckCommand` to probe a specific health endpoint."
-      ].join("\n");
-    });
-    await postPreflightFailure(formatPreflightFailureBody(issueBlocks, healthCheckOutput));
+      ].join("\n"));
+    }
+    await postPreflightFailure(formatPreflightFailureBody(issueBlocks));
     throw new Error("SUT health check timed out \u2014 service did not become ready before the configured timeout");
   }
   {
@@ -105090,7 +105182,30 @@ ${stdout}`);
         const label = kindLabel[i.kind] ?? i.kind;
         return [`**${label}:** ${i.message}`, "", `**Fix:** ${i.recommendation}`].join("\n");
       });
-      await postPreflightFailure(formatPreflightFailureBody(issueBlocks, ""));
+      let preflightDiagnostics = "";
+      if (config.targetReadyCheckDiagnosticsCommand) {
+        try {
+          const { stdout, stderr } = await exec2(
+            "bash",
+            ["-c", config.targetReadyCheckDiagnosticsCommand],
+            { cwd: workingDir, ignoreReturnCode: true }
+          );
+          preflightDiagnostics = [stderr, stdout].filter((s) => s.trim()).join("\n");
+        } catch (err) {
+          warning(`Could not retrieve preflight diagnostics: ${err}`);
+        }
+      }
+      if (preflightDiagnostics) {
+        const diagPath = path10.join(tempDir, "preflight-diagnostics.txt");
+        fs15.writeFileSync(diagPath, preflightDiagnostics);
+        try {
+          const artifact = new DefaultArtifactClient();
+          await artifact.uploadArtifact("skyramp-preflight-diagnostics", [diagPath], tempDir);
+        } catch (err) {
+          warning(`Failed to upload preflight diagnostics artifact: ${err}`);
+        }
+      }
+      await postPreflightFailure(formatPreflightFailureBody(issueBlocks));
       throw new Error(`SUT pre-flight validation failed: ${preflight.issues.map((i) => i.kind).join(", ")}`);
     }
   }

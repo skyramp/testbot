@@ -2,10 +2,22 @@ import * as fs from 'fs'
 import * as core from '@actions/core'
 import { load as parseYaml } from 'js-yaml'
 import type { PreflightIssue, PreflightIssueKind, PreflightResult, TargetDeploymentDetails, WorkspaceServiceInfo } from './types'
-import { withGroup, debug, abortAfter } from './utils'
+import { withGroup, debug, abortAfter, sleep } from './utils'
 
 const PROBE_TIMEOUT_MS = 5_000
 const MAX_ENDPOINTS = 3
+const PROBE_RETRIES = 2
+const PROBE_RETRY_DELAY_S = 2
+
+/**
+ * Returns true when a probe status code warrants a retry.
+ * Mirrors the non-null conditions in classifyProbe: 404, 401, 403, and any 5xx.
+ * 2xx, 400, 405, 422, and other non-flagged 4xx codes are treated as stable
+ * (the endpoint exists and responded deterministically) and are not retried.
+ */
+function isRetryableStatus(status: number): boolean {
+  return status === 404 || status === 401 || status === 403 || status >= 500
+}
 
 // ── Endpoint extraction ───────────────────────────────────────────────────────
 
@@ -96,6 +108,59 @@ export function extractEndpointsFromDiff(diffContent: string): string[] {
 }
 
 /**
+ * Extract probe hints from parameterised route additions in the diff.
+ *
+ * When a PR only adds parameterised routes (e.g. `PUT "/{order_id}"`) there are
+ * no directly-probeable static paths, but the service can still be validated by
+ * probing the parent collection endpoint (e.g. `GET /api/v1/orders`).
+ *
+ * Returns:
+ *   - The static stem before the first path parameter when the path has one
+ *     (e.g. `"/users/{id}"` → `"/users"`).  OpenAPI / code-analysis resolution
+ *     can expand the stem to the full collection path.
+ *   - The raw parameterised literal when the parameter is the first segment
+ *     (e.g. `"/{order_id}"`), so that LLM resolution can trace the router
+ *     prefix chain and infer the collection endpoint.
+ *
+ * Returns `[]` when the diff contains no parameterised route additions.
+ */
+export function extractParamHintsFromDiff(diffContent: string): string[] {
+  const addedLines = diffContent
+    .split('\n')
+    .filter(line => line.startsWith('+') && !line.startsWith('+++'))
+    .map(line => line.slice(1))
+
+  const hints = new Set<string>()
+  const pathLiteral = /['"`]([^'"`\s]*\/[^'"`\s]*)['"`]/g
+
+  for (const line of addedLines) {
+    pathLiteral.lastIndex = 0
+    let m: RegExpExecArray | null
+    while ((m = pathLiteral.exec(line)) !== null) {
+      const raw = m[1]
+      if (raw.includes('://')) continue
+      if (!raw.startsWith('/')) continue
+      // Only interested in parameterised paths
+      if (!raw.includes('{') && !raw.includes(':') && !raw.includes('*')) continue
+
+      const segments = raw.split('/')
+      const firstParamIdx = segments.findIndex(s => /[{:*]/.test(s))
+
+      if (firstParamIdx > 1) {
+        // e.g. "/orders/{id}" → "/orders",  "/api/v1/users/{id}" → "/api/v1/users"
+        hints.add(segments.slice(0, firstParamIdx).join('/'))
+      } else {
+        // Bare param at position 1 (e.g. "/{order_id}") — keep the full literal
+        // so that LLM resolution can trace the router prefix chain.
+        hints.add(raw)
+      }
+    }
+  }
+
+  return [...hints].slice(0, MAX_ENDPOINTS)
+}
+
+/**
  * Extract the set of changed file paths from the diff's file headers
  * (`diff --git a/<path> b/<path>`).
  *
@@ -155,22 +220,33 @@ interface ProbeOutcome {
 }
 
 export async function probeUrl(url: string, authToken: string, timeoutMs = PROBE_TIMEOUT_MS): Promise<ProbeOutcome> {
-  const { signal, cancel } = abortAfter(timeoutMs)
-
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (authToken) {
     headers['Authorization'] = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`
   }
 
-  try {
-    const res = await fetch(url, { method: 'GET', headers, signal })
-    cancel()
-    return { statusCode: res.status }
-  } catch (err) {
-    cancel()
-    const msg = err instanceof Error ? err.message : String(err)
-    return { statusCode: 0, error: msg.includes('abort') ? 'timeout' : msg }
+  let lastOutcome: ProbeOutcome = { statusCode: 0 }
+
+  for (let attempt = 0; attempt <= PROBE_RETRIES; attempt++) {
+    if (attempt > 0) {
+      debug(`Pre-flight: ${url} returned ${lastOutcome.statusCode}, retrying (${attempt}/${PROBE_RETRIES})...`)
+      await sleep(PROBE_RETRY_DELAY_S)
+    }
+
+    const { signal, cancel } = abortAfter(timeoutMs)
+    try {
+      const res = await fetch(url, { method: 'GET', headers, signal })
+      cancel()
+      lastOutcome = { statusCode: res.status }
+      if (!isRetryableStatus(res.status)) return lastOutcome
+    } catch (err) {
+      cancel()
+      const msg = err instanceof Error ? err.message : String(err)
+      return { statusCode: 0, error: msg.includes('abort') ? 'timeout' : msg }
+    }
   }
+
+  return lastOutcome
 }
 
 // ── Classification ────────────────────────────────────────────────────────────
@@ -395,7 +471,10 @@ export async function resolvePathsViaOpenApi(
     }
   }
 
-  return segments
+  // Filter out any parameterised paths — they cannot be probed without real IDs.
+  // This handles the case where hints like "/{order_id}" were passed in and all
+  // resolution strategies failed to find the collection endpoint.
+  return segments.filter(p => !p.includes('{') && !p.includes(':') && !p.includes('*'))
 }
 
 /**
@@ -423,9 +502,10 @@ export async function resolvePathsViaLlm(
     `Git diff (includes context lines with router setup):\n\`\`\`\n${diffContent.slice(0, 8_000)}\n\`\`\`\n\n` +
     `Instructions:\n` +
     `- Trace the full router prefix chain (e.g. app.include_router + APIRouter prefix + method decorator path).\n` +
-    `- Return ONLY a JSON array of complete paths, e.g. ["/api/v1/products/search"].\n` +
-    `- Exclude paths with route parameters ({id}, :id).\n` +
-    `- If you cannot determine the full path for a segment, include it unchanged.\n` +
+    `- Return ONLY a JSON array of complete, non-parameterised paths, e.g. ["/api/v1/orders"].\n` +
+    `- If a segment is parameterised (e.g. "/{order_id}", "/users/{id}"), return the collection endpoint instead — the non-parameterised parent path resolved through the prefix chain (e.g. "/{order_id}" + prefix "/api/v1/orders" → "/api/v1/orders").\n` +
+    `- Exclude all paths that still contain route parameters ({id}, :id) in the final result.\n` +
+    `- If you cannot determine the full path for a segment, omit it.\n` +
     `- Maximum ${MAX_ENDPOINTS} paths total.`
 
   try {
@@ -575,11 +655,29 @@ export async function runPreflightCheck(opts: {
       return { ready: true, skipped: true, issues: [], probedEndpoints: [] }
     }
 
-    const endpoints = extractEndpointsFromDiff(diffContent)
+    let endpoints = extractEndpointsFromDiff(diffContent)
 
     if (endpoints.length === 0) {
-      core.info('No new API routes detected in diff — skipping pre-flight check')
-      return { ready: true, skipped: true, issues: [], probedEndpoints: [] }
+      // No static paths in the diff — check for parameterised routes (e.g. PUT "/{order_id}").
+      // Derive stems or pass raw literals to OpenAPI/LLM resolution so we can probe
+      // the parent collection endpoint instead of skipping entirely.
+      const paramHints = extractParamHintsFromDiff(diffContent)
+      if (paramHints.length === 0) {
+        core.info('No new API routes detected in diff — skipping pre-flight check')
+        return { ready: true, skipped: true, issues: [], probedEndpoints: [] }
+      }
+      debug(`Pre-flight: no static routes found; using ${paramHints.length} parameterised hint(s) to resolve collection endpoint(s)`)
+      endpoints = paramHints
+    } else if (endpoints.length === 1 && endpoints[0] === '/') {
+      // extractEndpointsFromDiff returns ['/'] as a reachability fallback when the diff
+      // has only parameterised routes (e.g. FastAPI PUT "/{order_id}"). Try to resolve
+      // collection endpoints from param hints instead of just doing an alive probe.
+      const paramHints = extractParamHintsFromDiff(diffContent)
+      if (paramHints.length > 0) {
+        debug(`Pre-flight: diff has only parameterised routes; using ${paramHints.length} hint(s) to resolve collection endpoint(s)`)
+        endpoints = paramHints
+      }
+      // If no hints (e.g. pure Django diff without leading '/'), keep ['/'] for alive probe.
     }
 
     // Only probe services whose source root is a path prefix of a changed file.
@@ -615,8 +713,26 @@ export async function runPreflightCheck(opts: {
         anthropicApiKey,
       })
 
+      // Safety filter: drop any path that still contains a route parameter after resolution
+      // (e.g. "/{order_id}" when LLM was unavailable and no other strategy resolved it).
+      const probeablePaths = probePaths.filter(p => !p.includes('{') && !p.includes(':') && !p.includes('*'))
+
+      if (probeablePaths.length === 0) {
+        // Resolution failed (e.g. bare "/{id}" with no spec and no LLM).
+        // Fall back to a root alive-probe so unreachable services are still caught —
+        // especially important when skipTargetSetup=true bypasses the health check.
+        debug(`Pre-flight: ${svc.serviceName} — could not resolve parameterised hint(s); falling back to alive probe at /`)
+        const outcome = await probeUrl(`${baseUrl}/`, authToken)
+        svcProbed.push(`${baseUrl}/`)
+        // classifyProbe returns null for '/' on any HTTP response (service is alive);
+        // only a statusCode of 0 (unreachable) produces NOT_DEPLOYED.
+        const issue = classifyProbe('/', outcome)
+        if (issue) svcIssues.push(issue)
+        return { svcIssues, svcProbed }
+      }
+
       // Probe all resolved endpoints concurrently
-      const probeResults = await Promise.all(probePaths.map(async path => {
+      const probeResults = await Promise.all(probeablePaths.map(async path => {
         const url = `${baseUrl}${path}`
         const outcome = await probeUrl(url, authToken)
         return { path, url, outcome }
