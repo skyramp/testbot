@@ -350,7 +350,7 @@ describe('Next Steps section', () => {
     }
     const md = renderReport(report, { autoCommit: true })
     expect(md).toContain('### 💡 Next Steps')
-    expect(md).toContain('- Review the commit made by Skyramp Testbot.')
+    expect(md).toContain('- Let @skyramp-testbot know which additional recommendations to implement.')
   })
 
   it('suggests enabling autoCommit when autoCommit is false', () => {

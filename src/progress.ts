@@ -22,7 +22,7 @@ export function generateProgressBody(step: number, reportContent?: string, isCom
   if (reportContent) {
     // Strip the marker if renderReport already included it to avoid duplicates
     const content = reportContent.replace(/^\s*<!--\s*skyramp-testbot\s*-->\s*\n?/, '')
-    return `<!-- skyramp-testbot -->\n([workflow run](${runUrl}))\n\n${content}`
+    return `<!-- skyramp-testbot -->\n### Skyramp Testbot\n([workflow run](${runUrl}))\n\n${content}`
   }
 
   return `<!-- skyramp-testbot -->

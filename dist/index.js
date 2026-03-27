@@ -100837,6 +100837,7 @@ function generateProgressBody(step, reportContent, isCommentTrigger = false) {
   if (reportContent) {
     const content = reportContent.replace(/^\s*<!--\s*skyramp-testbot\s*-->\s*\n?/, "");
     return `<!-- skyramp-testbot -->
+### Skyramp Testbot
 ([workflow run](${runUrl}))
 
 ${content}`;
@@ -104601,7 +104602,7 @@ function renderReport(report, options = {}) {
   const hasTests = report.newTestsCreated.length > 0 || report.testMaintenance.length > 0 || report.testResults.length > 0;
   if (hasTests && !hasIssues && steps.length === 0) {
     if (autoCommit2) {
-      steps.push("Review the commit made by Skyramp Testbot.");
+      steps.push("Let @skyramp-testbot know which additional recommendations to implement.");
     } else {
       steps.push("Enable `autoCommit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.");
     }

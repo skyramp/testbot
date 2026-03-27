@@ -203,7 +203,7 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
   const hasTests = report.newTestsCreated.length > 0 || report.testMaintenance.length > 0 || report.testResults.length > 0
   if (hasTests && !hasIssues && steps.length === 0) {
     if (autoCommit) {
-      steps.push('Review the commit made by Skyramp Testbot.')
+      steps.push('Let @skyramp-testbot know which additional recommendations to implement.')
     } else {
       steps.push('Enable `autoCommit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.')
     }
