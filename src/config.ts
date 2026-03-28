@@ -104,6 +104,8 @@ export async function loadConfig(inputs: ActionInputs): Promise<ResolvedConfig> 
     commitMessage: inputs.commitMessage,
     postPrComment: inputs.postPrComment,
     testExecutionTimeout: inputs.testExecutionTimeout,
+    maxRecommendations: inputs.maxRecommendations,
+    maxGenerate: inputs.maxGenerate,
     testbotMaxRetries: inputs.testbotMaxRetries,
     testbotRetryDelay: inputs.testbotRetryDelay,
     testbotTimeout: inputs.testbotTimeout,

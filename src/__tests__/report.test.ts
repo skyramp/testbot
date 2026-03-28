@@ -68,7 +68,7 @@ describe('renderReport', () => {
     expect(md).toContain('> Tests cover the checkout flow.')
 
     expect(md).toContain('### 💡 Test Recommendations Implemented')
-    expect(md).toContain('- contract — `POST /orders`: `test_orders.py`')
+    expect(md).toContain('- contract — `POST /orders` (`test_orders.py`)')
 
     expect(md).toContain('### ✅ Test Maintenance')
     expect(md).toContain('- Updated auth header in existing tests')
@@ -298,6 +298,94 @@ describe('readSummary', () => {
     const result = readSummary(paths)
     expect(result.commitMessage).toBeUndefined()
     expect(result.summary).toBe('No summary available')
+  })
+})
+
+describe('additionalRecommendations grouping and sorting', () => {
+  const makeRec = (testType: string, scenarioName: string, category?: string, method = 'GET', path = '/foo') => ({
+    testId: `${testType}-${scenarioName}`,
+    testType,
+    category,
+    scenarioName,
+    priority: 'medium' as const,
+    description: `${scenarioName} description`,
+    steps: [{ method, path, description: `Call ${method} ${path}` }],
+    reasoning: '',
+  })
+
+  it('groups recommendations under emoji headers by test type', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      additionalRecommendations: [
+        makeRec('integration', 'update-order', 'workflow'),
+        makeRec('contract', 'post-orders-auth', 'security_boundary'),
+        makeRec('e2e', 'checkout-flow'),
+        makeRec('ui', 'cart-modal'),
+      ],
+    }
+    const md = renderReport(report)
+    expect(md).toContain('**📋 Contract**')
+    expect(md).toContain('**🔗 Integration**')
+    expect(md).toContain('**🌐 E2E**')
+    expect(md).toContain('**🖥️ UI**')
+  })
+
+  it('orders groups: Contract → Integration → E2E → UI', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      additionalRecommendations: [
+        makeRec('ui', 'cart-modal'),
+        makeRec('e2e', 'checkout-flow'),
+        makeRec('integration', 'update-order'),
+        makeRec('contract', 'post-orders-auth'),
+      ],
+    }
+    const md = renderReport(report)
+    const contractIdx = md.indexOf('**📋 Contract**')
+    const integrationIdx = md.indexOf('**🔗 Integration**')
+    const e2eIdx = md.indexOf('**🌐 E2E**')
+    const uiIdx = md.indexOf('**🖥️ UI**')
+    expect(contractIdx).toBeLessThan(integrationIdx)
+    expect(integrationIdx).toBeLessThan(e2eIdx)
+    expect(e2eIdx).toBeLessThan(uiIdx)
+  })
+
+  it('sorts within a group by category risk: security_boundary before workflow', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      additionalRecommendations: [
+        makeRec('integration', 'workflow-test', 'workflow'),
+        makeRec('integration', 'auth-boundary', 'security_boundary'),
+        makeRec('integration', 'data-check', 'data_integrity'),
+      ],
+    }
+    const md = renderReport(report)
+    const authIdx = md.indexOf('auth-boundary description')
+    const dataIdx = md.indexOf('data-check description')
+    const workflowIdx = md.indexOf('workflow-test description')
+    expect(authIdx).toBeLessThan(dataIdx)
+    expect(dataIdx).toBeLessThan(workflowIdx)
+  })
+
+  it('sorts alphabetically by scenarioName within same category', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      additionalRecommendations: [
+        makeRec('contract', 'z-test', 'security_boundary'),
+        makeRec('contract', 'a-test', 'security_boundary'),
+      ],
+    }
+    const md = renderReport(report)
+    expect(md.indexOf('a-test description')).toBeLessThan(md.indexOf('z-test description'))
+  })
+
+  it('falls back to unknown type label when testType is unrecognized', () => {
+    const report: TestbotReport = {
+      ...validReport,
+      additionalRecommendations: [makeRec('smoke', 'health-check')],
+    }
+    const md = renderReport(report)
+    expect(md).toContain('**smoke**')
   })
 })
 

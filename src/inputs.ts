@@ -34,6 +34,14 @@ export function getInputs(): ActionInputs {
     commitMessage: core.getInput('commitMessage'),
     postPrComment: core.getBooleanInput('postPrComment'),
     testExecutionTimeout: parseInt(core.getInput('testExecutionTimeout'), 10) || 300,
+    maxRecommendations: (() => {
+      const parsed = parseInt(core.getInput('maxRecommendations'), 10)
+      return isNaN(parsed) ? 20 : Math.max(0, parsed)
+    })(),
+    maxGenerate: (() => {
+      const parsed = parseInt(core.getInput('maxGenerate'), 10)
+      return isNaN(parsed) ? 3 : Math.max(0, parsed)
+    })(),
     testbotMaxRetries: parseInt(core.getInput('testbotMaxRetries'), 10) || 3,
     testbotRetryDelay: parseInt(core.getInput('testbotRetryDelay'), 10) || 10,
     testbotTimeout: parseInt(core.getInput('testbotTimeout'), 10) || 60,

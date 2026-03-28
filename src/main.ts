@@ -545,6 +545,8 @@ async function run(): Promise<void> {
       services: config.services,
       userPrompt,
       prNumber,
+      maxRecommendations: config.maxRecommendations,
+      maxGenerate: config.maxGenerate,
     })
 
     // Capture NDJSON log when the agent command actually outputs stream-json.

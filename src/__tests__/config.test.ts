@@ -51,6 +51,8 @@ function makeInputs(overrides: Partial<ActionInputs> = {}): ActionInputs {
     commitMessage: 'test commit',
     postPrComment: true,
     testExecutionTimeout: 300,
+    maxRecommendations: 20,
+    maxGenerate: 3,
     testbotMaxRetries: 3,
     testbotRetryDelay: 10,
     testbotTimeout: 10,

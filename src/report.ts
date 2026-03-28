@@ -122,9 +122,9 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     for (const t of report.newTestsCreated) {
       const id = t.testId ? ` [\`Test ID-${t.testId}\`]` : ''
       const endpoint = t.endpoint ? ` — \`${t.endpoint}\`` : ''
-      const desc = t.description ? `: ${t.description}` : ''
-      const file = t.fileName ? (t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\``) : ''
-      lines.push(`- ${t.testType}${id}${endpoint}${desc}${file}`)
+      const desc = t.description ? `\n  ${t.description}` : ''
+      const file = t.fileName ? ` (\`${t.fileName}\`)` : ''
+      lines.push(`- ${t.testType}${endpoint}${id}${file}${desc}`)
     }
     sectionEnd()
   }
@@ -134,19 +134,63 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     const recs = report.additionalRecommendations
     const count = recs.length
 
-    const priorityOrder = (p: string) => p === 'high' ? 0 : p === 'medium' ? 1 : 2
-    const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority))
+    // Test type order: Contract (quick wins) → Integration → E2E → UI (most effort)
+    const TEST_TYPE_ORDER: Record<string, number> = {
+      contract: 0,
+      integration: 1,
+      e2e: 2,
+      ui: 3,
+    }
+    const TEST_TYPE_LABEL: Record<string, string> = {
+      contract: '📋 Contract',
+      integration: '🔗 Integration',
+      e2e: '🌐 E2E',
+      ui: '🖥️ UI',
+    }
+    // Within each test type, sub-sort by category risk level so high-risk items float up
+    const CATEGORY_RISK: Record<string, number> = {
+      security_boundary: 0,
+      breaking_change: 1,
+      data_integrity: 2,
+      business_rule: 3,
+      workflow: 4,
+    }
+
+    const typeKey = (t: string) => t.toLowerCase()
+    const sorted = [...recs].sort((a, b) => {
+      const ta = TEST_TYPE_ORDER[typeKey(a.testType)] ?? 99
+      const tb = TEST_TYPE_ORDER[typeKey(b.testType)] ?? 99
+      if (ta !== tb) return ta - tb
+      // Within same test type, sort by category risk then alphabetically
+      const ca = CATEGORY_RISK[a.category ?? ''] ?? 99
+      const cb = CATEGORY_RISK[b.category ?? ''] ?? 99
+      return ca !== cb ? ca - cb : (a.scenarioName ?? '').localeCompare(b.scenarioName ?? '')
+    })
+
+    // Group by test type
+    const groups = new Map<string, typeof sorted>()
+    for (const rec of sorted) {
+      const key = typeKey(rec.testType)
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(rec)
+    }
 
     sectionStart(`📌 Additional Recommendations (${count})`)
     lines.push('To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).')
     lines.push('')
-    for (const rec of sorted) {
-      const endpoint = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path
-        ? `\`${rec.steps[0].method} ${rec.steps[0].path}\``
-        : ''
-      const endpointSuffix = endpoint ? ` — ${endpoint}` : ''
-      const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : ''
-      lines.push(`- **${rec.testType}**${id}${endpointSuffix}: ${rec.description}`)
+    for (const [type, groupRecs] of groups) {
+      const label = TEST_TYPE_LABEL[type] ?? type
+      lines.push(`**${label}**`)
+      lines.push('')
+      for (const rec of groupRecs) {
+        const endpoint = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path
+          ? `\`${rec.steps[0].method} ${rec.steps[0].path}\``
+          : ''
+        const endpointSuffix = endpoint ? ` — ${endpoint}` : ''
+        const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : ''
+        lines.push(`-${endpointSuffix}${id}\n  ${rec.description}`)
+      }
+      lines.push('')
     }
     sectionEnd()
   }

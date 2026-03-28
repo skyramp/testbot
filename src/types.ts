@@ -27,6 +27,8 @@ export interface SharedConfig {
   commitMessage: string
   postPrComment: boolean
   testExecutionTimeout: number
+  maxRecommendations: number
+  maxGenerate: number
   testbotMaxRetries: number
   testbotRetryDelay: number
   testbotTimeout: number
@@ -121,6 +123,7 @@ export interface TestbotReport {
   additionalRecommendations?: {
     testId?: string
     testType: string
+    category?: string
     scenarioName: string
     steps: {
       method?: string

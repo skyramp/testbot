@@ -27092,6 +27092,14 @@ function getInputs() {
     commitMessage: getInput("commitMessage"),
     postPrComment: getBooleanInput("postPrComment"),
     testExecutionTimeout: parseInt(getInput("testExecutionTimeout"), 10) || 300,
+    maxRecommendations: (() => {
+      const parsed = parseInt(getInput("maxRecommendations"), 10);
+      return isNaN(parsed) ? 20 : Math.max(0, parsed);
+    })(),
+    maxGenerate: (() => {
+      const parsed = parseInt(getInput("maxGenerate"), 10);
+      return isNaN(parsed) ? 3 : Math.max(0, parsed);
+    })(),
     testbotMaxRetries: parseInt(getInput("testbotMaxRetries"), 10) || 3,
     testbotRetryDelay: parseInt(getInput("testbotRetryDelay"), 10) || 10,
     testbotTimeout: parseInt(getInput("testbotTimeout"), 10) || 60,
@@ -27179,6 +27187,8 @@ async function loadConfig(inputs) {
     commitMessage: inputs.commitMessage,
     postPrComment: inputs.postPrComment,
     testExecutionTimeout: inputs.testExecutionTimeout,
+    maxRecommendations: inputs.maxRecommendations,
+    maxGenerate: inputs.maxGenerate,
     testbotMaxRetries: inputs.testbotMaxRetries,
     testbotRetryDelay: inputs.testbotRetryDelay,
     testbotTimeout: inputs.testbotTimeout,
