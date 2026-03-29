@@ -120,11 +120,11 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
   if (report.newTestsCreated.length > 0) {
     sectionStart('💡 Test Recommendations Implemented')
     for (const t of report.newTestsCreated) {
-      const id = t.testId ? ` [\`Test ID-${t.testId}\`]` : ''
-      const endpoint = t.endpoint ? ` — \`${t.endpoint}\`` : ''
+      const id = t.testId ? `\`${t.testId}\`` : t.testType
+      const endpointLine = t.endpoint ? `\n  \`${t.endpoint}\`` : ''
       const desc = t.description ? `\n  ${t.description}` : ''
       const file = t.fileName ? ` (\`${t.fileName}\`)` : ''
-      lines.push(`- ${t.testType}${endpoint}${id}${file}${desc}`)
+      lines.push(`- ${id}${file}${endpointLine}${desc}`)
     }
     sectionEnd()
   }
@@ -186,9 +186,14 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
         const endpoint = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path
           ? `\`${rec.steps[0].method} ${rec.steps[0].path}\``
           : ''
-        const endpointSuffix = endpoint ? ` — ${endpoint}` : ''
-        const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : ''
-        lines.push(`-${endpointSuffix}${id}\n  ${rec.description}`)
+        const idLabel = rec.testId
+          ? `\`${rec.testId}\``
+          : rec.scenarioName
+            ? `\`${rec.scenarioName}\``
+            : `\`${rec.testType} test\``
+        const prefix = `- ${idLabel}`
+        const endpointLine = endpoint ? `\n  ${endpoint}` : ''
+        lines.push(`${prefix}${endpointLine}\n  ${rec.description}`)
       }
       lines.push('')
     }
@@ -245,18 +250,38 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
   const steps: string[] = [...(report.nextSteps ?? [])]
   const hasIssues = report.issuesFound.length > 0
   const hasTests = report.newTestsCreated.length > 0 || report.testMaintenance.length > 0 || report.testResults.length > 0
-  if (hasTests && !hasIssues && steps.length === 0) {
-    if (autoCommit) {
-      steps.push('Let @skyramp-testbot know which additional recommendations to implement.')
-    } else {
-      steps.push('Enable `autoCommit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.')
-    }
+
+  // Surface top 2 additional recommendations as call-to-action (from sorted order)
+  const sortedRecs = [...(report.additionalRecommendations ?? [])].sort((a, b) => {
+    const TYPE_ORDER: Record<string, number> = { contract: 0, integration: 1, e2e: 2, ui: 3 }
+    const CAT_RISK: Record<string, number> = { security_boundary: 0, breaking_change: 1, data_integrity: 2, business_rule: 3, workflow: 4 }
+    const ta = TYPE_ORDER[a.testType.toLowerCase()] ?? 99
+    const tb = TYPE_ORDER[b.testType.toLowerCase()] ?? 99
+    if (ta !== tb) return ta - tb
+    const ca = CAT_RISK[a.category ?? ''] ?? 99
+    const cb = CAT_RISK[b.category ?? ''] ?? 99
+    return ca !== cb ? ca - cb : (a.scenarioName ?? '').localeCompare(b.scenarioName ?? '')
+  })
+  const topRecs = sortedRecs.slice(0, 2)
+
+  if (hasTests && !hasIssues && steps.length === 0 && topRecs.length === 0 && !autoCommit) {
+    steps.push('Enable `autoCommit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.')
   }
-  if (steps.length > 0) {
+  if (steps.length > 0 || topRecs.length > 0) {
     lines.push('### 💡 Next Steps')
     lines.push('')
     for (const step of steps) {
       lines.push(`- ${step}`)
+    }
+    if (topRecs.length > 0) {
+      lines.push('')
+      lines.push('Use `@skyramp-testbot` to implement additional recommendations. Based on my analysis of the diff, I would recommend:')
+      lines.push('')
+      topRecs.forEach((rec, i) => {
+        const name = rec.testId ? `**${rec.testId}**` : `**${rec.scenarioName ?? rec.testType}**`
+        const reasoning = rec.reasoning ?? rec.description
+        lines.push(`${i + 1}. ${name} — ${reasoning}`)
+      })
     }
     lines.push('')
   }

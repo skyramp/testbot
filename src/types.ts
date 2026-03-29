@@ -138,6 +138,7 @@ export interface TestbotReport {
     openApiSpec?: string
     backendTrace?: string
     frontendTrace?: string
+    reasoning?: string
   }[]
   issuesFound: { description: string }[]
   nextSteps?: string[]

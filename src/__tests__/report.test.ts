@@ -68,7 +68,7 @@ describe('renderReport', () => {
     expect(md).toContain('> Tests cover the checkout flow.')
 
     expect(md).toContain('### 💡 Test Recommendations Implemented')
-    expect(md).toContain('- contract — `POST /orders` (`test_orders.py`)')
+    expect(md).toContain('- contract (`test_orders.py`)\n  `POST /orders`')
 
     expect(md).toContain('### ✅ Test Maintenance')
     expect(md).toContain('- Updated auth header in existing tests')
@@ -431,14 +431,13 @@ describe('Next Steps section', () => {
     expect(md).toContain('- Check your targetSetupCommand — endpoints returned 404')
   })
 
-  it('renders "review commit" when autoCommit is true and no issues', () => {
+  it('omits Next Steps when autoCommit is true, no issues, and no recommendations', () => {
     const report: TestbotReport = {
       ...validReport,
       issuesFound: [],
     }
     const md = renderReport(report, { autoCommit: true })
-    expect(md).toContain('### 💡 Next Steps')
-    expect(md).toContain('- Let @skyramp-testbot know which additional recommendations to implement.')
+    expect(md).not.toContain('### 💡 Next Steps')
   })
 
   it('suggests enabling autoCommit when autoCommit is false', () => {
