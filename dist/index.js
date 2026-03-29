@@ -104417,12 +104417,39 @@ function classifyProbe(path11, outcome) {
   };
   return { kind, endpoint: path11, statusCode: outcome.statusCode, message: messages[kind], recommendation: recommendations[kind] };
 }
+function isParamSegment(segment) {
+  return segment.includes("{") || segment.startsWith(":") || segment === "*" || segment.startsWith("*");
+}
 function matchSegmentsToSpecPaths(segments, specPaths) {
-  const unparam = specPaths.filter((p) => !p.includes("{"));
+  const unparam = specPaths.filter((p) => !p.split("/").some(isParamSegment));
   const resolved = /* @__PURE__ */ new Set();
   for (const seg of segments) {
-    for (const sp of unparam) {
-      if (sp === seg || seg.length > 1 && sp.endsWith(seg)) resolved.add(sp);
+    const segParts = seg.split("/").filter(Boolean);
+    const segHasParam = segParts.some(isParamSegment);
+    if (!segHasParam) {
+      for (const sp of unparam) {
+        if (sp === seg || seg.length > 1 && sp.endsWith(seg)) resolved.add(sp);
+      }
+    } else {
+      if (segParts.length < 2) continue;
+      for (const sp of specPaths) {
+        const spParts = sp.split("/").filter(Boolean);
+        if (spParts.length < segParts.length) continue;
+        const offset = spParts.length - segParts.length;
+        const structuralMatch = segParts.every((part, i) => {
+          const spPart = spParts[offset + i];
+          if (part === spPart) return true;
+          if (part === "*" || part.startsWith("*")) return true;
+          return isParamSegment(part) && isParamSegment(spPart);
+        });
+        if (structuralMatch) {
+          const firstParamIdx = spParts.findIndex(isParamSegment);
+          if (firstParamIdx > 0) {
+            const ancestor = "/" + spParts.slice(0, firstParamIdx).join("/");
+            if (unparam.includes(ancestor)) resolved.add(ancestor);
+          }
+        }
+      }
     }
   }
   return [...resolved].slice(0, MAX_ENDPOINTS);

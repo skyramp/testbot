@@ -322,16 +322,75 @@ export function classifyProbe(
  * qualified paths.  Parameterised paths (containing `{`) are excluded since
  * they cannot be probed without a real ID.
  */
+/** Return true when a single path segment is a route parameter in any common style. */
+function isParamSegment(segment: string): boolean {
+  return segment.includes('{') || segment.startsWith(':') || segment === '*' || segment.startsWith('*')
+}
+
 function matchSegmentsToSpecPaths(segments: string[], specPaths: string[]): string[] {
-  const unparam = specPaths.filter(p => !p.includes('{'))
+  // OpenAPI specs use {param} style, but defensively also exclude :param and * wildcards
+  // in case a non-standard spec slips through.
+  const unparam = specPaths.filter(p => !p.split('/').some(isParamSegment))
   const resolved = new Set<string>()
+
   for (const seg of segments) {
-    for (const sp of unparam) {
+    const segParts = seg.split('/').filter(Boolean)
+    const segHasParam = segParts.some(isParamSegment)
+
+    if (!segHasParam) {
+      // Static segment: direct or suffix match against non-parameterised spec paths.
       // endsWith only when seg is a meaningful sub-path (length > 1); a bare '/'
       // would otherwise match every trailing-slash path in the spec.
-      if (sp === seg || (seg.length > 1 && sp.endsWith(seg))) resolved.add(sp)
+      for (const sp of unparam) {
+        if (sp === seg || (seg.length > 1 && sp.endsWith(seg))) resolved.add(sp)
+      }
+    } else {
+      // Parameterised segment (e.g. "/{order_id}/items" or "/:order_id/items") —
+      // these arise when the diff only has a relative router decorator like
+      // `@router.get("/{order_id}/items")` or `router.get("/:order_id/items")`
+      // and the prefix chain is not in the diff.  Match the segment structurally
+      // as a suffix against all spec paths and return the nearest non-parameterised
+      // ancestor as the probeable collection path.
+      //
+      // Examples:
+      //   "/{order_id}/items"  matches "/api/v1/orders/{order_id}/items" → "/api/v1/orders"
+      //   "/:order_id/items"   matches "/api/v1/orders/{order_id}/items" → "/api/v1/orders"
+      //
+      // Require at least 2 parts so a bare "/{id}" or "/:id" doesn't over-match
+      // every parameterised path in the spec.
+      if (segParts.length < 2) continue
+
+      for (const sp of specPaths) {
+        const spParts = sp.split('/').filter(Boolean)
+        if (spParts.length < segParts.length) continue
+
+        const offset = spParts.length - segParts.length
+        const structuralMatch = segParts.every((part, i) => {
+          const spPart = spParts[offset + i]
+          if (part === spPart) return true
+          // Wildcards (*) match any spec segment — static or parameterised.
+          if (part === '*' || part.startsWith('*')) return true
+          // Treat any param-style segment ({...}, :name) as matching the corresponding
+          // spec param segment — covers both OpenAPI {id} and Express :id in the diff.
+          return isParamSegment(part) && isParamSegment(spPart)
+        })
+
+        if (structuralMatch) {
+          // Ancestor: all static segments before the first parameter segment in the spec path.
+          // Only add it when the spec explicitly lists it as a non-parameterised path —
+          // if the collection endpoint doesn't exist in the spec we'd probe a 404 and
+          // report a false STALE_IMAGE.  When not present, fall through to code analysis
+          // / LLM / alive probe instead.
+          const firstParamIdx = spParts.findIndex(isParamSegment)
+          if (firstParamIdx > 0) {
+            const ancestor = '/' + spParts.slice(0, firstParamIdx).join('/')
+            if (unparam.includes(ancestor)) resolved.add(ancestor)
+          }
+        }
+      }
     }
   }
+
   return [...resolved].slice(0, MAX_ENDPOINTS)
 }
 

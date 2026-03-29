@@ -339,6 +339,86 @@ describe('resolvePathsViaOpenApi', () => {
     expect(result).toContain('/api/v1/products/search')
   })
 
+  it('resolves a bare relative param segment (e.g. "/{order_id}/items") to the collection ancestor via spec', async () => {
+    // Mirrors the real failure: diff has @router.get("/{order_id}/items") with no prefix
+    // in the diff. matchSegmentsToSpecPaths must find /api/v1/orders/{order_id}/items in
+    // the spec and derive /api/v1/orders as the probeable collection endpoint.
+    vi.stubGlobal('fetch', vi.fn(async () => spec([
+      '/api/v1/orders',                    // collection endpoint must be in spec to be returned
+      '/api/v1/orders/{order_id}',
+      '/api/v1/orders/{order_id}/items',
+      '/api/v1/products',
+    ])))
+    const result = await resolvePathsViaOpenApi('http://localhost:8000', ['/{order_id}/items'], '')
+    expect(result).toContain('/api/v1/orders')
+    expect(result).not.toContain('{order_id}')
+  })
+
+  it('does not resolve to an ancestor that is absent from the spec (avoids false STALE_IMAGE on 404)', async () => {
+    // Spec has the parameterised path but no collection endpoint — probing a derived
+    // ancestor that doesn't exist would return 404 and falsely report STALE_IMAGE.
+    // The ancestor must be absent from resolved so callers fall through to alive probe.
+    vi.stubGlobal('fetch', vi.fn(async () => spec([
+      '/api/v1/orders/{order_id}/items',   // no /api/v1/orders in the spec
+      '/api/v1/products',
+    ])))
+    const result = await resolvePathsViaOpenApi('http://localhost:8000', ['/{order_id}/items'], '')
+    expect(result).not.toContain('/api/v1/orders')
+    expect(result).toEqual([])
+  })
+
+  it('does not over-match a bare single-param segment "/{id}" against unrelated spec paths', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => spec([
+      '/api/v1/orders/{order_id}',
+      '/api/v1/products/{product_id}',
+    ])))
+    // A bare "/{id}" segment with only 1 part should not resolve (too ambiguous)
+    const result = await resolvePathsViaOpenApi('http://localhost:8000', ['/{order_id}'], '')
+    // Falls back to raw segment, filtered out by the parameterised-path safety filter
+    expect(result).toEqual([])
+  })
+
+  it('resolves an Express colon-style param segment "/:order_id/items" to the collection ancestor', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => spec([
+      '/api/v1/orders',
+      '/api/v1/orders/{order_id}',
+      '/api/v1/orders/{order_id}/items',
+    ])))
+    const result = await resolvePathsViaOpenApi('http://localhost:8000', ['/:order_id/items'], '')
+    expect(result).toContain('/api/v1/orders')
+    expect(result).not.toContain('{order_id}')
+  })
+
+  it('does not over-match a bare single colon-param "/:id" (1 part) against spec paths', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => spec([
+      '/api/v1/orders/{order_id}',
+      '/api/v1/products/{product_id}',
+    ])))
+    const result = await resolvePathsViaOpenApi('http://localhost:8000', ['/:order_id'], '')
+    expect(result).toEqual([])
+  })
+
+  it('resolves a wildcard segment "/:order_id/*" to the collection ancestor via spec', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => spec([
+      '/api/v1/orders',
+      '/api/v1/orders/{order_id}',
+      '/api/v1/orders/{order_id}/items',
+    ])))
+    const result = await resolvePathsViaOpenApi('http://localhost:8000', ['/:order_id/*'], '')
+    expect(result).toContain('/api/v1/orders')
+  })
+
+  it('does not return parameterised spec paths from the static branch even if spec uses colon style', async () => {
+    // Defensively: unparam filter now excludes any path with a param segment in any style
+    vi.stubGlobal('fetch', vi.fn(async () => spec([
+      '/api/v1/orders/:order_id',
+      '/api/v1/orders',
+    ])))
+    const result = await resolvePathsViaOpenApi('http://localhost:8000', ['/orders'], '')
+    expect(result).not.toContain('/api/v1/orders/:order_id')
+    expect(result).toContain('/api/v1/orders')
+  })
+
   it('falls back gracefully when fetch throws', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED') }))
     const result = await resolvePathsViaOpenApi('http://localhost:8000', ['/items'], '')
