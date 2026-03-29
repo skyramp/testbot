@@ -102,6 +102,14 @@ inputs:
     description: 'Post summary as PR comment'
     required: false
     default: 'true'
+  maxRecommendations:
+    description: 'Total number of test recommendations to produce (generated + additional). Defaults to 20.'
+    required: false
+    default: '20'
+  maxGenerate:
+    description: 'Number of tests to generate and execute in this run. The remainder are listed as additional recommendations. Defaults to 3.'
+    required: false
+    default: '3'
   testbotMaxRetries:
     description: 'Maximum number of retries for transient agent CLI errors (e.g., Cursor "Connection stalled")'
     required: false

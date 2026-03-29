@@ -1068,14 +1068,14 @@ var require_util = __commonJS({
         }
         const port = url2.port != null ? url2.port : url2.protocol === "https:" ? 443 : 80;
         let origin = url2.origin != null ? url2.origin : `${url2.protocol || ""}//${url2.hostname || ""}:${port}`;
-        let path11 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
+        let path12 = url2.path != null ? url2.path : `${url2.pathname || ""}${url2.search || ""}`;
         if (origin[origin.length - 1] === "/") {
           origin = origin.slice(0, origin.length - 1);
         }
-        if (path11 && path11[0] !== "/") {
-          path11 = `/${path11}`;
+        if (path12 && path12[0] !== "/") {
+          path12 = `/${path12}`;
         }
-        return new URL(`${origin}${path11}`);
+        return new URL(`${origin}${path12}`);
       }
       if (!isHttpOrHttpsPrefixed(url2.origin || url2.protocol)) {
         throw new InvalidArgumentError("Invalid URL protocol: the URL must start with `http:` or `https:`.");
@@ -1526,39 +1526,39 @@ var require_diagnostics = __commonJS({
       });
       diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
         const {
-          request: { method, path: path11, origin }
+          request: { method, path: path12, origin }
         } = evt;
-        debuglog("sending request to %s %s/%s", method, origin, path11);
+        debuglog("sending request to %s %s/%s", method, origin, path12);
       });
       diagnosticsChannel.channel("undici:request:headers").subscribe((evt) => {
         const {
-          request: { method, path: path11, origin },
+          request: { method, path: path12, origin },
           response: { statusCode }
         } = evt;
         debuglog(
           "received response to %s %s/%s - HTTP %d",
           method,
           origin,
-          path11,
+          path12,
           statusCode
         );
       });
       diagnosticsChannel.channel("undici:request:trailers").subscribe((evt) => {
         const {
-          request: { method, path: path11, origin }
+          request: { method, path: path12, origin }
         } = evt;
-        debuglog("trailers received from %s %s/%s", method, origin, path11);
+        debuglog("trailers received from %s %s/%s", method, origin, path12);
       });
       diagnosticsChannel.channel("undici:request:error").subscribe((evt) => {
         const {
-          request: { method, path: path11, origin },
+          request: { method, path: path12, origin },
           error: error2
         } = evt;
         debuglog(
           "request to %s %s/%s errored - %s",
           method,
           origin,
-          path11,
+          path12,
           error2.message
         );
       });
@@ -1607,9 +1607,9 @@ var require_diagnostics = __commonJS({
         });
         diagnosticsChannel.channel("undici:client:sendHeaders").subscribe((evt) => {
           const {
-            request: { method, path: path11, origin }
+            request: { method, path: path12, origin }
           } = evt;
-          debuglog("sending request to %s %s/%s", method, origin, path11);
+          debuglog("sending request to %s %s/%s", method, origin, path12);
         });
       }
       diagnosticsChannel.channel("undici:websocket:open").subscribe((evt) => {
@@ -1672,7 +1672,7 @@ var require_request = __commonJS({
     var kHandler = Symbol("handler");
     var Request = class {
       constructor(origin, {
-        path: path11,
+        path: path12,
         method,
         body: body2,
         headers,
@@ -1687,11 +1687,11 @@ var require_request = __commonJS({
         expectContinue,
         servername
       }, handler2) {
-        if (typeof path11 !== "string") {
+        if (typeof path12 !== "string") {
           throw new InvalidArgumentError("path must be a string");
-        } else if (path11[0] !== "/" && !(path11.startsWith("http://") || path11.startsWith("https://")) && method !== "CONNECT") {
+        } else if (path12[0] !== "/" && !(path12.startsWith("http://") || path12.startsWith("https://")) && method !== "CONNECT") {
           throw new InvalidArgumentError("path must be an absolute URL or start with a slash");
-        } else if (invalidPathRegex.test(path11)) {
+        } else if (invalidPathRegex.test(path12)) {
           throw new InvalidArgumentError("invalid request path");
         }
         if (typeof method !== "string") {
@@ -1757,7 +1757,7 @@ var require_request = __commonJS({
         this.completed = false;
         this.aborted = false;
         this.upgrade = upgrade || null;
-        this.path = query ? buildURL(path11, query) : path11;
+        this.path = query ? buildURL(path12, query) : path12;
         this.origin = origin;
         this.idempotent = idempotent == null ? method === "HEAD" || method === "GET" : idempotent;
         this.blocking = blocking == null ? false : blocking;
@@ -6276,7 +6276,7 @@ var require_client_h1 = __commonJS({
       return method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && method !== "TRACE" && method !== "CONNECT";
     }
     function writeH1(client2, request2) {
-      const { method, path: path11, host, upgrade, blocking, reset } = request2;
+      const { method, path: path12, host, upgrade, blocking, reset } = request2;
       let { body: body2, headers, contentLength: contentLength2 } = request2;
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH" || method === "QUERY" || method === "PROPFIND" || method === "PROPPATCH";
       if (util3.isFormDataLike(body2)) {
@@ -6342,7 +6342,7 @@ var require_client_h1 = __commonJS({
       if (blocking) {
         socket[kBlocking] = true;
       }
-      let header = `${method} ${path11} HTTP/1.1\r
+      let header = `${method} ${path12} HTTP/1.1\r
 `;
       if (typeof host === "string") {
         header += `host: ${host}\r
@@ -6868,7 +6868,7 @@ var require_client_h2 = __commonJS({
     }
     function writeH2(client2, request2) {
       const session = client2[kHTTP2Session];
-      const { method, path: path11, host, upgrade, expectContinue, signal, headers: reqHeaders } = request2;
+      const { method, path: path12, host, upgrade, expectContinue, signal, headers: reqHeaders } = request2;
       let { body: body2 } = request2;
       if (upgrade) {
         util3.errorRequest(client2, request2, new Error("Upgrade not supported for H2"));
@@ -6935,7 +6935,7 @@ var require_client_h2 = __commonJS({
         });
         return true;
       }
-      headers[HTTP2_HEADER_PATH] = path11;
+      headers[HTTP2_HEADER_PATH] = path12;
       headers[HTTP2_HEADER_SCHEME] = "https";
       const expectsPayload = method === "PUT" || method === "POST" || method === "PATCH";
       if (body2 && typeof body2.read === "function") {
@@ -7288,9 +7288,9 @@ var require_redirect_handler = __commonJS({
           return this.handler.onHeaders(statusCode, headers, resume, statusText);
         }
         const { origin, pathname, search } = util3.parseURL(new URL(this.location, this.opts.origin && new URL(this.opts.path, this.opts.origin)));
-        const path11 = search ? `${pathname}${search}` : pathname;
+        const path12 = search ? `${pathname}${search}` : pathname;
         this.opts.headers = cleanRequestHeaders(this.opts.headers, statusCode === 303, this.opts.origin !== origin);
-        this.opts.path = path11;
+        this.opts.path = path12;
         this.opts.origin = origin;
         this.opts.maxRedirections = 0;
         this.opts.query = null;
@@ -8524,10 +8524,10 @@ var require_proxy_agent = __commonJS({
         };
         const {
           origin,
-          path: path11 = "/",
+          path: path12 = "/",
           headers = {}
         } = opts;
-        opts.path = origin + path11;
+        opts.path = origin + path12;
         if (!("host" in headers) && !("Host" in headers)) {
           const { host } = new URL2(origin);
           headers.host = host;
@@ -10448,20 +10448,20 @@ var require_mock_utils = __commonJS({
       }
       return true;
     }
-    function safeUrl(path11) {
-      if (typeof path11 !== "string") {
-        return path11;
+    function safeUrl(path12) {
+      if (typeof path12 !== "string") {
+        return path12;
       }
-      const pathSegments = path11.split("?");
+      const pathSegments = path12.split("?");
       if (pathSegments.length !== 2) {
-        return path11;
+        return path12;
       }
       const qp = new URLSearchParams(pathSegments.pop());
       qp.sort();
       return [...pathSegments, qp.toString()].join("?");
     }
-    function matchKey(mockDispatch2, { path: path11, method, body: body2, headers }) {
-      const pathMatch = matchValue(mockDispatch2.path, path11);
+    function matchKey(mockDispatch2, { path: path12, method, body: body2, headers }) {
+      const pathMatch = matchValue(mockDispatch2.path, path12);
       const methodMatch = matchValue(mockDispatch2.method, method);
       const bodyMatch = typeof mockDispatch2.body !== "undefined" ? matchValue(mockDispatch2.body, body2) : true;
       const headersMatch = matchHeaders(mockDispatch2, headers);
@@ -10483,7 +10483,7 @@ var require_mock_utils = __commonJS({
     function getMockDispatch(mockDispatches, key) {
       const basePath = key.query ? buildURL(key.path, key.query) : key.path;
       const resolvedPath = typeof basePath === "string" ? safeUrl(basePath) : basePath;
-      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path11 }) => matchValue(safeUrl(path11), resolvedPath));
+      let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path12 }) => matchValue(safeUrl(path12), resolvedPath));
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
       }
@@ -10521,9 +10521,9 @@ var require_mock_utils = __commonJS({
       }
     }
     function buildKey(opts) {
-      const { path: path11, method, body: body2, headers, query } = opts;
+      const { path: path12, method, body: body2, headers, query } = opts;
       return {
-        path: path11,
+        path: path12,
         method,
         body: body2,
         headers,
@@ -10986,10 +10986,10 @@ var require_pending_interceptors_formatter = __commonJS({
       }
       format(pendingInterceptors) {
         const withPrettyHeaders = pendingInterceptors.map(
-          ({ method, path: path11, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
+          ({ method, path: path12, data: { statusCode }, persist, times, timesInvoked, origin }) => ({
             Method: method,
             Origin: origin,
-            Path: path11,
+            Path: path12,
             "Status code": statusCode,
             Persistent: persist ? PERSISTENT : NOT_PERSISTENT,
             Invocations: timesInvoked,
@@ -15870,9 +15870,9 @@ var require_util6 = __commonJS({
         }
       }
     }
-    function validateCookiePath(path11) {
-      for (let i = 0; i < path11.length; ++i) {
-        const code = path11.charCodeAt(i);
+    function validateCookiePath(path12) {
+      for (let i = 0; i < path12.length; ++i) {
+        const code = path12.charCodeAt(i);
         if (code < 32 || // exclude CTLs (0-31)
         code === 127 || // DEL
         code === 59) {
@@ -18538,11 +18538,11 @@ var require_undici = __commonJS({
           if (typeof opts.path !== "string") {
             throw new InvalidArgumentError("invalid opts.path");
           }
-          let path11 = opts.path;
+          let path12 = opts.path;
           if (!opts.path.startsWith("/")) {
-            path11 = `/${path11}`;
+            path12 = `/${path12}`;
           }
-          url2 = new URL(util3.parseOrigin(url2).origin + path11);
+          url2 = new URL(util3.parseOrigin(url2).origin + path12);
         } else {
           if (!opts) {
             opts = typeof url2 === "object" ? url2 : {};
@@ -25298,8 +25298,8 @@ var require_minimatch = __commonJS({
       return new Minimatch(pattern, options).match(p);
     };
     module2.exports = minimatch;
-    var path11 = require_path();
-    minimatch.sep = path11.sep;
+    var path12 = require_path();
+    minimatch.sep = path12.sep;
     var GLOBSTAR = Symbol("globstar **");
     minimatch.GLOBSTAR = GLOBSTAR;
     var expand2 = require_brace_expansion();
@@ -25905,8 +25905,8 @@ var require_minimatch = __commonJS({
         if (this.empty) return f === "";
         if (f === "/" && partial) return true;
         const options = this.options;
-        if (path11.sep !== "/") {
-          f = f.split(path11.sep).join("/");
+        if (path12.sep !== "/") {
+          f = f.split(path12.sep).join("/");
         }
         f = f.split(slashSplit);
         this.debug(this.pattern, "split", f);
@@ -25944,13 +25944,13 @@ var require_minimatch = __commonJS({
 var require_readdir_glob = __commonJS({
   "node_modules/readdir-glob/index.js"(exports2, module2) {
     module2.exports = readdirGlob;
-    var fs16 = require("fs");
+    var fs17 = require("fs");
     var { EventEmitter: EventEmitter4 } = require("events");
     var { Minimatch } = require_minimatch();
     var { resolve: resolve5 } = require("path");
     function readdir2(dir, strict) {
       return new Promise((resolve6, reject) => {
-        fs16.readdir(dir, { withFileTypes: true }, (err, files) => {
+        fs17.readdir(dir, { withFileTypes: true }, (err, files) => {
           if (err) {
             switch (err.code) {
               case "ENOTDIR":
@@ -25983,7 +25983,7 @@ var require_readdir_glob = __commonJS({
     }
     function stat2(file, followSymlinks) {
       return new Promise((resolve6, reject) => {
-        const statFunc = followSymlinks ? fs16.stat : fs16.lstat;
+        const statFunc = followSymlinks ? fs17.stat : fs17.lstat;
         statFunc(file, (err, stats) => {
           if (err) {
             switch (err.code) {
@@ -26004,8 +26004,8 @@ var require_readdir_glob = __commonJS({
         });
       });
     }
-    async function* exploreWalkAsync(dir, path11, followSymlinks, useStat, shouldSkip, strict) {
-      let files = await readdir2(path11 + dir, strict);
+    async function* exploreWalkAsync(dir, path12, followSymlinks, useStat, shouldSkip, strict) {
+      let files = await readdir2(path12 + dir, strict);
       for (const file of files) {
         let name = file.name;
         if (name === void 0) {
@@ -26014,7 +26014,7 @@ var require_readdir_glob = __commonJS({
         }
         const filename = dir + "/" + name;
         const relative2 = filename.slice(1);
-        const absolute = path11 + "/" + relative2;
+        const absolute = path12 + "/" + relative2;
         let stats = null;
         if (useStat || followSymlinks) {
           stats = await stat2(absolute, followSymlinks);
@@ -26028,15 +26028,15 @@ var require_readdir_glob = __commonJS({
         if (stats.isDirectory()) {
           if (!shouldSkip(relative2)) {
             yield { relative: relative2, absolute, stats };
-            yield* exploreWalkAsync(filename, path11, followSymlinks, useStat, shouldSkip, false);
+            yield* exploreWalkAsync(filename, path12, followSymlinks, useStat, shouldSkip, false);
           }
         } else {
           yield { relative: relative2, absolute, stats };
         }
       }
     }
-    async function* explore(path11, followSymlinks, useStat, shouldSkip) {
-      yield* exploreWalkAsync("", path11, followSymlinks, useStat, shouldSkip, true);
+    async function* explore(path12, followSymlinks, useStat, shouldSkip) {
+      yield* exploreWalkAsync("", path12, followSymlinks, useStat, shouldSkip, true);
     }
     function readOptions(options) {
       return {
@@ -28048,54 +28048,54 @@ var require_polyfills = __commonJS({
     }
     var chdir;
     module2.exports = patch;
-    function patch(fs16) {
+    function patch(fs17) {
       if (constants3.hasOwnProperty("O_SYMLINK") && process.version.match(/^v0\.6\.[0-2]|^v0\.5\./)) {
-        patchLchmod(fs16);
+        patchLchmod(fs17);
       }
-      if (!fs16.lutimes) {
-        patchLutimes(fs16);
+      if (!fs17.lutimes) {
+        patchLutimes(fs17);
       }
-      fs16.chown = chownFix(fs16.chown);
-      fs16.fchown = chownFix(fs16.fchown);
-      fs16.lchown = chownFix(fs16.lchown);
-      fs16.chmod = chmodFix(fs16.chmod);
-      fs16.fchmod = chmodFix(fs16.fchmod);
-      fs16.lchmod = chmodFix(fs16.lchmod);
-      fs16.chownSync = chownFixSync(fs16.chownSync);
-      fs16.fchownSync = chownFixSync(fs16.fchownSync);
-      fs16.lchownSync = chownFixSync(fs16.lchownSync);
-      fs16.chmodSync = chmodFixSync(fs16.chmodSync);
-      fs16.fchmodSync = chmodFixSync(fs16.fchmodSync);
-      fs16.lchmodSync = chmodFixSync(fs16.lchmodSync);
-      fs16.stat = statFix(fs16.stat);
-      fs16.fstat = statFix(fs16.fstat);
-      fs16.lstat = statFix(fs16.lstat);
-      fs16.statSync = statFixSync(fs16.statSync);
-      fs16.fstatSync = statFixSync(fs16.fstatSync);
-      fs16.lstatSync = statFixSync(fs16.lstatSync);
-      if (fs16.chmod && !fs16.lchmod) {
-        fs16.lchmod = function(path11, mode, cb) {
+      fs17.chown = chownFix(fs17.chown);
+      fs17.fchown = chownFix(fs17.fchown);
+      fs17.lchown = chownFix(fs17.lchown);
+      fs17.chmod = chmodFix(fs17.chmod);
+      fs17.fchmod = chmodFix(fs17.fchmod);
+      fs17.lchmod = chmodFix(fs17.lchmod);
+      fs17.chownSync = chownFixSync(fs17.chownSync);
+      fs17.fchownSync = chownFixSync(fs17.fchownSync);
+      fs17.lchownSync = chownFixSync(fs17.lchownSync);
+      fs17.chmodSync = chmodFixSync(fs17.chmodSync);
+      fs17.fchmodSync = chmodFixSync(fs17.fchmodSync);
+      fs17.lchmodSync = chmodFixSync(fs17.lchmodSync);
+      fs17.stat = statFix(fs17.stat);
+      fs17.fstat = statFix(fs17.fstat);
+      fs17.lstat = statFix(fs17.lstat);
+      fs17.statSync = statFixSync(fs17.statSync);
+      fs17.fstatSync = statFixSync(fs17.fstatSync);
+      fs17.lstatSync = statFixSync(fs17.lstatSync);
+      if (fs17.chmod && !fs17.lchmod) {
+        fs17.lchmod = function(path12, mode, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs16.lchmodSync = function() {
+        fs17.lchmodSync = function() {
         };
       }
-      if (fs16.chown && !fs16.lchown) {
-        fs16.lchown = function(path11, uid, gid, cb) {
+      if (fs17.chown && !fs17.lchown) {
+        fs17.lchown = function(path12, uid, gid, cb) {
           if (cb) process.nextTick(cb);
         };
-        fs16.lchownSync = function() {
+        fs17.lchownSync = function() {
         };
       }
       if (platform2 === "win32") {
-        fs16.rename = typeof fs16.rename !== "function" ? fs16.rename : (function(fs$rename) {
+        fs17.rename = typeof fs17.rename !== "function" ? fs17.rename : (function(fs$rename) {
           function rename2(from, to, cb) {
             var start = Date.now();
             var backoff = 0;
             fs$rename(from, to, function CB(er) {
               if (er && (er.code === "EACCES" || er.code === "EPERM" || er.code === "EBUSY") && Date.now() - start < 6e4) {
                 setTimeout(function() {
-                  fs16.stat(to, function(stater, st) {
+                  fs17.stat(to, function(stater, st) {
                     if (stater && stater.code === "ENOENT")
                       fs$rename(from, to, CB);
                     else
@@ -28111,9 +28111,9 @@ var require_polyfills = __commonJS({
           }
           if (Object.setPrototypeOf) Object.setPrototypeOf(rename2, fs$rename);
           return rename2;
-        })(fs16.rename);
+        })(fs17.rename);
       }
-      fs16.read = typeof fs16.read !== "function" ? fs16.read : (function(fs$read) {
+      fs17.read = typeof fs17.read !== "function" ? fs17.read : (function(fs$read) {
         function read(fd, buffer2, offset, length, position, callback_) {
           var callback;
           if (callback_ && typeof callback_ === "function") {
@@ -28121,22 +28121,22 @@ var require_polyfills = __commonJS({
             callback = function(er, _2, __) {
               if (er && er.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
-                return fs$read.call(fs16, fd, buffer2, offset, length, position, callback);
+                return fs$read.call(fs17, fd, buffer2, offset, length, position, callback);
               }
               callback_.apply(this, arguments);
             };
           }
-          return fs$read.call(fs16, fd, buffer2, offset, length, position, callback);
+          return fs$read.call(fs17, fd, buffer2, offset, length, position, callback);
         }
         if (Object.setPrototypeOf) Object.setPrototypeOf(read, fs$read);
         return read;
-      })(fs16.read);
-      fs16.readSync = typeof fs16.readSync !== "function" ? fs16.readSync : /* @__PURE__ */ (function(fs$readSync) {
+      })(fs17.read);
+      fs17.readSync = typeof fs17.readSync !== "function" ? fs17.readSync : /* @__PURE__ */ (function(fs$readSync) {
         return function(fd, buffer2, offset, length, position) {
           var eagCounter = 0;
           while (true) {
             try {
-              return fs$readSync.call(fs16, fd, buffer2, offset, length, position);
+              return fs$readSync.call(fs17, fd, buffer2, offset, length, position);
             } catch (er) {
               if (er.code === "EAGAIN" && eagCounter < 10) {
                 eagCounter++;
@@ -28146,11 +28146,11 @@ var require_polyfills = __commonJS({
             }
           }
         };
-      })(fs16.readSync);
-      function patchLchmod(fs17) {
-        fs17.lchmod = function(path11, mode, callback) {
-          fs17.open(
-            path11,
+      })(fs17.readSync);
+      function patchLchmod(fs18) {
+        fs18.lchmod = function(path12, mode, callback) {
+          fs18.open(
+            path12,
             constants3.O_WRONLY | constants3.O_SYMLINK,
             mode,
             function(err, fd) {
@@ -28158,80 +28158,80 @@ var require_polyfills = __commonJS({
                 if (callback) callback(err);
                 return;
               }
-              fs17.fchmod(fd, mode, function(err2) {
-                fs17.close(fd, function(err22) {
+              fs18.fchmod(fd, mode, function(err2) {
+                fs18.close(fd, function(err22) {
                   if (callback) callback(err2 || err22);
                 });
               });
             }
           );
         };
-        fs17.lchmodSync = function(path11, mode) {
-          var fd = fs17.openSync(path11, constants3.O_WRONLY | constants3.O_SYMLINK, mode);
+        fs18.lchmodSync = function(path12, mode) {
+          var fd = fs18.openSync(path12, constants3.O_WRONLY | constants3.O_SYMLINK, mode);
           var threw = true;
           var ret;
           try {
-            ret = fs17.fchmodSync(fd, mode);
+            ret = fs18.fchmodSync(fd, mode);
             threw = false;
           } finally {
             if (threw) {
               try {
-                fs17.closeSync(fd);
+                fs18.closeSync(fd);
               } catch (er) {
               }
             } else {
-              fs17.closeSync(fd);
+              fs18.closeSync(fd);
             }
           }
           return ret;
         };
       }
-      function patchLutimes(fs17) {
-        if (constants3.hasOwnProperty("O_SYMLINK") && fs17.futimes) {
-          fs17.lutimes = function(path11, at, mt, cb) {
-            fs17.open(path11, constants3.O_SYMLINK, function(er, fd) {
+      function patchLutimes(fs18) {
+        if (constants3.hasOwnProperty("O_SYMLINK") && fs18.futimes) {
+          fs18.lutimes = function(path12, at, mt, cb) {
+            fs18.open(path12, constants3.O_SYMLINK, function(er, fd) {
               if (er) {
                 if (cb) cb(er);
                 return;
               }
-              fs17.futimes(fd, at, mt, function(er2) {
-                fs17.close(fd, function(er22) {
+              fs18.futimes(fd, at, mt, function(er2) {
+                fs18.close(fd, function(er22) {
                   if (cb) cb(er2 || er22);
                 });
               });
             });
           };
-          fs17.lutimesSync = function(path11, at, mt) {
-            var fd = fs17.openSync(path11, constants3.O_SYMLINK);
+          fs18.lutimesSync = function(path12, at, mt) {
+            var fd = fs18.openSync(path12, constants3.O_SYMLINK);
             var ret;
             var threw = true;
             try {
-              ret = fs17.futimesSync(fd, at, mt);
+              ret = fs18.futimesSync(fd, at, mt);
               threw = false;
             } finally {
               if (threw) {
                 try {
-                  fs17.closeSync(fd);
+                  fs18.closeSync(fd);
                 } catch (er) {
                 }
               } else {
-                fs17.closeSync(fd);
+                fs18.closeSync(fd);
               }
             }
             return ret;
           };
-        } else if (fs17.futimes) {
-          fs17.lutimes = function(_a, _b, _c, cb) {
+        } else if (fs18.futimes) {
+          fs18.lutimes = function(_a, _b, _c, cb) {
             if (cb) process.nextTick(cb);
           };
-          fs17.lutimesSync = function() {
+          fs18.lutimesSync = function() {
           };
         }
       }
       function chmodFix(orig) {
         if (!orig) return orig;
         return function(target, mode, cb) {
-          return orig.call(fs16, target, mode, function(er) {
+          return orig.call(fs17, target, mode, function(er) {
             if (chownErOk(er)) er = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -28241,7 +28241,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, mode) {
           try {
-            return orig.call(fs16, target, mode);
+            return orig.call(fs17, target, mode);
           } catch (er) {
             if (!chownErOk(er)) throw er;
           }
@@ -28250,7 +28250,7 @@ var require_polyfills = __commonJS({
       function chownFix(orig) {
         if (!orig) return orig;
         return function(target, uid, gid, cb) {
-          return orig.call(fs16, target, uid, gid, function(er) {
+          return orig.call(fs17, target, uid, gid, function(er) {
             if (chownErOk(er)) er = null;
             if (cb) cb.apply(this, arguments);
           });
@@ -28260,7 +28260,7 @@ var require_polyfills = __commonJS({
         if (!orig) return orig;
         return function(target, uid, gid) {
           try {
-            return orig.call(fs16, target, uid, gid);
+            return orig.call(fs17, target, uid, gid);
           } catch (er) {
             if (!chownErOk(er)) throw er;
           }
@@ -28280,13 +28280,13 @@ var require_polyfills = __commonJS({
             }
             if (cb) cb.apply(this, arguments);
           }
-          return options ? orig.call(fs16, target, options, callback) : orig.call(fs16, target, callback);
+          return options ? orig.call(fs17, target, options, callback) : orig.call(fs17, target, callback);
         };
       }
       function statFixSync(orig) {
         if (!orig) return orig;
         return function(target, options) {
-          var stats = options ? orig.call(fs16, target, options) : orig.call(fs16, target);
+          var stats = options ? orig.call(fs17, target, options) : orig.call(fs17, target);
           if (stats) {
             if (stats.uid < 0) stats.uid += 4294967296;
             if (stats.gid < 0) stats.gid += 4294967296;
@@ -28315,16 +28315,16 @@ var require_legacy_streams = __commonJS({
   "node_modules/graceful-fs/legacy-streams.js"(exports2, module2) {
     var Stream = require("stream").Stream;
     module2.exports = legacy;
-    function legacy(fs16) {
+    function legacy(fs17) {
       return {
         ReadStream,
         WriteStream
       };
-      function ReadStream(path11, options) {
-        if (!(this instanceof ReadStream)) return new ReadStream(path11, options);
+      function ReadStream(path12, options) {
+        if (!(this instanceof ReadStream)) return new ReadStream(path12, options);
         Stream.call(this);
         var self2 = this;
-        this.path = path11;
+        this.path = path12;
         this.fd = null;
         this.readable = true;
         this.paused = false;
@@ -28358,7 +28358,7 @@ var require_legacy_streams = __commonJS({
           });
           return;
         }
-        fs16.open(this.path, this.flags, this.mode, function(err, fd) {
+        fs17.open(this.path, this.flags, this.mode, function(err, fd) {
           if (err) {
             self2.emit("error", err);
             self2.readable = false;
@@ -28369,10 +28369,10 @@ var require_legacy_streams = __commonJS({
           self2._read();
         });
       }
-      function WriteStream(path11, options) {
-        if (!(this instanceof WriteStream)) return new WriteStream(path11, options);
+      function WriteStream(path12, options) {
+        if (!(this instanceof WriteStream)) return new WriteStream(path12, options);
         Stream.call(this);
-        this.path = path11;
+        this.path = path12;
         this.fd = null;
         this.writable = true;
         this.flags = "w";
@@ -28397,7 +28397,7 @@ var require_legacy_streams = __commonJS({
         this.busy = false;
         this._queue = [];
         if (this.fd === null) {
-          this._open = fs16.open;
+          this._open = fs17.open;
           this._queue.push([this._open, this.path, this.flags, this.mode, void 0]);
           this.flush();
         }
@@ -28432,7 +28432,7 @@ var require_clone = __commonJS({
 // node_modules/graceful-fs/graceful-fs.js
 var require_graceful_fs = __commonJS({
   "node_modules/graceful-fs/graceful-fs.js"(exports2, module2) {
-    var fs16 = require("fs");
+    var fs17 = require("fs");
     var polyfills = require_polyfills();
     var legacy = require_legacy_streams();
     var clone = require_clone();
@@ -28464,12 +28464,12 @@ var require_graceful_fs = __commonJS({
         m = "GFS4: " + m.split(/\n/).join("\nGFS4: ");
         console.error(m);
       };
-    if (!fs16[gracefulQueue]) {
+    if (!fs17[gracefulQueue]) {
       queue = global[gracefulQueue] || [];
-      publishQueue(fs16, queue);
-      fs16.close = (function(fs$close) {
+      publishQueue(fs17, queue);
+      fs17.close = (function(fs$close) {
         function close(fd, cb) {
-          return fs$close.call(fs16, fd, function(err) {
+          return fs$close.call(fs17, fd, function(err) {
             if (!err) {
               resetQueue();
             }
@@ -28481,48 +28481,48 @@ var require_graceful_fs = __commonJS({
           value: fs$close
         });
         return close;
-      })(fs16.close);
-      fs16.closeSync = (function(fs$closeSync) {
-        function closeSync(fd) {
-          fs$closeSync.apply(fs16, arguments);
+      })(fs17.close);
+      fs17.closeSync = (function(fs$closeSync) {
+        function closeSync2(fd) {
+          fs$closeSync.apply(fs17, arguments);
           resetQueue();
         }
-        Object.defineProperty(closeSync, previousSymbol, {
+        Object.defineProperty(closeSync2, previousSymbol, {
           value: fs$closeSync
         });
-        return closeSync;
-      })(fs16.closeSync);
+        return closeSync2;
+      })(fs17.closeSync);
       if (/\bgfs4\b/i.test(process.env.NODE_DEBUG || "")) {
         process.on("exit", function() {
-          debug3(fs16[gracefulQueue]);
-          require("assert").equal(fs16[gracefulQueue].length, 0);
+          debug3(fs17[gracefulQueue]);
+          require("assert").equal(fs17[gracefulQueue].length, 0);
         });
       }
     }
     var queue;
     if (!global[gracefulQueue]) {
-      publishQueue(global, fs16[gracefulQueue]);
+      publishQueue(global, fs17[gracefulQueue]);
     }
-    module2.exports = patch(clone(fs16));
-    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs16.__patched) {
-      module2.exports = patch(fs16);
-      fs16.__patched = true;
+    module2.exports = patch(clone(fs17));
+    if (process.env.TEST_GRACEFUL_FS_GLOBAL_PATCH && !fs17.__patched) {
+      module2.exports = patch(fs17);
+      fs17.__patched = true;
     }
-    function patch(fs17) {
-      polyfills(fs17);
-      fs17.gracefulify = patch;
-      fs17.createReadStream = createReadStream2;
-      fs17.createWriteStream = createWriteStream2;
-      var fs$readFile = fs17.readFile;
-      fs17.readFile = readFile;
-      function readFile(path11, options, cb) {
+    function patch(fs18) {
+      polyfills(fs18);
+      fs18.gracefulify = patch;
+      fs18.createReadStream = createReadStream2;
+      fs18.createWriteStream = createWriteStream3;
+      var fs$readFile = fs18.readFile;
+      fs18.readFile = readFile;
+      function readFile(path12, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$readFile(path11, options, cb);
-        function go$readFile(path12, options2, cb2, startTime) {
-          return fs$readFile(path12, options2, function(err) {
+        return go$readFile(path12, options, cb);
+        function go$readFile(path13, options2, cb2, startTime) {
+          return fs$readFile(path13, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$readFile, [path12, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$readFile, [path13, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -28530,16 +28530,16 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$writeFile = fs17.writeFile;
-      fs17.writeFile = writeFile2;
-      function writeFile2(path11, data, options, cb) {
+      var fs$writeFile = fs18.writeFile;
+      fs18.writeFile = writeFile2;
+      function writeFile2(path12, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$writeFile(path11, data, options, cb);
-        function go$writeFile(path12, data2, options2, cb2, startTime) {
-          return fs$writeFile(path12, data2, options2, function(err) {
+        return go$writeFile(path12, data, options, cb);
+        function go$writeFile(path13, data2, options2, cb2, startTime) {
+          return fs$writeFile(path13, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$writeFile, [path12, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$writeFile, [path13, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -28547,17 +28547,17 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$appendFile = fs17.appendFile;
+      var fs$appendFile = fs18.appendFile;
       if (fs$appendFile)
-        fs17.appendFile = appendFile2;
-      function appendFile2(path11, data, options, cb) {
+        fs18.appendFile = appendFile2;
+      function appendFile2(path12, data, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        return go$appendFile(path11, data, options, cb);
-        function go$appendFile(path12, data2, options2, cb2, startTime) {
-          return fs$appendFile(path12, data2, options2, function(err) {
+        return go$appendFile(path12, data, options, cb);
+        function go$appendFile(path13, data2, options2, cb2, startTime) {
+          return fs$appendFile(path13, data2, options2, function(err) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$appendFile, [path12, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$appendFile, [path13, data2, options2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -28565,9 +28565,9 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$copyFile = fs17.copyFile;
+      var fs$copyFile = fs18.copyFile;
       if (fs$copyFile)
-        fs17.copyFile = copyFile2;
+        fs18.copyFile = copyFile2;
       function copyFile2(src, dest, flags, cb) {
         if (typeof flags === "function") {
           cb = flags;
@@ -28585,34 +28585,34 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      var fs$readdir = fs17.readdir;
-      fs17.readdir = readdir2;
+      var fs$readdir = fs18.readdir;
+      fs18.readdir = readdir2;
       var noReaddirOptionVersions = /^v[0-5]\./;
-      function readdir2(path11, options, cb) {
+      function readdir2(path12, options, cb) {
         if (typeof options === "function")
           cb = options, options = null;
-        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path12, options2, cb2, startTime) {
-          return fs$readdir(path12, fs$readdirCallback(
-            path12,
+        var go$readdir = noReaddirOptionVersions.test(process.version) ? function go$readdir2(path13, options2, cb2, startTime) {
+          return fs$readdir(path13, fs$readdirCallback(
+            path13,
             options2,
             cb2,
             startTime
           ));
-        } : function go$readdir2(path12, options2, cb2, startTime) {
-          return fs$readdir(path12, options2, fs$readdirCallback(
-            path12,
+        } : function go$readdir2(path13, options2, cb2, startTime) {
+          return fs$readdir(path13, options2, fs$readdirCallback(
+            path13,
             options2,
             cb2,
             startTime
           ));
         };
-        return go$readdir(path11, options, cb);
-        function fs$readdirCallback(path12, options2, cb2, startTime) {
+        return go$readdir(path12, options, cb);
+        function fs$readdirCallback(path13, options2, cb2, startTime) {
           return function(err, files) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
               enqueue([
                 go$readdir,
-                [path12, options2, cb2],
+                [path13, options2, cb2],
                 err,
                 startTime || Date.now(),
                 Date.now()
@@ -28627,21 +28627,21 @@ var require_graceful_fs = __commonJS({
         }
       }
       if (process.version.substr(0, 4) === "v0.8") {
-        var legStreams = legacy(fs17);
+        var legStreams = legacy(fs18);
         ReadStream = legStreams.ReadStream;
         WriteStream = legStreams.WriteStream;
       }
-      var fs$ReadStream = fs17.ReadStream;
+      var fs$ReadStream = fs18.ReadStream;
       if (fs$ReadStream) {
         ReadStream.prototype = Object.create(fs$ReadStream.prototype);
         ReadStream.prototype.open = ReadStream$open;
       }
-      var fs$WriteStream = fs17.WriteStream;
+      var fs$WriteStream = fs18.WriteStream;
       if (fs$WriteStream) {
         WriteStream.prototype = Object.create(fs$WriteStream.prototype);
         WriteStream.prototype.open = WriteStream$open;
       }
-      Object.defineProperty(fs17, "ReadStream", {
+      Object.defineProperty(fs18, "ReadStream", {
         get: function() {
           return ReadStream;
         },
@@ -28651,7 +28651,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      Object.defineProperty(fs17, "WriteStream", {
+      Object.defineProperty(fs18, "WriteStream", {
         get: function() {
           return WriteStream;
         },
@@ -28662,7 +28662,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileReadStream = ReadStream;
-      Object.defineProperty(fs17, "FileReadStream", {
+      Object.defineProperty(fs18, "FileReadStream", {
         get: function() {
           return FileReadStream;
         },
@@ -28673,7 +28673,7 @@ var require_graceful_fs = __commonJS({
         configurable: true
       });
       var FileWriteStream = WriteStream;
-      Object.defineProperty(fs17, "FileWriteStream", {
+      Object.defineProperty(fs18, "FileWriteStream", {
         get: function() {
           return FileWriteStream;
         },
@@ -28683,7 +28683,7 @@ var require_graceful_fs = __commonJS({
         enumerable: true,
         configurable: true
       });
-      function ReadStream(path11, options) {
+      function ReadStream(path12, options) {
         if (this instanceof ReadStream)
           return fs$ReadStream.apply(this, arguments), this;
         else
@@ -28703,7 +28703,7 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function WriteStream(path11, options) {
+      function WriteStream(path12, options) {
         if (this instanceof WriteStream)
           return fs$WriteStream.apply(this, arguments), this;
         else
@@ -28721,22 +28721,22 @@ var require_graceful_fs = __commonJS({
           }
         });
       }
-      function createReadStream2(path11, options) {
-        return new fs17.ReadStream(path11, options);
+      function createReadStream2(path12, options) {
+        return new fs18.ReadStream(path12, options);
       }
-      function createWriteStream2(path11, options) {
-        return new fs17.WriteStream(path11, options);
+      function createWriteStream3(path12, options) {
+        return new fs18.WriteStream(path12, options);
       }
-      var fs$open = fs17.open;
-      fs17.open = open2;
-      function open2(path11, flags, mode, cb) {
+      var fs$open = fs18.open;
+      fs18.open = open2;
+      function open2(path12, flags, mode, cb) {
         if (typeof mode === "function")
           cb = mode, mode = null;
-        return go$open(path11, flags, mode, cb);
-        function go$open(path12, flags2, mode2, cb2, startTime) {
-          return fs$open(path12, flags2, mode2, function(err, fd) {
+        return go$open(path12, flags, mode, cb);
+        function go$open(path13, flags2, mode2, cb2, startTime) {
+          return fs$open(path13, flags2, mode2, function(err, fd) {
             if (err && (err.code === "EMFILE" || err.code === "ENFILE"))
-              enqueue([go$open, [path12, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
+              enqueue([go$open, [path13, flags2, mode2, cb2], err, startTime || Date.now(), Date.now()]);
             else {
               if (typeof cb2 === "function")
                 cb2.apply(this, arguments);
@@ -28744,20 +28744,20 @@ var require_graceful_fs = __commonJS({
           });
         }
       }
-      return fs17;
+      return fs18;
     }
     function enqueue(elem) {
       debug3("ENQUEUE", elem[0].name, elem[1]);
-      fs16[gracefulQueue].push(elem);
+      fs17[gracefulQueue].push(elem);
       retry2();
     }
     var retryTimer;
     function resetQueue() {
       var now = Date.now();
-      for (var i = 0; i < fs16[gracefulQueue].length; ++i) {
-        if (fs16[gracefulQueue][i].length > 2) {
-          fs16[gracefulQueue][i][3] = now;
-          fs16[gracefulQueue][i][4] = now;
+      for (var i = 0; i < fs17[gracefulQueue].length; ++i) {
+        if (fs17[gracefulQueue][i].length > 2) {
+          fs17[gracefulQueue][i][3] = now;
+          fs17[gracefulQueue][i][4] = now;
         }
       }
       retry2();
@@ -28765,9 +28765,9 @@ var require_graceful_fs = __commonJS({
     function retry2() {
       clearTimeout(retryTimer);
       retryTimer = void 0;
-      if (fs16[gracefulQueue].length === 0)
+      if (fs17[gracefulQueue].length === 0)
         return;
-      var elem = fs16[gracefulQueue].shift();
+      var elem = fs17[gracefulQueue].shift();
       var fn = elem[0];
       var args = elem[1];
       var err = elem[2];
@@ -28789,7 +28789,7 @@ var require_graceful_fs = __commonJS({
           debug3("RETRY", fn.name, args);
           fn.apply(null, args.concat([startTime]));
         } else {
-          fs16[gracefulQueue].push(elem);
+          fs17[gracefulQueue].push(elem);
         }
       }
       if (retryTimer === void 0) {
@@ -29093,7 +29093,7 @@ var require_BufferList = __commonJS({
         this.head = this.tail = null;
         this.length = 0;
       };
-      BufferList.prototype.join = function join8(s) {
+      BufferList.prototype.join = function join9(s) {
         if (this.length === 0) return "";
         var p = this.head;
         var ret = "" + p.data;
@@ -30841,22 +30841,22 @@ var require_lazystream = __commonJS({
 // node_modules/normalize-path/index.js
 var require_normalize_path = __commonJS({
   "node_modules/normalize-path/index.js"(exports2, module2) {
-    module2.exports = function(path11, stripTrailing) {
-      if (typeof path11 !== "string") {
+    module2.exports = function(path12, stripTrailing) {
+      if (typeof path12 !== "string") {
         throw new TypeError("expected path to be a string");
       }
-      if (path11 === "\\" || path11 === "/") return "/";
-      var len = path11.length;
-      if (len <= 1) return path11;
+      if (path12 === "\\" || path12 === "/") return "/";
+      var len = path12.length;
+      if (len <= 1) return path12;
       var prefix2 = "";
-      if (len > 4 && path11[3] === "\\") {
-        var ch = path11[2];
-        if ((ch === "?" || ch === ".") && path11.slice(0, 2) === "\\\\") {
-          path11 = path11.slice(2);
+      if (len > 4 && path12[3] === "\\") {
+        var ch = path12[2];
+        if ((ch === "?" || ch === ".") && path12.slice(0, 2) === "\\\\") {
+          path12 = path12.slice(2);
           prefix2 = "//";
         }
       }
-      var segs = path11.split(/[/\\]+/);
+      var segs = path12.split(/[/\\]+/);
       if (stripTrailing !== false && segs[segs.length - 1] === "") {
         segs.pop();
       }
@@ -39918,11 +39918,11 @@ var require_commonjs5 = __commonJS({
       return (f) => f.length === len && f !== "." && f !== "..";
     };
     var defaultPlatform = typeof process === "object" && process ? typeof process.env === "object" && process.env && process.env.__MINIMATCH_TESTING_PLATFORM__ || process.platform : "posix";
-    var path11 = {
+    var path12 = {
       win32: { sep: "\\" },
       posix: { sep: "/" }
     };
-    exports2.sep = defaultPlatform === "win32" ? path11.win32.sep : path11.posix.sep;
+    exports2.sep = defaultPlatform === "win32" ? path12.win32.sep : path12.posix.sep;
     exports2.minimatch.sep = exports2.sep;
     exports2.GLOBSTAR = Symbol("globstar **");
     exports2.minimatch.GLOBSTAR = exports2.GLOBSTAR;
@@ -43240,12 +43240,12 @@ var require_commonjs8 = __commonJS({
       /**
        * Get the Path object referenced by the string path, resolved from this Path
        */
-      resolve(path11) {
-        if (!path11) {
+      resolve(path12) {
+        if (!path12) {
           return this;
         }
-        const rootPath = this.getRootString(path11);
-        const dir = path11.substring(rootPath.length);
+        const rootPath = this.getRootString(path12);
+        const dir = path12.substring(rootPath.length);
         const dirParts = dir.split(this.splitSep);
         const result = rootPath ? this.getRoot(rootPath).#resolveParts(dirParts) : this.#resolveParts(dirParts);
         return result;
@@ -43998,8 +43998,8 @@ var require_commonjs8 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path11) {
-        return node_path_1.win32.parse(path11).root;
+      getRootString(path12) {
+        return node_path_1.win32.parse(path12).root;
       }
       /**
        * @internal
@@ -44046,8 +44046,8 @@ var require_commonjs8 = __commonJS({
       /**
        * @internal
        */
-      getRootString(path11) {
-        return path11.startsWith("/") ? "/" : "";
+      getRootString(path12) {
+        return path12.startsWith("/") ? "/" : "";
       }
       /**
        * @internal
@@ -44097,8 +44097,8 @@ var require_commonjs8 = __commonJS({
        *
        * @internal
        */
-      constructor(cwd = process.cwd(), pathImpl, sep3, { nocase, childrenCacheSize = 16 * 1024, fs: fs16 = defaultFS } = {}) {
-        this.#fs = fsFromOption(fs16);
+      constructor(cwd = process.cwd(), pathImpl, sep3, { nocase, childrenCacheSize = 16 * 1024, fs: fs17 = defaultFS } = {}) {
+        this.#fs = fsFromOption(fs17);
         if (cwd instanceof URL || cwd.startsWith("file://")) {
           cwd = (0, node_url_1.fileURLToPath)(cwd);
         }
@@ -44137,11 +44137,11 @@ var require_commonjs8 = __commonJS({
       /**
        * Get the depth of a provided path, string, or the cwd
        */
-      depth(path11 = this.cwd) {
-        if (typeof path11 === "string") {
-          path11 = this.cwd.resolve(path11);
+      depth(path12 = this.cwd) {
+        if (typeof path12 === "string") {
+          path12 = this.cwd.resolve(path12);
         }
-        return path11.depth();
+        return path12.depth();
       }
       /**
        * Return the cache of child entries.  Exposed so subclasses can create
@@ -44628,9 +44628,9 @@ var require_commonjs8 = __commonJS({
         process4();
         return results;
       }
-      chdir(path11 = this.cwd) {
+      chdir(path12 = this.cwd) {
         const oldCwd = this.cwd;
-        this.cwd = typeof path11 === "string" ? this.cwd.resolve(path11) : path11;
+        this.cwd = typeof path12 === "string" ? this.cwd.resolve(path12) : path12;
         this.cwd[setAsCwd](oldCwd);
       }
     };
@@ -44657,8 +44657,8 @@ var require_commonjs8 = __commonJS({
       /**
        * @internal
        */
-      newRoot(fs16) {
-        return new PathWin32(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs16 });
+      newRoot(fs17) {
+        return new PathWin32(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs17 });
       }
       /**
        * Return true if the provided path string is an absolute path
@@ -44687,8 +44687,8 @@ var require_commonjs8 = __commonJS({
       /**
        * @internal
        */
-      newRoot(fs16) {
-        return new PathPosix(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs16 });
+      newRoot(fs17) {
+        return new PathPosix(this.rootPath, IFDIR, void 0, this.roots, this.nocase, this.childrenCache(), { fs: fs17 });
       }
       /**
        * Return true if the provided path string is an absolute path
@@ -45018,8 +45018,8 @@ var require_processor = __commonJS({
       }
       // match, absolute, ifdir
       entries() {
-        return [...this.store.entries()].map(([path11, n]) => [
-          path11,
+        return [...this.store.entries()].map(([path12, n]) => [
+          path12,
           !!(n & 2),
           !!(n & 1)
         ]);
@@ -45237,9 +45237,9 @@ var require_walker = __commonJS({
       signal;
       maxDepth;
       includeChildMatches;
-      constructor(patterns, path11, opts) {
+      constructor(patterns, path12, opts) {
         this.patterns = patterns;
-        this.path = path11;
+        this.path = path12;
         this.opts = opts;
         this.#sep = !opts.posix && opts.platform === "win32" ? "\\" : "/";
         this.includeChildMatches = opts.includeChildMatches !== false;
@@ -45258,11 +45258,11 @@ var require_walker = __commonJS({
           });
         }
       }
-      #ignored(path11) {
-        return this.seen.has(path11) || !!this.#ignore?.ignored?.(path11);
+      #ignored(path12) {
+        return this.seen.has(path12) || !!this.#ignore?.ignored?.(path12);
       }
-      #childrenIgnored(path11) {
-        return !!this.#ignore?.childrenIgnored?.(path11);
+      #childrenIgnored(path12) {
+        return !!this.#ignore?.childrenIgnored?.(path12);
       }
       // backpressure mechanism
       pause() {
@@ -45478,8 +45478,8 @@ var require_walker = __commonJS({
     exports2.GlobUtil = GlobUtil;
     var GlobWalker = class extends GlobUtil {
       matches = /* @__PURE__ */ new Set();
-      constructor(patterns, path11, opts) {
-        super(patterns, path11, opts);
+      constructor(patterns, path12, opts) {
+        super(patterns, path12, opts);
       }
       matchEmit(e) {
         this.matches.add(e);
@@ -45517,8 +45517,8 @@ var require_walker = __commonJS({
     exports2.GlobWalker = GlobWalker;
     var GlobStream = class extends GlobUtil {
       results;
-      constructor(patterns, path11, opts) {
-        super(patterns, path11, opts);
+      constructor(patterns, path12, opts) {
+        super(patterns, path12, opts);
         this.results = new minipass_1.Minipass({
           signal: this.signal,
           objectMode: true
@@ -45873,8 +45873,8 @@ var require_commonjs9 = __commonJS({
 // node_modules/archiver-utils/file.js
 var require_file2 = __commonJS({
   "node_modules/archiver-utils/file.js"(exports2, module2) {
-    var fs16 = require_graceful_fs();
-    var path11 = require("path");
+    var fs17 = require_graceful_fs();
+    var path12 = require("path");
     var flatten = require_flatten();
     var difference = require_difference();
     var union = require_union();
@@ -45899,8 +45899,8 @@ var require_file2 = __commonJS({
       return result;
     };
     file.exists = function() {
-      var filepath = path11.join.apply(path11, arguments);
-      return fs16.existsSync(filepath);
+      var filepath = path12.join.apply(path12, arguments);
+      return fs17.existsSync(filepath);
     };
     file.expand = function(...args) {
       var options = isPlainObject3(args[0]) ? args.shift() : {};
@@ -45913,12 +45913,12 @@ var require_file2 = __commonJS({
       });
       if (options.filter) {
         matches = matches.filter(function(filepath) {
-          filepath = path11.join(options.cwd || "", filepath);
+          filepath = path12.join(options.cwd || "", filepath);
           try {
             if (typeof options.filter === "function") {
               return options.filter(filepath);
             } else {
-              return fs16.statSync(filepath)[options.filter]();
+              return fs17.statSync(filepath)[options.filter]();
             }
           } catch (e) {
             return false;
@@ -45930,7 +45930,7 @@ var require_file2 = __commonJS({
     file.expandMapping = function(patterns, destBase, options) {
       options = Object.assign({
         rename: function(destBase2, destPath) {
-          return path11.join(destBase2 || "", destPath);
+          return path12.join(destBase2 || "", destPath);
         }
       }, options);
       var files = [];
@@ -45938,14 +45938,14 @@ var require_file2 = __commonJS({
       file.expand(options, patterns).forEach(function(src) {
         var destPath = src;
         if (options.flatten) {
-          destPath = path11.basename(destPath);
+          destPath = path12.basename(destPath);
         }
         if (options.ext) {
           destPath = destPath.replace(/(\.[^\/]*)?$/, options.ext);
         }
         var dest = options.rename(destBase, destPath, options);
         if (options.cwd) {
-          src = path11.join(options.cwd, src);
+          src = path12.join(options.cwd, src);
         }
         dest = dest.replace(pathSeparatorRe, "/");
         src = src.replace(pathSeparatorRe, "/");
@@ -46026,8 +46026,8 @@ var require_file2 = __commonJS({
 // node_modules/archiver-utils/index.js
 var require_archiver_utils = __commonJS({
   "node_modules/archiver-utils/index.js"(exports2, module2) {
-    var fs16 = require_graceful_fs();
-    var path11 = require("path");
+    var fs17 = require_graceful_fs();
+    var path12 = require("path");
     var isStream = require_is_stream();
     var lazystream = require_lazystream();
     var normalizePath = require_normalize_path();
@@ -46075,7 +46075,7 @@ var require_archiver_utils = __commonJS({
     };
     utils.lazyReadStream = function(filepath) {
       return new lazystream.Readable(function() {
-        return fs16.createReadStream(filepath);
+        return fs17.createReadStream(filepath);
       });
     };
     utils.normalizeInputSource = function(source) {
@@ -46103,7 +46103,7 @@ var require_archiver_utils = __commonJS({
         callback = base;
         base = dirpath;
       }
-      fs16.readdir(dirpath, function(err, list) {
+      fs17.readdir(dirpath, function(err, list) {
         var i = 0;
         var file;
         var filepath;
@@ -46115,11 +46115,11 @@ var require_archiver_utils = __commonJS({
           if (!file) {
             return callback(null, results);
           }
-          filepath = path11.join(dirpath, file);
-          fs16.stat(filepath, function(err2, stats) {
+          filepath = path12.join(dirpath, file);
+          fs17.stat(filepath, function(err2, stats) {
             results.push({
               path: filepath,
-              relative: path11.relative(base, filepath).replace(/\\/g, "/"),
+              relative: path12.relative(base, filepath).replace(/\\/g, "/"),
               stats
             });
             if (stats && stats.isDirectory()) {
@@ -46178,10 +46178,10 @@ var require_error = __commonJS({
 // node_modules/archiver/lib/core.js
 var require_core = __commonJS({
   "node_modules/archiver/lib/core.js"(exports2, module2) {
-    var fs16 = require("fs");
+    var fs17 = require("fs");
     var glob = require_readdir_glob();
     var async = require_async();
-    var path11 = require("path");
+    var path12 = require("path");
     var util3 = require_archiver_utils();
     var inherits = require("util").inherits;
     var ArchiverError = require_error();
@@ -46242,7 +46242,7 @@ var require_core = __commonJS({
       data.sourcePath = filepath;
       task.data = data;
       this._entriesCount++;
-      if (data.stats && data.stats instanceof fs16.Stats) {
+      if (data.stats && data.stats instanceof fs17.Stats) {
         task = this._updateQueueTaskWithStats(task, data.stats);
         if (task) {
           if (data.stats.size) {
@@ -46413,7 +46413,7 @@ var require_core = __commonJS({
         callback();
         return;
       }
-      fs16.lstat(task.filepath, function(err, stats) {
+      fs17.lstat(task.filepath, function(err, stats) {
         if (this._state.aborted) {
           setImmediate(callback);
           return;
@@ -46456,10 +46456,10 @@ var require_core = __commonJS({
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else if (stats.isSymbolicLink() && this._moduleSupports("symlink")) {
-        var linkPath = fs16.readlinkSync(task.filepath);
-        var dirName = path11.dirname(task.filepath);
+        var linkPath = fs17.readlinkSync(task.filepath);
+        var dirName = path12.dirname(task.filepath);
         task.data.type = "symlink";
-        task.data.linkname = path11.relative(dirName, path11.resolve(dirName, linkPath));
+        task.data.linkname = path12.relative(dirName, path12.resolve(dirName, linkPath));
         task.data.sourceType = "buffer";
         task.source = Buffer.concat([]);
       } else {
@@ -50831,7 +50831,7 @@ var require_traverse = __commonJS({
       })(this.value);
     };
     function walk(root, cb, immutable) {
-      var path11 = [];
+      var path12 = [];
       var parents = [];
       var alive = true;
       return (function walker(node_) {
@@ -50840,11 +50840,11 @@ var require_traverse = __commonJS({
         var state3 = {
           node,
           node_,
-          path: [].concat(path11),
+          path: [].concat(path12),
           parent: parents.slice(-1)[0],
-          key: path11.slice(-1)[0],
-          isRoot: path11.length === 0,
-          level: path11.length,
+          key: path12.slice(-1)[0],
+          isRoot: path12.length === 0,
+          level: path12.length,
           circular: null,
           update: function(x) {
             if (!state3.isRoot) {
@@ -50899,7 +50899,7 @@ var require_traverse = __commonJS({
           parents.push(state3);
           var keys = Object.keys(state3.node);
           keys.forEach(function(key, i2) {
-            path11.push(key);
+            path12.push(key);
             if (modifiers.pre) modifiers.pre.call(state3, state3.node[key], key);
             var child2 = walker(state3.node[key]);
             if (immutable && Object.hasOwnProperty.call(state3.node, key)) {
@@ -50908,7 +50908,7 @@ var require_traverse = __commonJS({
             child2.isLast = i2 == keys.length - 1;
             child2.isFirst = i2 == 0;
             if (modifiers.post) modifiers.post.call(state3, child2);
-            path11.pop();
+            path12.pop();
           });
           parents.pop();
         }
@@ -51929,11 +51929,11 @@ var require_unzip_stream = __commonJS({
           return requiredLength;
         case states.CENTRAL_DIRECTORY_FILE_HEADER_SUFFIX:
           var isUtf8 = (this.parsedEntity.flags & 2048) !== 0;
-          var path11 = this._decodeString(chunk.slice(0, this.parsedEntity.fileNameLength), isUtf8);
+          var path12 = this._decodeString(chunk.slice(0, this.parsedEntity.fileNameLength), isUtf8);
           var extraDataBuffer = chunk.slice(this.parsedEntity.fileNameLength, this.parsedEntity.fileNameLength + this.parsedEntity.extraFieldLength);
           var extra = this._readExtraFields(extraDataBuffer);
           if (extra && extra.parsed && extra.parsed.path && !isUtf8) {
-            path11 = extra.parsed.path;
+            path12 = extra.parsed.path;
           }
           this.parsedEntity.extra = extra.parsed;
           var isUnix = (this.parsedEntity.versionMadeBy & 65280) >> 8 === 3;
@@ -51945,7 +51945,7 @@ var require_unzip_stream = __commonJS({
           }
           if (this.options.debug) {
             const debugObj2 = Object.assign({}, this.parsedEntity, {
-              path: path11,
+              path: path12,
               flags: "0x" + this.parsedEntity.flags.toString(16),
               unixAttrs: unixAttrs && "0" + unixAttrs.toString(8),
               isSymlink,
@@ -52382,8 +52382,8 @@ var require_parser_stream = __commonJS({
 // node_modules/mkdirp/index.js
 var require_mkdirp = __commonJS({
   "node_modules/mkdirp/index.js"(exports2, module2) {
-    var path11 = require("path");
-    var fs16 = require("fs");
+    var path12 = require("path");
+    var fs17 = require("fs");
     var _0777 = parseInt("0777", 8);
     module2.exports = mkdirP.mkdirp = mkdirP.mkdirP = mkdirP;
     function mkdirP(p, opts, f, made) {
@@ -52394,7 +52394,7 @@ var require_mkdirp = __commonJS({
         opts = { mode: opts };
       }
       var mode = opts.mode;
-      var xfs = opts.fs || fs16;
+      var xfs = opts.fs || fs17;
       if (mode === void 0) {
         mode = _0777;
       }
@@ -52402,7 +52402,7 @@ var require_mkdirp = __commonJS({
       var cb = f || /* istanbul ignore next */
       function() {
       };
-      p = path11.resolve(p);
+      p = path12.resolve(p);
       xfs.mkdir(p, mode, function(er) {
         if (!er) {
           made = made || p;
@@ -52410,8 +52410,8 @@ var require_mkdirp = __commonJS({
         }
         switch (er.code) {
           case "ENOENT":
-            if (path11.dirname(p) === p) return cb(er);
-            mkdirP(path11.dirname(p), opts, function(er2, made2) {
+            if (path12.dirname(p) === p) return cb(er);
+            mkdirP(path12.dirname(p), opts, function(er2, made2) {
               if (er2) cb(er2, made2);
               else mkdirP(p, opts, cb, made2);
             });
@@ -52433,19 +52433,19 @@ var require_mkdirp = __commonJS({
         opts = { mode: opts };
       }
       var mode = opts.mode;
-      var xfs = opts.fs || fs16;
+      var xfs = opts.fs || fs17;
       if (mode === void 0) {
         mode = _0777;
       }
       if (!made) made = null;
-      p = path11.resolve(p);
+      p = path12.resolve(p);
       try {
         xfs.mkdirSync(p, mode);
         made = made || p;
       } catch (err0) {
         switch (err0.code) {
           case "ENOENT":
-            made = sync(path11.dirname(p), opts, made);
+            made = sync(path12.dirname(p), opts, made);
             sync(p, opts, made);
             break;
           // In the case of any other error, just see if there's a dir
@@ -52470,8 +52470,8 @@ var require_mkdirp = __commonJS({
 // node_modules/unzip-stream/lib/extract.js
 var require_extract2 = __commonJS({
   "node_modules/unzip-stream/lib/extract.js"(exports2, module2) {
-    var fs16 = require("fs");
-    var path11 = require("path");
+    var fs17 = require("fs");
+    var path12 = require("path");
     var util3 = require("util");
     var mkdirp = require_mkdirp();
     var Transform3 = require("stream").Transform;
@@ -52513,11 +52513,11 @@ var require_extract2 = __commonJS({
     };
     Extract.prototype._processEntry = function(entry) {
       var self2 = this;
-      var destPath = path11.join(this.opts.path, entry.path);
-      var directory = entry.isDirectory ? destPath : path11.dirname(destPath);
+      var destPath = path12.join(this.opts.path, entry.path);
+      var directory = entry.isDirectory ? destPath : path12.dirname(destPath);
       this.unfinishedEntries++;
       var writeFileFn = function() {
-        var pipedStream = fs16.createWriteStream(destPath);
+        var pipedStream = fs17.createWriteStream(destPath);
         pipedStream.on("close", function() {
           self2.unfinishedEntries--;
           self2._notifyAwaiter();
@@ -57091,8 +57091,8 @@ var require_parseUtil = __commonJS({
     var errors_js_1 = require_errors3();
     var en_js_1 = __importDefault(require_en());
     var makeIssue = (params) => {
-      const { data, path: path11, errorMaps, issueData } = params;
-      const fullPath = [...path11, ...issueData.path || []];
+      const { data, path: path12, errorMaps, issueData } = params;
+      const fullPath = [...path12, ...issueData.path || []];
       const fullIssue = {
         ...issueData,
         path: fullPath
@@ -57246,11 +57246,11 @@ var require_types = __commonJS({
     var parseUtil_js_1 = require_parseUtil();
     var util_js_1 = require_util13();
     var ParseInputLazyPath = class {
-      constructor(parent, value, path11, key) {
+      constructor(parent, value, path12, key) {
         this._cachedPath = [];
         this.parent = parent;
         this.data = value;
-        this._path = path11;
+        this._path = path12;
         this._key = key;
       }
       get path() {
@@ -60849,8 +60849,8 @@ var require_zod = __commonJS({
 // node_modules/@skyramp/skyramp/src/workspace.js
 var require_workspace = __commonJS({
   "node_modules/@skyramp/skyramp/src/workspace.js"(exports2, module2) {
-    var fs16 = require("fs").promises;
-    var path11 = require("path");
+    var fs17 = require("fs").promises;
+    var path12 = require("path");
     var yaml = require_js_yaml();
     var { execFile } = require("child_process");
     var { promisify } = require("util");
@@ -60932,7 +60932,7 @@ var require_workspace = __commonJS({
         forceQuotes: false
       });
       try {
-        await fs16.writeFile(filePath, header + body2, "utf8");
+        await fs17.writeFile(filePath, header + body2, "utf8");
       } catch (err) {
         throw new Error(
           `Failed to write workspace file to ${filePath}: ${err.message}`
@@ -60940,7 +60940,7 @@ var require_workspace = __commonJS({
       }
     }
     async function detectRepoInfo(dirPath, requireGit = true) {
-      const cwd = dirPath ? path11.resolve(dirPath) : process.cwd();
+      const cwd = dirPath ? path12.resolve(dirPath) : process.cwd();
       let repoUrl = null;
       let repoName = null;
       let isGitRepo = false;
@@ -60971,19 +60971,19 @@ var require_workspace = __commonJS({
           if (match) repoName = match[1];
         }
         if (!repoName) {
-          repoName = path11.basename(cwd);
+          repoName = path12.basename(cwd);
         }
       }
       return { repoName, repoUrl };
     }
     async function loadWorkspaceFile(filePath) {
-      const resolvedPath = path11.resolve(filePath);
+      const resolvedPath = path12.resolve(filePath);
       try {
-        await fs16.access(resolvedPath);
+        await fs17.access(resolvedPath);
       } catch {
         throw new Error(`Workspace file not found: ${resolvedPath}`);
       }
-      const content = await fs16.readFile(resolvedPath, "utf8");
+      const content = await fs17.readFile(resolvedPath, "utf8");
       let rawConfig;
       try {
         rawConfig = yaml.load(content, { schema: yaml.JSON_SCHEMA });
@@ -60995,14 +60995,14 @@ var require_workspace = __commonJS({
     }
     var WorkspaceConfigManager2 = class {
       constructor(workspacePath) {
-        this.workspacePath = path11.resolve(workspacePath);
-        this.skyrampDir = path11.join(this.workspacePath, WORKSPACE_DIR);
-        this.configPath = path11.join(this.skyrampDir, WORKSPACE_FILENAME);
+        this.workspacePath = path12.resolve(workspacePath);
+        this.skyrampDir = path12.join(this.workspacePath, WORKSPACE_DIR);
+        this.configPath = path12.join(this.skyrampDir, WORKSPACE_FILENAME);
       }
       /** Check if workspace config file exists */
       async exists() {
         try {
-          await fs16.access(this.configPath);
+          await fs17.access(this.configPath);
           return true;
         } catch {
           return false;
@@ -61044,7 +61044,7 @@ var require_workspace = __commonJS({
        * @returns {Promise<Object>} The validated WorkspaceConfig.
        */
       async initialize(workspaceInfo = {}) {
-        await fs16.mkdir(this.skyrampDir, { recursive: true });
+        await fs17.mkdir(this.skyrampDir, { recursive: true });
         const detected = await detectRepoInfo(this.workspacePath);
         const config = createDefaultConfig();
         config.workspace = {
@@ -63096,9 +63096,16 @@ function startGroup(name) {
 function endGroup() {
   issue("endgroup");
 }
+function saveState(name, value) {
+  const filePath = process.env["GITHUB_STATE"] || "";
+  if (filePath) {
+    return issueFileCommand("STATE", prepareKeyValueMessage(name, value));
+  }
+  issueCommand("save-state", { name }, toCommandValue(value));
+}
 
 // src/main.ts
-var fs15 = __toESM(require("fs"));
+var fs16 = __toESM(require("fs"));
 
 // node_modules/@actions/github/lib/context.js
 var import_fs2 = require("fs");
@@ -63114,8 +63121,8 @@ var Context = class {
       if ((0, import_fs2.existsSync)(process.env.GITHUB_EVENT_PATH)) {
         this.payload = JSON.parse((0, import_fs2.readFileSync)(process.env.GITHUB_EVENT_PATH, { encoding: "utf8" }));
       } else {
-        const path11 = process.env.GITHUB_EVENT_PATH;
-        process.stdout.write(`GITHUB_EVENT_PATH ${path11} does not exist${import_os3.EOL}`);
+        const path12 = process.env.GITHUB_EVENT_PATH;
+        process.stdout.write(`GITHUB_EVENT_PATH ${path12} does not exist${import_os3.EOL}`);
       }
     }
     this.eventName = process.env.GITHUB_EVENT_NAME;
@@ -66726,7 +66733,7 @@ function getOctokit(token, options, ...additionalPlugins) {
 }
 
 // src/main.ts
-var path10 = __toESM(require("path"));
+var path11 = __toESM(require("path"));
 
 // node_modules/@actions/artifact/lib/internal/shared/config.js
 var import_os4 = __toESM(require("os"), 1);
@@ -68743,13 +68750,13 @@ These characters are not allowed in the artifact name due to limitations with ce
   }
   info(`Artifact name is valid!`);
 }
-function validateFilePath(path11) {
-  if (!path11) {
+function validateFilePath(path12) {
+  if (!path12) {
     throw new Error(`Provided file path input during validation is empty`);
   }
   for (const [invalidCharacterKey, errorMessageForCharacter] of invalidArtifactFilePathCharacters) {
-    if (path11.includes(invalidCharacterKey)) {
-      throw new Error(`The path for one of the files in artifact is not valid: ${path11}. Contains the following character: ${errorMessageForCharacter}
+    if (path12.includes(invalidCharacterKey)) {
+      throw new Error(`The path for one of the files in artifact is not valid: ${path12}. Contains the following character: ${errorMessageForCharacter}
           
 Invalid characters include: ${Array.from(invalidArtifactFilePathCharacters.values()).toString()}
           
@@ -73151,15 +73158,15 @@ function getRequestUrl(baseUri, operationSpec, operationArguments, fallbackObjec
   let isAbsolutePath = false;
   let requestUrl = replaceAll(baseUri, urlReplacements);
   if (operationSpec.path) {
-    let path11 = replaceAll(operationSpec.path, urlReplacements);
-    if (operationSpec.path === "/{nextLink}" && path11.startsWith("/")) {
-      path11 = path11.substring(1);
+    let path12 = replaceAll(operationSpec.path, urlReplacements);
+    if (operationSpec.path === "/{nextLink}" && path12.startsWith("/")) {
+      path12 = path12.substring(1);
     }
-    if (isAbsoluteUrl(path11)) {
-      requestUrl = path11;
+    if (isAbsoluteUrl(path12)) {
+      requestUrl = path12;
       isAbsolutePath = true;
     } else {
-      requestUrl = appendPath(requestUrl, path11);
+      requestUrl = appendPath(requestUrl, path12);
     }
   }
   const { queryParams, sequenceParams } = calculateQueryParameters(operationSpec, operationArguments, fallbackObject);
@@ -73205,9 +73212,9 @@ function appendPath(url2, pathToAppend) {
   }
   const searchStart = pathToAppend.indexOf("?");
   if (searchStart !== -1) {
-    const path11 = pathToAppend.substring(0, searchStart);
+    const path12 = pathToAppend.substring(0, searchStart);
     const search = pathToAppend.substring(searchStart + 1);
-    newPath = newPath + path11;
+    newPath = newPath + path12;
     if (search) {
       parsedUrl.search = parsedUrl.search ? `${parsedUrl.search}&${search}` : search;
     }
@@ -78142,9 +78149,9 @@ var StorageSharedKeyCredentialPolicy = class extends CredentialPolicy {
    * @param request -
    */
   getCanonicalizedResourceString(request2) {
-    const path11 = getURLPath(request2.url) || "/";
+    const path12 = getURLPath(request2.url) || "/";
     let canonicalizedResourceString = "";
-    canonicalizedResourceString += `/${this.factory.accountName}${path11}`;
+    canonicalizedResourceString += `/${this.factory.accountName}${path12}`;
     const queries = getURLQueries(request2.url);
     const lowercaseQueries = {};
     if (queries) {
@@ -78634,9 +78641,9 @@ function storageSharedKeyCredentialPolicy(options) {
     return canonicalizedHeadersStringToSign;
   }
   function getCanonicalizedResourceString(request2) {
-    const path11 = getURLPath(request2.url) || "/";
+    const path12 = getURLPath(request2.url) || "/";
     let canonicalizedResourceString = "";
-    canonicalizedResourceString += `/${options.accountName}${path11}`;
+    canonicalizedResourceString += `/${options.accountName}${path12}`;
     const queries = getURLQueries(request2.url);
     const lowercaseQueries = {};
     if (queries) {
@@ -92577,10 +92584,10 @@ var StorageContextClient = class extends StorageClient {
 // node_modules/@azure/storage-blob/dist/esm/utils/utils.common.js
 function escapeURLPath(url2) {
   const urlParsed = new URL(url2);
-  let path11 = urlParsed.pathname;
-  path11 = path11 || "/";
-  path11 = escape(path11);
-  urlParsed.pathname = path11;
+  let path12 = urlParsed.pathname;
+  path12 = path12 || "/";
+  path12 = escape(path12);
+  urlParsed.pathname = path12;
   return urlParsed.toString();
 }
 function getProxyUriFromDevConnString(connectionString) {
@@ -92665,9 +92672,9 @@ function escape(text) {
 }
 function appendToURLPath(url2, name) {
   const urlParsed = new URL(url2);
-  let path11 = urlParsed.pathname;
-  path11 = path11 ? path11.endsWith("/") ? `${path11}${name}` : `${path11}/${name}` : name;
-  urlParsed.pathname = path11;
+  let path12 = urlParsed.pathname;
+  path12 = path12 ? path12.endsWith("/") ? `${path12}${name}` : `${path12}/${name}` : name;
+  urlParsed.pathname = path12;
   return urlParsed.toString();
 }
 function setURLParameter2(url2, name, value) {
@@ -99536,10 +99543,10 @@ var scrubQueryParameters = (url2) => {
   parsed.search = "";
   return parsed.toString();
 };
-function exists2(path11) {
+function exists2(path12) {
   return __awaiter13(this, void 0, void 0, function* () {
     try {
-      yield import_promises2.default.access(path11);
+      yield import_promises2.default.access(path12);
       return true;
     } catch (error2) {
       if (error2.code === "ENOENT") {
@@ -99748,17 +99755,17 @@ function requestLog(octokit) {
     octokit.log.debug("request", options);
     const start = Date.now();
     const requestOptions = octokit.request.endpoint.parse(options);
-    const path11 = requestOptions.url.replace(options.baseUrl, "");
+    const path12 = requestOptions.url.replace(options.baseUrl, "");
     return request2(options).then((response) => {
       const requestId2 = response.headers["x-github-request-id"];
       octokit.log.info(
-        `${requestOptions.method} ${path11} - ${response.status} with id ${requestId2} in ${Date.now() - start}ms`
+        `${requestOptions.method} ${path12} - ${response.status} with id ${requestId2} in ${Date.now() - start}ms`
       );
       return response;
     }).catch((error2) => {
       const requestId2 = error2.response?.headers["x-github-request-id"] || "UNKNOWN";
       octokit.log.error(
-        `${requestOptions.method} ${path11} - ${error2.status} with id ${requestId2} in ${Date.now() - start}ms`
+        `${requestOptions.method} ${path12} - ${error2.status} with id ${requestId2} in ${Date.now() - start}ms`
       );
       throw error2;
     });
@@ -100345,6 +100352,14 @@ function getInputs() {
     commitMessage: getInput("commitMessage"),
     postPrComment: getBooleanInput("postPrComment"),
     testExecutionTimeout: parseInt(getInput("testExecutionTimeout"), 10) || 300,
+    maxRecommendations: (() => {
+      const parsed = parseInt(getInput("maxRecommendations"), 10);
+      return isNaN(parsed) ? 20 : Math.max(0, parsed);
+    })(),
+    maxGenerate: (() => {
+      const parsed = parseInt(getInput("maxGenerate"), 10);
+      return isNaN(parsed) ? 3 : Math.max(0, parsed);
+    })(),
     testbotMaxRetries: parseInt(getInput("testbotMaxRetries"), 10) || 3,
     testbotRetryDelay: parseInt(getInput("testbotRetryDelay"), 10) || 10,
     testbotTimeout: parseInt(getInput("testbotTimeout"), 10) || 60,
@@ -100406,6 +100421,7 @@ async function exec2(command, args = [], options = {}) {
     listeners: {
       stdout: (data) => {
         stdout += data.toString();
+        if (options.stdoutStream) options.stdoutStream.write(data);
       },
       stderr: (data) => {
         stderr += data.toString();
@@ -100423,6 +100439,7 @@ async function exec2(command, args = [], options = {}) {
       child2.stdout?.on("data", (data) => {
         stdout += data.toString();
         if (!options.silent) process.stdout.write(data);
+        if (options.stdoutStream) options.stdoutStream.write(data);
       });
       child2.stderr?.on("data", (data) => {
         stderr += data.toString();
@@ -100755,6 +100772,8 @@ async function loadConfig(inputs) {
     commitMessage: inputs.commitMessage,
     postPrComment: inputs.postPrComment,
     testExecutionTimeout: inputs.testExecutionTimeout,
+    maxRecommendations: inputs.maxRecommendations,
+    maxGenerate: inputs.maxGenerate,
     testbotMaxRetries: inputs.testbotMaxRetries,
     testbotRetryDelay: inputs.testbotRetryDelay,
     testbotTimeout: inputs.testbotTimeout,
@@ -100823,17 +100842,30 @@ async function checkSelfTrigger() {
 
 // src/progress.ts
 var fs8 = __toESM(require("fs"));
+function formatElapsed(ms) {
+  const totalSeconds = Math.floor(ms / 1e3);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
+function createInitialSteps(isCommentTrigger = false) {
+  return [
+    { step: "setup" /* Setup */, label: "Setting up environment", status: "pending" },
+    { step: "analyzing" /* Analyzing */, label: isCommentTrigger ? "Analyzing user request" : "Analyzing code changes", status: "pending" },
+    { step: "generating" /* Generating */, label: "Generating tests", status: "pending" },
+    { step: "executing" /* Executing */, label: "Executing tests", status: "pending" },
+    { step: "maintaining" /* Maintaining */, label: "Maintaining existing tests", status: "pending" },
+    { step: "reporting" /* Reporting */, label: "Generating report", status: "pending" }
+  ];
+}
 var _githubToken = "";
 function setGitHubToken(token) {
   _githubToken = token;
 }
-function generateProgressBody(step, reportContent, isCommentTrigger = false) {
-  const check1 = step >= 1 ? "[x]" : "[ ]";
-  const check2 = step >= 2 ? "[x]" : "[ ]";
-  const check3 = step >= 3 ? "[x]" : "[ ]";
+function generateProgressBody(steps, reportContent, _isCommentTrigger = false) {
   const { owner, repo } = context2.repo;
   const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context2.runId}`;
-  const step1Label = isCommentTrigger ? "Analyzing user request" : "Analyzing Pull Request";
   if (reportContent) {
     const content = reportContent.replace(/^\s*<!--\s*skyramp-testbot\s*-->\s*\n?/, "");
     return `<!-- skyramp-testbot -->
@@ -100842,13 +100874,21 @@ function generateProgressBody(step, reportContent, isCommentTrigger = false) {
 
 ${content}`;
   }
+  const lines = steps.map((s) => {
+    if (s.status === "completed") {
+      const elapsed = s.startedAt != null && s.completedAt != null ? ` (${formatElapsed(s.completedAt - s.startedAt)})` : "";
+      return `- [x] ${s.label}${elapsed}`;
+    }
+    if (s.status === "active") {
+      return `- \u23F3 ${s.label}...`;
+    }
+    return `- [ ] ${s.label}`;
+  });
   return `<!-- skyramp-testbot -->
-### Skyramp Testbot Plan
+### Skyramp Testbot
 Reviewing the Pull Request for test recommendations. ([workflow run](${runUrl}))
 
-- ${check1} ${step1Label}
-- ${check2} Running tests
-- ${check3} Generating report`;
+${lines.join("\n")}`;
 }
 function getOctokit2() {
   if (!_githubToken) {
@@ -100856,11 +100896,11 @@ function getOctokit2() {
   }
   return getOctokit(_githubToken);
 }
-async function postInitialProgress(prNumber, isCommentTrigger = false) {
+async function postInitialProgress(prNumber, steps) {
   startGroup("Posting initial progress comment");
   try {
     const octokit = getOctokit2();
-    const body2 = generateProgressBody(1, void 0, isCommentTrigger);
+    const body2 = generateProgressBody(steps);
     const { data } = await octokit.rest.issues.createComment({
       ...context2.repo,
       issue_number: prNumber,
@@ -100875,10 +100915,10 @@ async function postInitialProgress(prNumber, isCommentTrigger = false) {
     return null;
   }
 }
-async function updateProgress(commentId, step, isCommentTrigger = false) {
+async function updateProgress(commentId, steps) {
   try {
     const octokit = getOctokit2();
-    const body2 = generateProgressBody(step, void 0, isCommentTrigger);
+    const body2 = generateProgressBody(steps);
     await octokit.rest.issues.updateComment({
       ...context2.repo,
       comment_id: commentId,
@@ -100888,11 +100928,11 @@ async function updateProgress(commentId, step, isCommentTrigger = false) {
     warning(`Failed to update progress comment: ${err}`);
   }
 }
-async function appendReportToProgress(commentId, reportFile, isCommentTrigger = false) {
+async function appendReportToProgress(commentId, reportFile, steps) {
   try {
     const reportContent = fs8.existsSync(reportFile) ? fs8.readFileSync(reportFile, "utf-8") : "";
     const octokit = getOctokit2();
-    const body2 = generateProgressBody(3, reportContent, isCommentTrigger);
+    const body2 = generateProgressBody(steps, reportContent);
     await octokit.rest.issues.updateComment({
       ...context2.repo,
       comment_id: commentId,
@@ -100948,8 +100988,178 @@ Please check your workflow configuration and ensure all required secrets are set
   await postStandaloneComment(prNumber, body2);
 }
 
-// src/mcp.ts
+// src/progress-tracker.ts
 var fs9 = __toESM(require("fs"));
+var DEFAULT_PHASE_MAP = {
+  skyramp_recommend_tests: "analyzing",
+  skyramp_analyze_changes: "analyzing",
+  skyramp_execute_test: "executing",
+  skyramp_execute_tests: "executing",
+  skyramp_execute_tests_batch: "executing",
+  skyramp_analyze_test_health: "maintaining",
+  skyramp_submit_report: "reporting"
+};
+var activePhaseMap = { ...DEFAULT_PHASE_MAP };
+function loadToolPhaseMap() {
+  try {
+    const mod = require("@skyramp/mcp/tool-phases");
+    const map2 = mod.TOOL_PHASE_MAP;
+    if (map2 && typeof map2 === "object" && Object.keys(map2).length > 0) {
+      activePhaseMap = map2;
+      debug2(`Loaded ${Object.keys(activePhaseMap).length} tool-phase mappings from @skyramp/mcp`);
+    }
+  } catch {
+    debug2("Could not load tool-phase map from @skyramp/mcp, using defaults");
+  }
+}
+function phaseToStep(phase) {
+  switch (phase) {
+    case "analyzing":
+      return "analyzing" /* Analyzing */;
+    case "generating":
+      return "generating" /* Generating */;
+    case "executing":
+      return "executing" /* Executing */;
+    case "maintaining":
+      return "maintaining" /* Maintaining */;
+    case "reporting":
+      return "reporting" /* Reporting */;
+    default:
+      return null;
+  }
+}
+function toolToStep(rawName) {
+  const name = rawName.startsWith("mcp__skyramp__") ? rawName.slice("mcp__skyramp__".length) : rawName;
+  const phase = activePhaseMap[name];
+  if (phase) return phaseToStep(phase);
+  if (name.includes("test_generation")) return "generating" /* Generating */;
+  return null;
+}
+var STEP_ORDER = [
+  "setup" /* Setup */,
+  "analyzing" /* Analyzing */,
+  "generating" /* Generating */,
+  "executing" /* Executing */,
+  "maintaining" /* Maintaining */,
+  "reporting" /* Reporting */
+];
+function advanceSteps(steps, targetStep, now) {
+  const targetIdx = STEP_ORDER.indexOf(targetStep);
+  if (targetIdx < 0) return false;
+  const activeIdx = steps.findIndex((s) => s.status === "active");
+  if (activeIdx >= 0 && activeIdx >= targetIdx) return false;
+  if (steps[targetIdx].status === "completed") return false;
+  for (let i = 0; i < targetIdx; i++) {
+    if (steps[i].status === "active") {
+      steps[i].status = "completed";
+      steps[i].completedAt = now;
+    } else if (steps[i].status === "pending") {
+      steps[i].status = "completed";
+      steps[i].startedAt = now;
+      steps[i].completedAt = now;
+    }
+  }
+  steps[targetIdx].status = "active";
+  steps[targetIdx].startedAt = now;
+  return true;
+}
+function extractToolNames(line) {
+  try {
+    const obj = JSON.parse(line);
+    if (obj.type !== "assistant") return [];
+    const content = obj.message?.content;
+    if (!Array.isArray(content)) return [];
+    return content.filter((block) => block.type === "tool_use").map((block) => block.name);
+  } catch {
+    return [];
+  }
+}
+var MAX_READ_BYTES = 1024 * 1024;
+function createProgressTracker(opts) {
+  const { logFile, steps, onStepChange, pollIntervalMs = 500 } = opts;
+  let readPosition = 0;
+  let pollTimer = null;
+  let stopped = false;
+  let leftover = "";
+  function processNewLines() {
+    if (!fs9.existsSync(logFile)) return;
+    const stat2 = fs9.statSync(logFile);
+    if (stat2.size <= readPosition) return;
+    const bytesToRead = Math.min(stat2.size - readPosition, MAX_READ_BYTES);
+    const fd = fs9.openSync(logFile, "r");
+    const buf = Buffer.alloc(bytesToRead);
+    fs9.readSync(fd, buf, 0, buf.length, readPosition);
+    fs9.closeSync(fd);
+    readPosition += bytesToRead;
+    const chunk = leftover + buf.toString("utf-8");
+    const parts = chunk.split("\n");
+    leftover = parts.pop() ?? "";
+    const lines = parts.filter((l) => l.trim());
+    let changed = false;
+    const now = Date.now();
+    for (const line of lines) {
+      const toolNames = extractToolNames(line);
+      for (const toolName of toolNames) {
+        const targetStep = toolToStep(toolName);
+        if (targetStep && advanceSteps(steps, targetStep, now)) {
+          debug2(`Progress: advanced to ${targetStep} (tool: ${toolName})`);
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      try {
+        const result = onStepChange(steps);
+        if (result && typeof result.catch === "function") {
+          ;
+          result.catch((err) => {
+            debug2(`Error in onStepChange: ${err instanceof Error ? err.message : String(err)}`);
+          });
+        }
+      } catch (err) {
+        debug2(`Error in onStepChange: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+  return {
+    start() {
+      stopped = false;
+      readPosition = 0;
+      leftover = "";
+      pollTimer = setInterval(() => {
+        if (!stopped) processNewLines();
+      }, pollIntervalMs);
+    },
+    stop() {
+      stopped = true;
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      processNewLines();
+      if (leftover.trim()) {
+        const toolNames = extractToolNames(leftover);
+        const now2 = Date.now();
+        for (const toolName of toolNames) {
+          const targetStep = toolToStep(toolName);
+          if (targetStep) advanceSteps(steps, targetStep, now2);
+        }
+        leftover = "";
+      }
+      const now = Date.now();
+      for (const s of steps) {
+        if (s.status === "active") {
+          s.status = "completed";
+          s.completedAt = now;
+          break;
+        }
+      }
+    }
+  };
+}
+
+// src/mcp.ts
+var fs10 = __toESM(require("fs"));
 var path9 = __toESM(require("path"));
 var NPM_INSTALL_TIMEOUT_MS = secondsToMilliseconds(180);
 async function installMcp(config, inputs, tempDir) {
@@ -100957,7 +101167,7 @@ async function installMcp(config, inputs, tempDir) {
     let command;
     let args;
     const mcpInstallDir = path9.join(tempDir, "mcp");
-    fs9.mkdirSync(mcpInstallDir, { recursive: true });
+    fs10.mkdirSync(mcpInstallDir, { recursive: true });
     if (config.skyrampMcpSource === "github") {
       if (!inputs.skyrampMcpGithubToken) {
         throw new Error("skyrampMcpGithubToken is required when skyrampMcpSource is 'github'");
@@ -100968,8 +101178,8 @@ async function installMcp(config, inputs, tempDir) {
       const ref = config.skyrampMcpGithubRef;
       try {
         await withRetry(async () => {
-          fs9.rmSync(mcpPkgDir, { recursive: true, force: true });
-          fs9.mkdirSync(path9.dirname(mcpPkgDir), { recursive: true });
+          fs10.rmSync(mcpPkgDir, { recursive: true, force: true });
+          fs10.mkdirSync(path9.dirname(mcpPkgDir), { recursive: true });
           const isSha = /^[0-9a-fA-F]{7,40}$/.test(ref);
           if (isSha) {
             info(`Fetching @skyramp/mcp from github.com/letsramp/mcp at commit ${ref}`);
@@ -100983,13 +101193,13 @@ async function installMcp(config, inputs, tempDir) {
           }
           const { stdout: commitSha } = await exec2("git", ["-C", mcpPkgDir, "rev-parse", "HEAD"], { silent: true });
           notice(`@skyramp/mcp commit: ${commitSha.trim()} (ref: ${ref})`);
-          fs9.rmSync(path9.join(mcpPkgDir, ".git"), { recursive: true, force: true });
+          fs10.rmSync(path9.join(mcpPkgDir, ".git"), { recursive: true, force: true });
           info("Installing dependencies and building...");
           await exec2("npm", ["install", "--include=dev"], { cwd: mcpPkgDir, timeout: NPM_INSTALL_TIMEOUT_MS });
           await exec2("npm", ["run", "build"], { cwd: mcpPkgDir });
         }, { retries: 3, delay: 10, label: "MCP install (github)" });
       } catch (err) {
-        fs9.rmSync(mcpPkgDir, { recursive: true, force: true });
+        fs10.rmSync(mcpPkgDir, { recursive: true, force: true });
         throw err;
       }
       command = "node";
@@ -101029,7 +101239,344 @@ async function configureMcp(agent, mcpCommand, mcpArgs, licensePath, testExecuti
 }
 
 // src/agent.ts
-var fs10 = __toESM(require("fs"));
+var fs13 = __toESM(require("fs"));
+var path10 = __toESM(require("path"));
+
+// src/report.ts
+var fs11 = __toESM(require("fs"));
+function resolveSummarySource(paths) {
+  if (fs11.existsSync(paths.summaryPath)) return paths.summaryPath;
+  if (fs11.existsSync(paths.agentStdoutPath)) {
+    info("Using agent stdout as fallback (agent did not write to summary file)");
+    return paths.agentStdoutPath;
+  }
+  return null;
+}
+function tryParseReport(raw) {
+  try {
+    const cleaned = raw.replace(/^```(?:json)?\s*\n?/m, "").replace(/\n?```\s*$/m, "").trim();
+    const parsed = JSON.parse(cleaned);
+    if (typeof parsed.businessCaseAnalysis === "string" && Array.isArray(parsed.testResults)) {
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+function renderReport(report, options = {}) {
+  const { commitMessage, collapsed = false, userPrompt, autoCommit: autoCommit2 = false } = options;
+  const lines = [];
+  lines.push("<!-- skyramp-testbot -->");
+  const isMinimalReport = report.newTestsCreated.length === 0 && report.testResults.length === 0 && report.testMaintenance.length === 0 && report.issuesFound.length > 0;
+  if (isMinimalReport) {
+    lines.push("### \u26A0\uFE0F Skyramp Testbot");
+    lines.push("");
+    for (const issue2 of report.issuesFound) {
+      lines.push(issue2.description);
+    }
+    if (report.nextSteps && report.nextSteps.length > 0) {
+      lines.push("");
+      lines.push("### \u{1F4A1} Next Steps");
+      lines.push("");
+      for (const step of report.nextSteps) {
+        lines.push(`- ${step}`);
+      }
+    }
+    return lines.join("\n");
+  }
+  const escapeCell = (s) => s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
+  if (userPrompt) {
+    lines.push(`> Following user instruction: *${userPrompt}*`);
+    lines.push("");
+  }
+  if (collapsed && commitMessage) {
+    lines.push(`**Summary:** ${commitMessage}`);
+    lines.push("");
+  }
+  const sectionStart = (title) => {
+    if (collapsed) {
+      lines.push("<details>");
+      lines.push(`<summary>${title}</summary>`);
+      lines.push("");
+    } else {
+      lines.push(`### ${title}`);
+    }
+  };
+  const sectionEnd = () => {
+    if (collapsed) {
+      lines.push("");
+      lines.push("</details>");
+    }
+    lines.push("");
+  };
+  for (const bcaLine of report.businessCaseAnalysis.split(/\r?\n/)) {
+    lines.push(`> ${bcaLine}`);
+  }
+  lines.push("");
+  if (report.newTestsCreated.length > 0) {
+    sectionStart("\u{1F4A1} Test Recommendations Implemented");
+    for (const t of report.newTestsCreated) {
+      const id = t.testId ? `\`${t.testId}\`` : t.testType;
+      const endpointLine = t.endpoint ? `
+  \`${t.endpoint}\`` : "";
+      const desc = t.description ? `
+  ${t.description}` : "";
+      const file = t.fileName ? ` (\`${t.fileName}\`)` : "";
+      lines.push(`- ${id}${file}${endpointLine}${desc}`);
+    }
+    sectionEnd();
+  }
+  if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
+    const recs = report.additionalRecommendations;
+    const count = recs.length;
+    const TEST_TYPE_ORDER = {
+      contract: 0,
+      integration: 1,
+      e2e: 2,
+      ui: 3
+    };
+    const TEST_TYPE_LABEL = {
+      contract: "\u{1F4CB} Contract",
+      integration: "\u{1F517} Integration",
+      e2e: "\u{1F310} E2E",
+      ui: "\u{1F5A5}\uFE0F UI"
+    };
+    const CATEGORY_RISK = {
+      security_boundary: 0,
+      breaking_change: 1,
+      data_integrity: 2,
+      business_rule: 3,
+      workflow: 4
+    };
+    const typeKey = (t) => t.toLowerCase();
+    const sorted = [...recs].sort((a, b) => {
+      const ta = TEST_TYPE_ORDER[typeKey(a.testType)] ?? 99;
+      const tb = TEST_TYPE_ORDER[typeKey(b.testType)] ?? 99;
+      if (ta !== tb) return ta - tb;
+      const ca = CATEGORY_RISK[a.category ?? ""] ?? 99;
+      const cb = CATEGORY_RISK[b.category ?? ""] ?? 99;
+      return ca !== cb ? ca - cb : (a.scenarioName ?? "").localeCompare(b.scenarioName ?? "");
+    });
+    const groups = /* @__PURE__ */ new Map();
+    for (const rec of sorted) {
+      const key = typeKey(rec.testType);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(rec);
+    }
+    sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
+    lines.push("To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).");
+    lines.push("");
+    for (const [type2, groupRecs] of groups) {
+      const label = TEST_TYPE_LABEL[type2] ?? type2;
+      lines.push(`**${label}**`);
+      lines.push("");
+      for (const rec of groupRecs) {
+        const endpoint2 = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path ? `\`${rec.steps[0].method} ${rec.steps[0].path}\`` : "";
+        const idLabel = rec.testId ? `\`${rec.testId}\`` : rec.scenarioName ? `\`${rec.scenarioName}\`` : `\`${rec.testType} test\``;
+        const prefix2 = `- ${idLabel}`;
+        const endpointLine = endpoint2 ? `
+  ${endpoint2}` : "";
+        lines.push(`${prefix2}${endpointLine}
+  ${rec.description}`);
+      }
+      lines.push("");
+    }
+    sectionEnd();
+  }
+  sectionStart("\u2705 Test Maintenance");
+  if (report.testMaintenance.length > 0) {
+    const hasBeforeAfter = report.testMaintenance.some(
+      (m) => typeof m === "object" && m !== null && "beforeStatus" in m
+    );
+    if (hasBeforeAfter) {
+      lines.push("| File | Change | Before | After |");
+      lines.push("|------|--------|--------|-------|");
+      for (const m of report.testMaintenance) {
+        if (typeof m === "object" && m !== null && "beforeStatus" in m) {
+          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`;
+          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`;
+          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
+        } else {
+          lines.push(`| \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
+        }
+      }
+    } else {
+      for (const m of report.testMaintenance) {
+        lines.push(`- ${m.description}`);
+      }
+    }
+  } else {
+    lines.push("No existing Skyramp tests required maintenance for this PR.");
+  }
+  sectionEnd();
+  sectionStart("\u{1F9EA} Test Results");
+  lines.push("| Test Type | Endpoint | Status | Details |");
+  lines.push("|-----------|----------|--------|---------|");
+  for (const r of report.testResults) {
+    lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
+  }
+  sectionEnd();
+  if (report.issuesFound.length > 0) {
+    sectionStart("\u26A0\uFE0F Issues Found");
+    for (const issue2 of report.issuesFound) {
+      lines.push(`- ${issue2.description}`);
+    }
+    sectionEnd();
+  }
+  const steps = [...report.nextSteps ?? []];
+  const hasIssues = report.issuesFound.length > 0;
+  const hasTests = report.newTestsCreated.length > 0 || report.testMaintenance.length > 0 || report.testResults.length > 0;
+  const sortedRecs = [...report.additionalRecommendations ?? []].sort((a, b) => {
+    const TYPE_ORDER = { contract: 0, integration: 1, e2e: 2, ui: 3 };
+    const CAT_RISK = { security_boundary: 0, breaking_change: 1, data_integrity: 2, business_rule: 3, workflow: 4 };
+    const ta = TYPE_ORDER[a.testType.toLowerCase()] ?? 99;
+    const tb = TYPE_ORDER[b.testType.toLowerCase()] ?? 99;
+    if (ta !== tb) return ta - tb;
+    const ca = CAT_RISK[a.category ?? ""] ?? 99;
+    const cb = CAT_RISK[b.category ?? ""] ?? 99;
+    return ca !== cb ? ca - cb : (a.scenarioName ?? "").localeCompare(b.scenarioName ?? "");
+  });
+  const topRecs = sortedRecs.slice(0, 2);
+  if (hasTests && !hasIssues && steps.length === 0 && topRecs.length === 0 && !autoCommit2) {
+    steps.push("Enable `autoCommit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.");
+  }
+  if (steps.length > 0 || topRecs.length > 0) {
+    lines.push("### \u{1F4A1} Next Steps");
+    lines.push("");
+    for (const step of steps) {
+      lines.push(`- ${step}`);
+    }
+    if (topRecs.length > 0) {
+      lines.push("");
+      lines.push("Use `@skyramp-testbot` to implement additional recommendations. Based on my analysis of the diff, I would recommend:");
+      lines.push("");
+      topRecs.forEach((rec, i) => {
+        const name = rec.testId ? `**${rec.testId}**` : `**${rec.scenarioName ?? rec.testType}**`;
+        const reasoning = rec.reasoning ?? rec.description;
+        lines.push(`${i + 1}. ${name} \u2014 ${reasoning}`);
+      });
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+function readSummary(paths, reportCollapsed = false, userPrompt, autoCommit2 = false) {
+  startGroup("Reading test summary");
+  const src = resolveSummarySource(paths);
+  let summary2;
+  let commitMessage;
+  let report;
+  let renderOptions = {};
+  if (src) {
+    const raw = fs11.readFileSync(src, "utf-8");
+    const parsed = tryParseReport(raw);
+    if (parsed) {
+      notice("Testbot report parsed from JSON");
+      report = parsed;
+      renderOptions = { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt, autoCommit: autoCommit2 };
+      summary2 = renderReport(report, renderOptions);
+      commitMessage = report.commitMessage;
+    } else {
+      info("Summary is not JSON \u2014 using raw content");
+      summary2 = raw;
+    }
+    fs11.writeFileSync(paths.combinedResultPath, summary2);
+    notice("Testbot report ready");
+  } else {
+    warning("No summary file generated");
+    summary2 = "No summary available";
+  }
+  setOutput("test_summary", summary2);
+  endGroup();
+  return { summary: summary2, commitMessage, report, renderOptions };
+}
+function parseMetrics(summary2) {
+  startGroup("Parsing summary metrics");
+  const extract = (keyword) => {
+    const match = summary2.match(new RegExp(`${keyword}[^0-9]*(\\d+)`, "i"));
+    return match ? parseInt(match[1], 10) : 0;
+  };
+  const metrics = {
+    modified: extract("modified"),
+    created: extract("created"),
+    executed: extract("executed")
+  };
+  setOutput("tests_modified", String(metrics.modified));
+  setOutput("tests_created", String(metrics.created));
+  setOutput("tests_executed", String(metrics.executed));
+  notice(`Metrics - Modified: ${metrics.modified}, Created: ${metrics.created}, Executed: ${metrics.executed}`);
+  endGroup();
+  return metrics;
+}
+
+// src/telemetry.ts
+var fs12 = __toESM(require("fs"));
+var readline = __toESM(require("readline"));
+async function extractAgentLogSummary(logFilePath) {
+  if (!fs12.existsSync(logFilePath)) return { usage: null, model: null };
+  const rl = readline.createInterface({
+    input: fs12.createReadStream(logFilePath),
+    crlfDelay: Infinity
+  });
+  let usage = null;
+  let model = null;
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    try {
+      const obj = JSON.parse(line);
+      if (!model && obj.type === "assistant") {
+        const msgModel = obj.message?.model;
+        if (typeof msgModel === "string") model = msgModel;
+      }
+      if (obj.type === "result") {
+        const u = obj.usage ?? {};
+        usage = {
+          inputTokens: u.input_tokens ?? 0,
+          outputTokens: u.output_tokens ?? 0,
+          cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
+          cacheReadInputTokens: u.cache_read_input_tokens ?? 0,
+          totalCostUsd: obj.total_cost_usd ?? 0,
+          numTurns: obj.num_turns ?? 0,
+          durationMs: obj.duration_ms ?? 0,
+          durationApiMs: obj.duration_api_ms ?? 0
+        };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return { usage, model };
+}
+async function pushAgentUsageEvent(usage, model, licensePath) {
+  const params = {
+    inputTokens: String(usage.inputTokens),
+    outputTokens: String(usage.outputTokens),
+    cacheCreationInputTokens: String(usage.cacheCreationInputTokens),
+    cacheReadInputTokens: String(usage.cacheReadInputTokens),
+    totalCostUsd: String(usage.totalCostUsd),
+    numTurns: String(usage.numTurns),
+    durationMs: String(usage.durationMs),
+    durationApiMs: String(usage.durationApiMs),
+    model
+  };
+  debug2(`Pushing agent usage telemetry: ${JSON.stringify(params)}`);
+  await exec2("node", ["-e", `
+    const { pushToolEvent } = require('@skyramp/skyramp');
+    pushToolEvent('testbot', 'testbot_agent_usage', '', ${JSON.stringify(params)})
+      .then(() => process.exit(0))
+      .catch(e => { console.error(e.message); process.exit(1); });
+  `], {
+    silent: true,
+    env: {
+      NODE_PATH: process.env.NODE_PATH || "",
+      LICENSE_FILE: licensePath,
+      CI: "true"
+    }
+  });
+}
+
+// src/agent.ts
 async function installAgentCli(agent) {
   await withGroup(`Installing ${agent.label} CLI`, async () => {
     try {
@@ -101064,14 +101611,15 @@ function buildPrompt(opts) {
   const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
   const userPromptParam = opts.userPrompt ? `&userPrompt=${encodeURIComponent(opts.userPrompt)}` : "";
   const prNumberParam = opts.prNumber ? `&prNumber=${opts.prNumber}` : "";
+  const maxRecommendationsParam = opts.maxRecommendations != null && Number.isFinite(opts.maxRecommendations) ? `&maxRecommendations=${opts.maxRecommendations}` : "";
+  const maxGenerateParam = opts.maxGenerate != null && Number.isFinite(opts.maxGenerate) ? `&maxGenerate=${opts.maxGenerate}` : "";
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${userPromptParam}${prNumberParam}
+${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${userPromptParam}${prNumberParam}${maxRecommendationsParam}${maxGenerateParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
 AUTHENTICATION:
-When executing any tests using the Skyramp MCP execute tool, pass this authentication token to the tool's authToken parameter: ${opts.authToken}
-If the token is empty, pass an empty string for the token parameter.
+When executing any tests using the Skyramp MCP execute tool, ${opts.hasAuthToken ? "read the SKYRAMP_AUTH_TOKEN environment variable and pass its value to the tool's authToken parameter." : "pass an empty string for the token parameter."}
 CRITICAL \u2014 GENERATED TEST FILE INTEGRITY:
 When the CLI generates a test file, preserve it exactly as-is. The ONLY permitted edit is fixing chaining \u2014 replacing literal/hardcoded IDs in path params and request bodies with dynamic response IDs. Do NOT add, remove, or modify auth headers, cookies, tokens, env vars, imports, assertions, or request bodies (other than chaining IDs).`;
 }
@@ -101089,50 +101637,158 @@ function buildServiceContext(services) {
 ${blocks2.join("\n")}
 </services>`;
 }
-async function runAgentWithRetry(agentCmd, prompt, config, opts = {}) {
-  const maxRetries = config.testbotMaxRetries;
-  const retryDelay = config.testbotRetryDelay;
+async function runAgentOnce(agentCmd, prompt, config, opts = {}) {
   const timeoutMs = secondsToMilliseconds(config.testbotTimeout * 60);
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    let stdout = "";
-    let stderr = "";
-    let exitCode;
+  let stdout = "";
+  let stderr = "";
+  let exitCode;
+  try {
+    const args = [...agentCmd.args, prompt];
+    const result = await exec2(agentCmd.command, args, {
+      ignoreReturnCode: true,
+      silent: !!opts.logFile,
+      input: Buffer.from(""),
+      timeout: timeoutMs
+    });
+    exitCode = result.exitCode;
+    stdout = result.stdout;
+    stderr = result.stderr;
+    let logStream = null;
+    if (opts.logFile) {
+      logStream = fs13.createWriteStream(opts.logFile, { flags: "w" });
+      logStream.on("error", (err) => {
+        warning(`Log stream error: ${err.message}`);
+        logStream = null;
+      });
+    }
     try {
-      const args = [...agentCmd.args, prompt];
-      const result = await exec2(agentCmd.command, args, {
+      const args2 = [...agentCmd.args, prompt];
+      const result2 = await exec2(agentCmd.command, args2, {
         ignoreReturnCode: true,
         silent: !!opts.logFile,
         input: Buffer.from(""),
-        timeout: timeoutMs
+        timeout: timeoutMs,
+        stdoutStream: logStream ?? void 0
       });
-      exitCode = result.exitCode;
-      stdout = result.stdout;
-      stderr = result.stderr;
-      if (opts.logFile) {
-        fs10.writeFileSync(opts.logFile, stdout + stderr);
-      }
-      if (exitCode === 0) {
-        if (opts.stdoutFile) {
-          fs10.writeFileSync(opts.stdoutFile, stdout);
-        }
-        return { success: true, exitCode: 0 };
-      }
+      exitCode = result2.exitCode;
+      stdout = result2.stdout;
+      stderr = result2.stderr;
     } catch (err) {
       exitCode = 1;
       stderr = String(err);
-    }
-    const combined = stdout + stderr;
-    if (combined.includes("Connection stalled") || combined.includes("timed out")) {
-      if (attempt < maxRetries) {
-        warning(`Agent error (attempt ${attempt}/${maxRetries}), retrying in ${retryDelay}s...`);
-        await sleep(retryDelay);
-        continue;
+    } finally {
+      if (logStream) {
+        logStream.end();
+        await new Promise((resolve5) => logStream.on("finish", resolve5));
       }
-      error(`Agent failed after ${maxRetries} attempts`);
     }
-    return { success: false, exitCode };
+    if (exitCode === 0 && opts.stdoutFile) {
+      fs13.writeFileSync(opts.stdoutFile, stdout);
+    }
+  } catch (err) {
+    exitCode = 1;
+    stderr = String(err);
   }
-  return { success: false, exitCode: 1 };
+  return { success: exitCode === 0, exitCode, output: stdout + stderr };
+}
+function isTransientAgentError(output) {
+  return output.includes("Connection stalled") || output.includes("timed out");
+}
+async function executeAgent(opts) {
+  const {
+    agentCmd,
+    agentLabel,
+    config,
+    paths,
+    workingDir,
+    authToken,
+    prTitle,
+    prBody,
+    baseBranch,
+    userPrompt,
+    prNumber,
+    licensePath
+  } = opts;
+  const maxRetries = config.testbotMaxRetries;
+  const retryDelay = config.testbotRetryDelay;
+  let lastResult = { success: false, exitCode: 1, output: "" };
+  let lastSummary = "";
+  let lastCommitMessage;
+  let lastReport;
+  let lastRenderOptions = {};
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (const f of [paths.summaryPath, paths.agentStdoutPath, paths.combinedResultPath]) {
+      if (fs13.existsSync(f)) fs13.rmSync(f, { force: true });
+    }
+    lastResult = await withGroup(`Running Skyramp Testbot (attempt ${attempt}/${maxRetries})`, async () => {
+      const localDiffPath = path10.join(workingDir, ".skyramp_git_diff");
+      fs13.copyFileSync(paths.gitDiffPath, localDiffPath);
+      process.env.SKYRAMP_AUTH_TOKEN = authToken;
+      const prompt = buildPrompt({
+        prTitle,
+        prBody,
+        baseBranch,
+        testDirectory: config.testDirectory,
+        summaryPath: paths.summaryPath,
+        hasAuthToken: !!authToken,
+        repositoryPath: workingDir,
+        services: config.services,
+        userPrompt,
+        prNumber,
+        maxRecommendations: config.maxRecommendations,
+        maxGenerate: config.maxGenerate
+      });
+      const useNdjsonLog = agentCmd.args.includes("stream-json");
+      debug2(`Agent command: ${agentCmd.command} ${agentCmd.args.join(" ")}`);
+      debug2(`Agent log file: ${useNdjsonLog ? paths.agentLogPath : "none (streaming to console)"}`);
+      debug2(`Prompt length: ${prompt.length} chars`);
+      const agentResult = await runAgentOnce(agentCmd, prompt, config, {
+        logFile: useNdjsonLog ? paths.agentLogPath : void 0,
+        stdoutFile: useNdjsonLog ? void 0 : paths.agentStdoutPath
+      });
+      fs13.rmSync(localDiffPath, { force: true });
+      if (!agentResult.success) {
+        error(`Skyramp Testbot failed with exit code ${agentResult.exitCode}`);
+      } else {
+        notice("Skyramp Testbot completed successfully");
+      }
+      if (useNdjsonLog && fs13.existsSync(paths.agentLogPath)) {
+        const { model, usage } = await extractAgentLogSummary(paths.agentLogPath);
+        if (model) notice(`${agentLabel} auto-selected model: ${model}`);
+        if (usage) {
+          debug2(`Agent usage: ${usage.inputTokens} input, ${usage.outputTokens} output, ${usage.cacheReadInputTokens} cache-read, ${usage.cacheCreationInputTokens} cache-create, ${usage.numTurns} turns, $${usage.totalCostUsd.toFixed(4)}`);
+          pushAgentUsageEvent(usage, model ?? "unknown", licensePath).catch((err) => debug2(`Telemetry push failed: ${err}`));
+        }
+      }
+      return agentResult;
+    });
+    const summaryResult = readSummary(paths, config.reportCollapsed, userPrompt || void 0, config.autoCommit);
+    parseMetrics(summaryResult.summary);
+    lastSummary = summaryResult.summary;
+    lastCommitMessage = summaryResult.commitMessage;
+    lastReport = summaryResult.report;
+    lastRenderOptions = summaryResult.renderOptions;
+    const emptySummary = !lastSummary || lastSummary.trim() === "" || lastSummary.trim() === "No summary available";
+    const transientCrash = !lastResult.success && isTransientAgentError(lastResult.output);
+    const emptyResult = lastResult.success && emptySummary;
+    if ((transientCrash || emptyResult) && attempt < maxRetries) {
+      const reason = transientCrash ? "transient error" : "no report produced";
+      warning(`Agent ${reason} (attempt ${attempt}/${maxRetries}). Retrying in ${retryDelay}s...`);
+      await sleep(retryDelay);
+      continue;
+    }
+    if (transientCrash || emptyResult) {
+      error(`Agent failed after ${maxRetries} attempts (last: ${transientCrash ? "transient error" : "no report"})`);
+    }
+    break;
+  }
+  return {
+    result: { success: lastResult.success, exitCode: lastResult.exitCode },
+    summary: lastSummary,
+    commitMessage: lastCommitMessage,
+    report: lastReport,
+    renderOptions: lastRenderOptions
+  };
 }
 
 // src/startup-errors.ts
@@ -101299,6 +101955,8 @@ function formatStartupFailureComment(opts) {
     `**Command:** \`${command}\``,
     "",
     `**Error:** ${analysis.summary}`,
+    "",
+    "> **Check if the code changes in this PR are causing this failure** \u2014 a newly introduced bug, missing dependency, or broken configuration can prevent the service from starting.",
     outputSection,
     "**How to fix:**",
     fixList,
@@ -101462,7 +102120,7 @@ async function generateAuthToken(config, workingDir) {
 }
 
 // src/preflight.ts
-var fs11 = __toESM(require("fs"));
+var fs14 = __toESM(require("fs"));
 
 // node_modules/js-yaml/dist/js-yaml.mjs
 function isNothing(subject) {
@@ -104053,8 +104711,8 @@ var safeDump = renamed("safeDump", "dump");
 // src/preflight.ts
 var PROBE_TIMEOUT_MS = 5e3;
 var MAX_ENDPOINTS = 3;
-var PROBE_RETRIES = 2;
-var PROBE_RETRY_DELAY_S = 2;
+var PROBE_RETRIES = 3;
+var PROBE_RETRY_DELAY_S = 10;
 function isRetryableStatus(status) {
   return status === 404 || status === 401 || status === 403 || status >= 500;
 }
@@ -104073,21 +104731,21 @@ function extractEndpointsFromDiff(diffContent) {
         hasRouteRegistrations = true;
         continue;
       }
-      let path11 = raw;
-      if (!path11.startsWith("/")) {
+      let path12 = raw;
+      if (!path12.startsWith("/")) {
         const isDjangoRouteContext = /\b(re_)?path\s*\(/.test(line);
         if (isDjangoRouteContext) {
-          path11 = "/" + path11;
+          path12 = "/" + path12;
         }
       }
-      if (!path11.startsWith("/")) continue;
-      if (path11.includes(":") || path11.includes("{") || path11.includes("*")) {
+      if (!path12.startsWith("/")) continue;
+      if (path12.includes(":") || path12.includes("{") || path12.includes("*")) {
         hasRouteRegistrations = true;
         continue;
       }
-      if (path11.includes("..") || /\/v\d+\.\d+/.test(path11)) continue;
-      if (/\.(png|jpe?g|gif|svg|webp|ico|css|js|html?|md|txt|pdf)(\?|$)/i.test(path11)) continue;
-      candidates.add(path11);
+      if (path12.includes("..") || /\/v\d+\.\d+/.test(path12)) continue;
+      if (/\.(png|jpe?g|gif|svg|webp|ico|css|js|html?|md|txt|pdf)(\?|$)/i.test(path12)) continue;
+      candidates.add(path12);
     }
   }
   if (candidates.size > 0) {
@@ -104166,22 +104824,22 @@ async function probeUrl(url2, authToken, timeoutMs = PROBE_TIMEOUT_MS) {
   }
   return lastOutcome;
 }
-function classifyProbe(path11, outcome) {
+function classifyProbe(path12, outcome) {
   if (outcome.statusCode === 0) {
     return {
       kind: "NOT_DEPLOYED",
-      endpoint: path11,
-      message: `${path11} is unreachable (${outcome.error ?? "connection refused or timed out"}). The route may not be registered or the service may have stopped.`,
+      endpoint: path12,
+      message: `${path12} is unreachable (${outcome.error ?? "connection refused or timed out"}). The route may not be registered or the service may have stopped.`,
       recommendation: "Confirm the route is registered, the server restarted after the code change, and the service is still running."
     };
   }
-  if (path11 === "/") return null;
+  if (path12 === "/") return null;
   const kind = outcome.statusCode === 404 ? "STALE_IMAGE" : outcome.statusCode === 401 || outcome.statusCode === 403 ? "AUTH_FAILURE" : outcome.statusCode >= 500 ? "UNHEALTHY" : null;
   if (!kind) return null;
   const messages = {
-    STALE_IMAGE: `${path11} returned 404. The endpoint was not found \u2014 the service may be running a stale image that does not include this route, or the auth layer may be returning 404 instead of 401/403.`,
-    AUTH_FAILURE: `${path11} returned ${outcome.statusCode}. The endpoint exists but the auth token is missing or invalid.`,
-    UNHEALTHY: `${path11} returned ${outcome.statusCode}. The endpoint exists but the service is returning server errors.`,
+    STALE_IMAGE: `${path12} returned 404. The endpoint was not found \u2014 the service may be running a stale image that does not include this route, or the auth layer may be returning 404 instead of 401/403.`,
+    AUTH_FAILURE: `${path12} returned ${outcome.statusCode}. The endpoint exists but the auth token is missing or invalid.`,
+    UNHEALTHY: `${path12} returned ${outcome.statusCode}. The endpoint exists but the service is returning server errors.`,
     NOT_DEPLOYED: ""
     // handled above
   };
@@ -104191,14 +104849,41 @@ function classifyProbe(path11, outcome) {
     UNHEALTHY: "Check service logs. The endpoint may have a startup or configuration problem.",
     NOT_DEPLOYED: ""
   };
-  return { kind, endpoint: path11, statusCode: outcome.statusCode, message: messages[kind], recommendation: recommendations[kind] };
+  return { kind, endpoint: path12, statusCode: outcome.statusCode, message: messages[kind], recommendation: recommendations[kind] };
+}
+function isParamSegment(segment) {
+  return segment.includes("{") || segment.startsWith(":") || segment === "*" || segment.startsWith("*");
 }
 function matchSegmentsToSpecPaths(segments, specPaths) {
-  const unparam = specPaths.filter((p) => !p.includes("{"));
+  const unparam = specPaths.filter((p) => !p.split("/").some(isParamSegment));
   const resolved = /* @__PURE__ */ new Set();
   for (const seg of segments) {
-    for (const sp of unparam) {
-      if (sp === seg || seg.length > 1 && sp.endsWith(seg)) resolved.add(sp);
+    const segParts = seg.split("/").filter(Boolean);
+    const segHasParam = segParts.some(isParamSegment);
+    if (!segHasParam) {
+      for (const sp of unparam) {
+        if (sp === seg || seg.length > 1 && sp.endsWith(seg)) resolved.add(sp);
+      }
+    } else {
+      if (segParts.length < 2) continue;
+      for (const sp of specPaths) {
+        const spParts = sp.split("/").filter(Boolean);
+        if (spParts.length < segParts.length) continue;
+        const offset = spParts.length - segParts.length;
+        const structuralMatch = segParts.every((part, i) => {
+          const spPart = spParts[offset + i];
+          if (part === spPart) return true;
+          if (part === "*" || part.startsWith("*")) return true;
+          return isParamSegment(part) && isParamSegment(spPart);
+        });
+        if (structuralMatch) {
+          const firstParamIdx = spParts.findIndex(isParamSegment);
+          if (firstParamIdx > 0) {
+            const ancestor = "/" + spParts.slice(0, firstParamIdx).join("/");
+            if (unparam.includes(ancestor)) resolved.add(ancestor);
+          }
+        }
+      }
     }
   }
   return [...resolved].slice(0, MAX_ENDPOINTS);
@@ -104223,7 +104908,7 @@ function parseSpecPaths(raw) {
 async function loadSpecPaths(source, authToken) {
   if (!source.startsWith("http://") && !source.startsWith("https://")) {
     try {
-      const raw = fs11.readFileSync(source, "utf8");
+      const raw = fs14.readFileSync(source, "utf8");
       return parseSpecPaths(raw);
     } catch {
       return null;
@@ -104421,20 +105106,20 @@ async function runPreflightCheck(opts) {
         if (issue2) svcIssues.push(issue2);
         return { svcIssues, svcProbed };
       }
-      const probeResults = await Promise.all(probeablePaths.map(async (path11) => {
-        const url2 = `${baseUrl2}${path11}`;
+      const probeResults = await Promise.all(probeablePaths.map(async (path12) => {
+        const url2 = `${baseUrl2}${path12}`;
         const outcome = await probeUrl(url2, authToken);
-        return { path: path11, url: url2, outcome };
+        return { path: path12, url: url2, outcome };
       }));
-      for (const { path: path11, url: url2, outcome } of probeResults) {
+      for (const { path: path12, url: url2, outcome } of probeResults) {
         svcProbed.push(url2);
         debug2(`Pre-flight probe ${url2}: ${outcome.statusCode}`);
-        const issue2 = classifyProbe(path11, outcome);
+        const issue2 = classifyProbe(path12, outcome);
         if (issue2) {
           svcIssues.push(issue2);
           error(`Pre-flight [${issue2.kind}]: ${issue2.message}`);
         } else {
-          notice(`Pre-flight: ${path11} \u2192 ${outcome.statusCode} \u2713`);
+          notice(`Pre-flight: ${path12} \u2192 ${outcome.statusCode} \u2713`);
         }
       }
       return { svcIssues, svcProbed };
@@ -104448,7 +105133,7 @@ async function runPreflightCheck(opts) {
 }
 
 // src/git.ts
-var fs12 = __toESM(require("fs"));
+var fs15 = __toESM(require("fs"));
 async function generateGitDiff(diffPath, workingDir, baseBranch) {
   startGroup("Generating git diff");
   const baseSha = context2.payload.pull_request?.base?.sha;
@@ -104462,7 +105147,7 @@ async function generateGitDiff(diffPath, workingDir, baseBranch) {
     warning("No base SHA or base branch available, using HEAD~1 for diff");
     diffContent = (await exec2("git", ["diff", "HEAD~1"], { cwd: workingDir })).stdout;
   }
-  fs12.writeFileSync(diffPath, diffContent);
+  fs15.writeFileSync(diffPath, diffContent);
   const lines = diffContent.split("\n").length;
   info(`Generated diff with ${lines} lines`);
   debug2(`Git diff path: ${diffPath}`);
@@ -104531,281 +105216,20 @@ async function autoCommit(config) {
   return { sha, hasChanges: true };
 }
 
-// src/report.ts
-var fs13 = __toESM(require("fs"));
-function resolveSummarySource(paths) {
-  if (fs13.existsSync(paths.summaryPath)) return paths.summaryPath;
-  if (fs13.existsSync(paths.agentStdoutPath)) {
-    info("Using agent stdout as fallback (agent did not write to summary file)");
-    return paths.agentStdoutPath;
-  }
-  return null;
-}
-function tryParseReport(raw) {
-  try {
-    const cleaned = raw.replace(/^```(?:json)?\s*\n?/m, "").replace(/\n?```\s*$/m, "").trim();
-    const parsed = JSON.parse(cleaned);
-    if (typeof parsed.businessCaseAnalysis === "string" && Array.isArray(parsed.testResults)) {
-      return parsed;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-function renderReport(report, options = {}) {
-  const { commitMessage, collapsed = false, userPrompt, autoCommit: autoCommit2 = false } = options;
-  const lines = [];
-  lines.push("<!-- skyramp-testbot -->");
-  const isMinimalReport = report.newTestsCreated.length === 0 && report.testResults.length === 0 && report.testMaintenance.length === 0 && report.issuesFound.length > 0;
-  if (isMinimalReport) {
-    lines.push("### \u26A0\uFE0F Skyramp Testbot");
-    lines.push("");
-    for (const issue2 of report.issuesFound) {
-      lines.push(issue2.description);
-    }
-    if (report.nextSteps && report.nextSteps.length > 0) {
-      lines.push("");
-      lines.push("### \u{1F4A1} Next Steps");
-      lines.push("");
-      for (const step of report.nextSteps) {
-        lines.push(`- ${step}`);
-      }
-    }
-    return lines.join("\n");
-  }
-  const escapeCell = (s) => s.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
-  if (userPrompt) {
-    lines.push(`> Following user instruction: *${userPrompt}*`);
-    lines.push("");
-  }
-  if (collapsed && commitMessage) {
-    lines.push(`**Summary:** ${commitMessage}`);
-    lines.push("");
-  }
-  const sectionStart = (title) => {
-    if (collapsed) {
-      lines.push("<details>");
-      lines.push(`<summary>${title}</summary>`);
-      lines.push("");
-    } else {
-      lines.push(`### ${title}`);
-    }
-  };
-  const sectionEnd = () => {
-    if (collapsed) {
-      lines.push("");
-      lines.push("</details>");
-    }
-    lines.push("");
-  };
-  for (const bcaLine of report.businessCaseAnalysis.split(/\r?\n/)) {
-    lines.push(`> ${bcaLine}`);
-  }
-  lines.push("");
-  if (report.newTestsCreated.length > 0) {
-    sectionStart("\u{1F4A1} Test Recommendations Implemented");
-    for (const t of report.newTestsCreated) {
-      const id = t.testId ? ` [\`Test ID-${t.testId}\`]` : "";
-      const endpoint2 = t.endpoint ? ` \u2014 \`${t.endpoint}\`` : "";
-      const desc = t.description ? `: ${t.description}` : "";
-      const file = t.fileName ? t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\`` : "";
-      lines.push(`- ${t.testType}${id}${endpoint2}${desc}${file}`);
-    }
-    sectionEnd();
-  }
-  if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
-    const recs = report.additionalRecommendations;
-    const count = recs.length;
-    const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
-    const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
-    sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
-    lines.push("To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).");
-    lines.push("");
-    for (const rec of sorted) {
-      const endpoint2 = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path ? `\`${rec.steps[0].method} ${rec.steps[0].path}\`` : "";
-      const endpointSuffix = endpoint2 ? ` \u2014 ${endpoint2}` : "";
-      const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : "";
-      lines.push(`- **${rec.testType}**${id}${endpointSuffix}: ${rec.description}`);
-    }
-    sectionEnd();
-  }
-  sectionStart("\u2705 Test Maintenance");
-  if (report.testMaintenance.length > 0) {
-    const hasBeforeAfter = report.testMaintenance.some(
-      (m) => typeof m === "object" && m !== null && "beforeStatus" in m
-    );
-    if (hasBeforeAfter) {
-      lines.push("| File | Change | Before | After |");
-      lines.push("|------|--------|--------|-------|");
-      for (const m of report.testMaintenance) {
-        if (typeof m === "object" && m !== null && "beforeStatus" in m) {
-          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`;
-          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`;
-          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
-        } else {
-          lines.push(`| \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
-        }
-      }
-    } else {
-      for (const m of report.testMaintenance) {
-        lines.push(`- ${m.description}`);
-      }
-    }
-  } else {
-    lines.push("No existing Skyramp tests required maintenance for this PR.");
-  }
-  sectionEnd();
-  sectionStart("\u{1F9EA} Test Results");
-  lines.push("| Test Type | Endpoint | Status | Details |");
-  lines.push("|-----------|----------|--------|---------|");
-  for (const r of report.testResults) {
-    lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
-  }
-  sectionEnd();
-  if (report.issuesFound.length > 0) {
-    sectionStart("\u26A0\uFE0F Issues Found");
-    for (const issue2 of report.issuesFound) {
-      lines.push(`- ${issue2.description}`);
-    }
-    sectionEnd();
-  }
-  const steps = [...report.nextSteps ?? []];
-  const hasIssues = report.issuesFound.length > 0;
-  const hasTests = report.newTestsCreated.length > 0 || report.testMaintenance.length > 0 || report.testResults.length > 0;
-  if (hasTests && !hasIssues && steps.length === 0) {
-    if (autoCommit2) {
-      steps.push("Let @skyramp-testbot know which additional recommendations to implement.");
-    } else {
-      steps.push("Enable `autoCommit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.");
-    }
-  }
-  if (steps.length > 0) {
-    lines.push("### \u{1F4A1} Next Steps");
-    lines.push("");
-    for (const step of steps) {
-      lines.push(`- ${step}`);
-    }
-    lines.push("");
-  }
-  return lines.join("\n");
-}
-function readSummary(paths, reportCollapsed = false, userPrompt, autoCommit2 = false) {
-  startGroup("Reading test summary");
-  const src = resolveSummarySource(paths);
-  let summary2;
-  let commitMessage;
-  let report;
-  let renderOptions = {};
-  if (src) {
-    const raw = fs13.readFileSync(src, "utf-8");
-    const parsed = tryParseReport(raw);
-    if (parsed) {
-      notice("Testbot report parsed from JSON");
-      report = parsed;
-      renderOptions = { commitMessage: report.commitMessage, collapsed: reportCollapsed, userPrompt, autoCommit: autoCommit2 };
-      summary2 = renderReport(report, renderOptions);
-      commitMessage = report.commitMessage;
-    } else {
-      info("Summary is not JSON \u2014 using raw content");
-      summary2 = raw;
-    }
-    fs13.writeFileSync(paths.combinedResultPath, summary2);
-    notice("Testbot report ready");
-  } else {
-    warning("No summary file generated");
-    summary2 = "No summary available";
-  }
-  setOutput("test_summary", summary2);
-  endGroup();
-  return { summary: summary2, commitMessage, report, renderOptions };
-}
-function parseMetrics(summary2) {
-  startGroup("Parsing summary metrics");
-  const extract = (keyword) => {
-    const match = summary2.match(new RegExp(`${keyword}[^0-9]*(\\d+)`, "i"));
-    return match ? parseInt(match[1], 10) : 0;
-  };
-  const metrics = {
-    modified: extract("modified"),
-    created: extract("created"),
-    executed: extract("executed")
-  };
-  setOutput("tests_modified", String(metrics.modified));
-  setOutput("tests_created", String(metrics.created));
-  setOutput("tests_executed", String(metrics.executed));
-  notice(`Metrics - Modified: ${metrics.modified}, Created: ${metrics.created}, Executed: ${metrics.executed}`);
-  endGroup();
-  return metrics;
-}
-
-// src/telemetry.ts
-var fs14 = __toESM(require("fs"));
-var readline = __toESM(require("readline"));
-async function extractAgentLogSummary(logFilePath) {
-  if (!fs14.existsSync(logFilePath)) return { usage: null, model: null };
-  const rl = readline.createInterface({
-    input: fs14.createReadStream(logFilePath),
-    crlfDelay: Infinity
-  });
-  let usage = null;
-  let model = null;
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    try {
-      const obj = JSON.parse(line);
-      if (!model && obj.type === "assistant") {
-        const msgModel = obj.message?.model;
-        if (typeof msgModel === "string") model = msgModel;
-      }
-      if (obj.type === "result") {
-        const u = obj.usage ?? {};
-        usage = {
-          inputTokens: u.input_tokens ?? 0,
-          outputTokens: u.output_tokens ?? 0,
-          cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
-          cacheReadInputTokens: u.cache_read_input_tokens ?? 0,
-          totalCostUsd: obj.total_cost_usd ?? 0,
-          numTurns: obj.num_turns ?? 0,
-          durationMs: obj.duration_ms ?? 0,
-          durationApiMs: obj.duration_api_ms ?? 0
-        };
-      }
-    } catch {
-      continue;
-    }
-  }
-  return { usage, model };
-}
-async function pushAgentUsageEvent(usage, model, licensePath) {
-  const params = {
-    inputTokens: String(usage.inputTokens),
-    outputTokens: String(usage.outputTokens),
-    cacheCreationInputTokens: String(usage.cacheCreationInputTokens),
-    cacheReadInputTokens: String(usage.cacheReadInputTokens),
-    totalCostUsd: String(usage.totalCostUsd),
-    numTurns: String(usage.numTurns),
-    durationMs: String(usage.durationMs),
-    durationApiMs: String(usage.durationApiMs),
-    model
-  };
-  debug2(`Pushing agent usage telemetry: ${JSON.stringify(params)}`);
-  await exec2("node", ["-e", `
-    const { pushToolEvent } = require('@skyramp/skyramp');
-    pushToolEvent('testbot', 'testbot_agent_usage', '', ${JSON.stringify(params)})
-      .then(() => process.exit(0))
-      .catch(e => { console.error(e.message); process.exit(1); });
-  `], {
-    silent: true,
-    env: {
-      NODE_PATH: process.env.NODE_PATH || "",
-      LICENSE_FILE: licensePath,
-      CI: "true"
-    }
-  });
-}
-
 // src/main.ts
+async function replyPermissionDenied(octokit, author) {
+  const issueNumber = context2.payload.issue?.number;
+  if (!issueNumber) return;
+  try {
+    await octokit.rest.issues.createComment({
+      ...context2.repo,
+      issue_number: issueNumber,
+      body: `@${author} Sorry, only collaborators with **write** access can trigger Skyramp Testbot.`
+    });
+  } catch (err) {
+    info(`Failed to post permission-denied comment: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 async function run() {
   const { skip, botName, botEmail } = await checkSelfTrigger();
   setOutput("skipped_self_trigger", String(skip));
@@ -104862,6 +105286,27 @@ async function run() {
   } else if (isCommentTrigger) {
     const commentBody = context2.payload.comment?.body;
     if (commentBody?.includes("@skyramp-testbot")) {
+      const commentAuthor = context2.payload.comment?.user?.login;
+      if (commentAuthor) {
+        const octokit = getOctokit(githubToken);
+        try {
+          const { data: permData } = await octokit.rest.repos.getCollaboratorPermissionLevel({
+            ...context2.repo,
+            username: commentAuthor
+          });
+          if (!["admin", "write"].includes(permData.permission)) {
+            info(`Ignoring @skyramp-testbot from ${commentAuthor} (permission: ${permData.permission})`);
+            await replyPermissionDenied(octokit, commentAuthor);
+            return;
+          }
+        } catch (error2) {
+          info(
+            `Ignoring @skyramp-testbot from ${commentAuthor} \u2014 permission check failed: ${error2 instanceof Error ? error2.message : String(error2)}`
+          );
+          await replyPermissionDenied(octokit, commentAuthor);
+          return;
+        }
+      }
       const match = commentBody.match(/@skyramp-testbot\s+([\s\S]*)/i);
       if (match) {
         userPrompt = match[1].trim();
@@ -104952,18 +105397,18 @@ async function run() {
     await postValidationError(prNumber, "skyrampMcpGithubToken is required when skyrampMcpSource is 'github'");
     throw new Error("skyrampMcpGithubToken required for github source");
   }
-  const tempDir = path10.join(process.env.RUNNER_TEMP ?? "/tmp", "skyramp");
-  fs15.mkdirSync(tempDir, { recursive: true });
+  const tempDir = path11.join(process.env.RUNNER_TEMP ?? "/tmp", "skyramp");
+  fs16.mkdirSync(tempDir, { recursive: true });
   const paths = {
     tempDir,
-    licensePath: path10.join(tempDir, "skyramp_license.lic"),
-    gitDiffPath: path10.join(tempDir, "git_diff"),
-    summaryPath: path10.join(tempDir, "testbot-result.txt"),
-    agentLogPath: path10.join(tempDir, "agent-log.ndjson"),
-    agentStdoutPath: path10.join(tempDir, "agent-stdout.txt"),
-    combinedResultPath: path10.join(tempDir, "combined-result.txt")
+    licensePath: path11.join(tempDir, "skyramp_license.lic"),
+    gitDiffPath: path11.join(tempDir, "git_diff"),
+    summaryPath: path11.join(tempDir, "testbot-result.txt"),
+    agentLogPath: path11.join(tempDir, "agent-log.ndjson"),
+    agentStdoutPath: path11.join(tempDir, "agent-stdout.txt"),
+    combinedResultPath: path11.join(tempDir, "combined-result.txt")
   };
-  const workingDir = path10.resolve(inputs.workingDirectory);
+  const workingDir = path11.resolve(inputs.workingDirectory);
   debug2(`Paths: tempDir=${tempDir}, workingDir=${workingDir}`);
   debug2(`PR #${prNumber ?? "N/A"}, event=${context2.eventName}`);
   if (prHeadRef && context2.eventName !== "pull_request") {
@@ -104971,13 +105416,19 @@ async function run() {
     info(`Checked out PR head branch: ${prHeadRef}`);
   }
   await generateGitDiff(paths.gitDiffPath, workingDir, baseBranch || void 0);
+  const steps = createInitialSteps(isCommentTrigger);
   let progressCommentId = null;
   if (config.postPrComment && prNumber) {
-    progressCommentId = await postInitialProgress(prNumber, isCommentTrigger);
+    advanceSteps(steps, "setup" /* Setup */, Date.now());
+    progressCommentId = await postInitialProgress(prNumber, steps);
+    if (progressCommentId) {
+      saveState("progressCommentId", String(progressCommentId));
+      saveState("steps", JSON.stringify(steps));
+    }
   }
   await withGroup("Configuring Skyramp license", async () => {
-    fs15.writeFileSync(paths.licensePath, inputs.skyrampLicenseFile, { mode: 384 });
-    if (!fs15.statSync(paths.licensePath).size) {
+    fs16.writeFileSync(paths.licensePath, inputs.skyrampLicenseFile, { mode: 384 });
+    if (!fs16.statSync(paths.licensePath).size) {
       const msg = "License file is empty or could not be created";
       if (prNumber) {
         await postStandaloneComment(
@@ -104995,6 +105446,7 @@ Please ensure your \`skyrampLicenseFile\` secret is configured correctly.`
   });
   const mcp = await installMcp(config, inputs, tempDir);
   mcp.licensePath = paths.licensePath;
+  loadToolPhaseMap();
   await withGroup("Validating Skyramp license", async () => {
     try {
       await withRetry(
@@ -105109,16 +105561,26 @@ ${stdout}`);
   exportServiceBaseUrlEnvVars(config.services);
   const dynamicToken = await generateAuthToken(config, workingDir);
   const authToken = dynamicToken || process.env.SKYRAMP_TEST_TOKEN || "";
+  if (authToken) {
+    setSecret(authToken);
+  }
   const tokenSource = dynamicToken ? "authTokenCommand" : process.env.SKYRAMP_TEST_TOKEN ? "SKYRAMP_TEST_TOKEN env var" : "none";
   debug2(`Auth token source: ${tokenSource}, length: ${authToken.length}`);
   const workflowUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${process.env.GITHUB_REPOSITORY ?? context2.repo.owner + "/" + context2.repo.repo}/actions/runs/${process.env.GITHUB_RUN_ID ?? context2.runId}`;
   const formatPreflightFailureBody = (issueBlocks) => {
     return [
-      "### :x: Skyramp Testbot \u2014 SUT Pre-flight Validation Failed",
+      "### Skyramp Testbot",
+      "",
+      ":warning: **Your service is returning errors**",
+      "",
+      "Testbot checked your endpoints before running tests and found issues.",
+      "**Check if the code changes in this PR are causing the service to fail** \u2014 a newly introduced bug, missing dependency, or misconfiguration can prevent the service from starting or responding correctly.",
       "",
       issueBlocks.join("\n\n---\n\n"),
       "",
-      `[View full workflow logs \u2197](${workflowUrl})`
+      `[View full workflow logs \u2197](${workflowUrl})`,
+      "",
+      "_Fix the issue and push again, or re-run the workflow to retry._"
     ].join("\n");
   };
   const postPreflightFailure = async (body2) => {
@@ -105130,8 +105592,8 @@ ${stdout}`);
   };
   if (!healthCheckPassed) {
     if (healthCheckOutput) {
-      const diagPath = path10.join(tempDir, "preflight-diagnostics.txt");
-      fs15.writeFileSync(diagPath, healthCheckOutput);
+      const diagPath = path11.join(tempDir, "preflight-diagnostics.txt");
+      fs16.writeFileSync(diagPath, healthCheckOutput);
       try {
         const artifact = new DefaultArtifactClient();
         await artifact.uploadArtifact("skyramp-preflight-diagnostics", [diagPath], tempDir);
@@ -105163,7 +105625,7 @@ ${stdout}`);
     throw new Error("SUT health check timed out \u2014 service did not become ready before the configured timeout");
   }
   {
-    const diffContent = fs15.existsSync(paths.gitDiffPath) ? fs15.readFileSync(paths.gitDiffPath, "utf8") : "";
+    const diffContent = fs16.existsSync(paths.gitDiffPath) ? fs16.readFileSync(paths.gitDiffPath, "utf8") : "";
     const preflight = await runPreflightCheck({
       diffContent,
       services: config.services,
@@ -105196,8 +105658,8 @@ ${stdout}`);
         }
       }
       if (preflightDiagnostics) {
-        const diagPath = path10.join(tempDir, "preflight-diagnostics.txt");
-        fs15.writeFileSync(diagPath, preflightDiagnostics);
+        const diagPath = path11.join(tempDir, "preflight-diagnostics.txt");
+        fs16.writeFileSync(diagPath, preflightDiagnostics);
         try {
           const artifact = new DefaultArtifactClient();
           await artifact.uploadArtifact("skyramp-preflight-diagnostics", [diagPath], tempDir);
@@ -105209,52 +105671,56 @@ ${stdout}`);
       throw new Error(`SUT pre-flight validation failed: ${preflight.issues.map((i) => i.kind).join(", ")}`);
     }
   }
+  advanceSteps(steps, "analyzing" /* Analyzing */, Date.now());
   if (progressCommentId) {
-    await updateProgress(progressCommentId, 2, isCommentTrigger);
+    await updateProgress(progressCommentId, steps);
   }
-  const result = await withGroup("Running Skyramp Testbot", async () => {
-    const localDiffPath = path10.join(workingDir, ".skyramp_git_diff");
-    fs15.copyFileSync(paths.gitDiffPath, localDiffPath);
-    const prompt = buildPrompt({
-      prTitle,
-      prBody,
-      baseBranch,
-      testDirectory: config.testDirectory,
-      summaryPath: paths.summaryPath,
-      authToken,
-      repositoryPath: workingDir,
-      services: config.services,
-      userPrompt,
-      prNumber
-    });
-    const useNdjsonLog = agentCmd.args.includes("stream-json");
-    debug2(`Agent command: ${agentCmd.command} ${agentCmd.args.join(" ")}`);
-    debug2(`Agent log file: ${useNdjsonLog ? paths.agentLogPath : "none (streaming to console)"}`);
-    debug2(`Prompt length: ${prompt.length} chars`);
-    const agentResult = await runAgentWithRetry(agentCmd, prompt, config, {
-      logFile: useNdjsonLog ? paths.agentLogPath : void 0,
-      stdoutFile: useNdjsonLog ? void 0 : paths.agentStdoutPath
-    });
-    fs15.rmSync(localDiffPath, { force: true });
-    if (!agentResult.success) {
-      error(`Skyramp Testbot failed with exit code ${agentResult.exitCode}`);
-    } else {
-      notice("Skyramp Testbot completed successfully");
-    }
-    if (useNdjsonLog && fs15.existsSync(paths.agentLogPath)) {
-      const { model, usage } = await extractAgentLogSummary(paths.agentLogPath);
-      if (model) {
-        notice(`${agent.label} auto-selected model: ${model}`);
+  let lastUpdateTime = Date.now();
+  const DEBOUNCE_MS = 5e3;
+  let debounceTimer = null;
+  const tracker = createProgressTracker({
+    logFile: paths.agentLogPath,
+    steps,
+    pollIntervalMs: 500,
+    onStepChange: async (updatedSteps) => {
+      saveState("steps", JSON.stringify(updatedSteps));
+      if (!progressCommentId) return;
+      const now = Date.now();
+      if (now - lastUpdateTime < DEBOUNCE_MS) {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async () => {
+          if (progressCommentId) {
+            await updateProgress(progressCommentId, updatedSteps);
+            lastUpdateTime = Date.now();
+          }
+        }, DEBOUNCE_MS - (now - lastUpdateTime));
+        return;
       }
-      if (usage) {
-        debug2(`Agent usage: ${usage.inputTokens} input, ${usage.outputTokens} output, ${usage.cacheReadInputTokens} cache-read, ${usage.cacheCreationInputTokens} cache-create, ${usage.numTurns} turns, $${usage.totalCostUsd.toFixed(4)}`);
-        pushAgentUsageEvent(usage, model ?? "unknown", paths.licensePath).catch((err) => debug2(`Telemetry push failed: ${err}`));
-      }
+      await updateProgress(progressCommentId, updatedSteps);
+      lastUpdateTime = now;
     }
-    return agentResult;
   });
-  const { summary: summary2, commitMessage: reportCommitMessage, report, renderOptions } = readSummary(paths, config.reportCollapsed, userPrompt || void 0, config.autoCommit);
-  parseMetrics(summary2);
+  tracker.start();
+  const { result, summary: summary2, commitMessage: reportCommitMessage, report, renderOptions } = await executeAgent({
+    agentCmd,
+    agentLabel: agent.label,
+    config,
+    paths,
+    workingDir,
+    authToken,
+    prTitle,
+    prBody,
+    baseBranch,
+    userPrompt,
+    prNumber,
+    licensePath: paths.licensePath
+  });
+  tracker.stop();
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  saveState("steps", JSON.stringify(steps));
   if (reportCommitMessage) {
     let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").trim();
     if (sanitized.toLowerCase().startsWith("skyramp testbot:")) {
@@ -105266,24 +105732,24 @@ ${stdout}`);
     }
   }
   debug2(`Summary length: ${summary2.length} chars`);
-  debug2(`Summary file exists: ${fs15.existsSync(paths.summaryPath)}`);
-  debug2(`Agent log file exists: ${fs15.existsSync(paths.agentLogPath)}`);
-  debug2(`Agent stdout file exists: ${fs15.existsSync(paths.agentStdoutPath)}`);
-  debug2(`Combined result file exists: ${fs15.existsSync(paths.combinedResultPath)}`);
+  debug2(`Summary file exists: ${fs16.existsSync(paths.summaryPath)}`);
+  debug2(`Agent log file exists: ${fs16.existsSync(paths.agentLogPath)}`);
+  debug2(`Agent stdout file exists: ${fs16.existsSync(paths.agentStdoutPath)}`);
+  debug2(`Combined result file exists: ${fs16.existsSync(paths.combinedResultPath)}`);
   const emptySummary = !summary2 || summary2.trim() === "" || summary2.trim() === "No summary available";
   if (result.success && emptySummary) {
     const noTestsMsg = [
       "<!-- skyramp-testbot -->",
-      "### Skyramp Testbot \u2014 No Tests Generated",
+      "### Skyramp Testbot \u2014 Internal Error",
       "",
-      "Testbot analyzed this PR and determined that no new tests were required.",
-      "This typically happens when the changes are non-functional (e.g. documentation, configuration, CI/deployment).",
+      "Testbot encountered an unexpected internal error: the agent completed successfully but did not produce a report.",
+      `This was retried ${config.testbotMaxRetries} times without success.`,
       "",
-      "To request tests explicitly, comment with `@skyramp-testbot` followed by your request."
+      "Please file an issue at https://github.com/skyramp/testbot/issues with a link to this workflow run."
     ].join("\n");
-    fs15.writeFileSync(paths.combinedResultPath, noTestsMsg);
+    fs16.writeFileSync(paths.combinedResultPath, noTestsMsg);
     setOutput("test_summary", noTestsMsg);
-    notice("Agent produced no output \u2014 posting skip indication to PR");
+    error(`Agent produced no report after ${config.testbotMaxRetries} attempts \u2014 posting error to PR`);
   }
   let commitHasChanges = false;
   if (config.autoCommit) {
@@ -105297,10 +105763,10 @@ ${stdout}`);
       if (report) {
         report.issuesFound.push({ description: issueDescription });
         const reRendered = renderReport(report, renderOptions);
-        fs15.writeFileSync(paths.combinedResultPath, reRendered);
+        fs16.writeFileSync(paths.combinedResultPath, reRendered);
         setOutput("test_summary", reRendered);
-      } else if (fs15.existsSync(paths.combinedResultPath)) {
-        fs15.appendFileSync(paths.combinedResultPath, `
+      } else if (fs16.existsSync(paths.combinedResultPath)) {
+        fs16.appendFileSync(paths.combinedResultPath, `
 
 **\u26A0\uFE0F ${issueDescription}**
 `);
@@ -105310,11 +105776,11 @@ ${stdout}`);
   }
   try {
     const artifact = new DefaultArtifactClient();
-    const reportFiles = [paths.summaryPath, paths.combinedResultPath, paths.agentStdoutPath].filter((f) => fs15.existsSync(f));
+    const reportFiles = [paths.summaryPath, paths.combinedResultPath, paths.agentStdoutPath].filter((f) => fs16.existsSync(f));
     if (reportFiles.length > 0) {
       await artifact.uploadArtifact("skyramp-testbot-report", reportFiles, tempDir);
     }
-    if (config.enableDebug && fs15.existsSync(paths.agentLogPath)) {
+    if (config.enableDebug && fs16.existsSync(paths.agentLogPath)) {
       await artifact.uploadArtifact("skyramp-agent-logs", [paths.agentLogPath], tempDir);
     }
   } catch (err) {
@@ -105324,7 +105790,7 @@ ${stdout}`);
     await withGroup("Posting final PR comment", async () => {
       let posted = false;
       if (progressCommentId) {
-        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath, isCommentTrigger);
+        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath, steps);
         if (posted) {
           notice("Progress comment updated with final report");
         } else {
@@ -105340,6 +105806,7 @@ ${stdout}`);
       }
     });
   }
+  saveState("completed", "true");
   const actionFailed = !result.success && commitHasChanges;
   if (!result.success) {
     if (commitHasChanges) {
