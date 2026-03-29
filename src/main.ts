@@ -12,13 +12,12 @@ import { setGitHubToken, postInitialProgress, updateProgress, appendReportToProg
 import { createProgressTracker, advanceSteps, loadToolPhaseMap } from './progress-tracker'
 import { createInitialSteps, ProgressStep } from './progress'
 import { installMcp, configureMcp } from './mcp'
-import { installAgentCli, initializeAgent, buildAgentCommand, buildPrompt, runAgentWithRetry } from './agent'
+import { installAgentCli, initializeAgent, buildAgentCommand, executeAgent } from './agent'
 import { startServices, exportServiceBaseUrlEnvVars, generateAuthToken } from './services'
 import { StartupError, analyzeStartupError, formatStartupFailureComment, extractAppErrorLine } from './startup-errors'
 import { runPreflightCheck } from './preflight'
 import { generateGitDiff, configureGitIdentity, autoCommit } from './git'
-import { readSummary, renderReport, parseMetrics } from './report'
-import { extractAgentLogSummary, pushAgentUsageEvent } from './telemetry'
+import { renderReport } from './report'
 import { exec, withRetry, withGroup, setDebugEnabled, debug } from './utils'
 
 /**
@@ -628,65 +627,11 @@ async function run(): Promise<void> {
   tracker.start()
 
   // ── 16. Run Skyramp Testbot ─────────────────────────────────────────
-  const result = await withGroup('Running Skyramp Testbot', async () => {
-    // Copy git diff to working directory for consistent agent access
-    const localDiffPath = path.join(workingDir, '.skyramp_git_diff')
-    fs.copyFileSync(paths.gitDiffPath, localDiffPath)
-
-    // Pass auth token via env var so it doesn't appear in the prompt CLI arg
-    process.env.SKYRAMP_AUTH_TOKEN = authToken
-
-    const prompt = buildPrompt({
-      prTitle,
-      prBody,
-      baseBranch,
-      testDirectory: config.testDirectory,
-      summaryPath: paths.summaryPath,
-      hasAuthToken: !!authToken,
-      repositoryPath: workingDir,
-      services: config.services,
-      userPrompt,
-      prNumber,
-      maxRecommendations: config.maxRecommendations,
-      maxGenerate: config.maxGenerate,
-    })
-
-    // Capture NDJSON log when the agent command actually outputs stream-json.
-    // Claude always does (for telemetry); Cursor only in debug mode.
-    const useNdjsonLog = agentCmd.args.includes('stream-json')
-
-    debug(`Agent command: ${agentCmd.command} ${agentCmd.args.join(' ')}`)
-    debug(`Agent log file: ${useNdjsonLog ? paths.agentLogPath : 'none (streaming to console)'}`)
-    debug(`Prompt length: ${prompt.length} chars`)
-
-    const agentResult = await runAgentWithRetry(agentCmd, prompt, config, {
-      logFile: useNdjsonLog ? paths.agentLogPath : undefined,
-      stdoutFile: useNdjsonLog ? undefined : paths.agentStdoutPath,
-    })
-
-    // Clean up temp diff file
-    fs.rmSync(localDiffPath, { force: true })
-
-    if (!agentResult.success) {
-      core.error(`Skyramp Testbot failed with exit code ${agentResult.exitCode}`)
-      // Don't throw — continue to report/comment phase so partial results are posted
-    } else {
-      core.notice('Skyramp Testbot completed successfully')
-    }
-
-    // Extract model and token usage from NDJSON logs (single streaming pass)
-    if (useNdjsonLog && fs.existsSync(paths.agentLogPath)) {
-      const { model, usage } = await extractAgentLogSummary(paths.agentLogPath)
-      if (model) {
-        core.notice(`${agent.label} auto-selected model: ${model}`)
-      }
-      if (usage) {
-        debug(`Agent usage: ${usage.inputTokens} input, ${usage.outputTokens} output, ${usage.cacheReadInputTokens} cache-read, ${usage.cacheCreationInputTokens} cache-create, ${usage.numTurns} turns, $${usage.totalCostUsd.toFixed(4)}`)
-        pushAgentUsageEvent(usage, model ?? 'unknown', paths.licensePath).catch(err => debug(`Telemetry push failed: ${err}`))
-      }
-    }
-
-    return agentResult
+  // executeAgent handles retries for both transient crashes and empty results (SKYR-3688).
+  const { result, summary, commitMessage: reportCommitMessage, report, renderOptions } = await executeAgent({
+    agentCmd, agentLabel: agent.label, config, paths, workingDir, authToken,
+    prTitle, prBody, baseBranch, userPrompt, prNumber,
+    licensePath: paths.licensePath,
   })
 
   // Stop the progress tracker now that the agent has exited
@@ -698,10 +643,6 @@ async function run(): Promise<void> {
   }
   // Persist latest step state for the post step (cancellation detection)
   core.saveState('steps', JSON.stringify(steps))
-
-  // ── 17. Read summary & parse metrics ───────────────────────────────
-  const { summary, commitMessage: reportCommitMessage, report, renderOptions } = readSummary(paths, config.reportCollapsed, userPrompt || undefined, config.autoCommit)
-  parseMetrics(summary)
 
   // Use agent-provided commit message if available (keeps user input as fallback)
   if (reportCommitMessage) {
@@ -723,22 +664,21 @@ async function run(): Promise<void> {
   debug(`Agent stdout file exists: ${fs.existsSync(paths.agentStdoutPath)}`)
   debug(`Combined result file exists: ${fs.existsSync(paths.combinedResultPath)}`)
 
-  // When the agent succeeded but produced no output (Issue #18: no skip indication),
-  // write a "no tests generated" message so the PR comment is never left blank.
+  // When the agent succeeded but produced no output after all retries (SKYR-3688)
   const emptySummary = !summary || summary.trim() === '' || summary.trim() === 'No summary available'
   if (result.success && emptySummary) {
     const noTestsMsg = [
       '<!-- skyramp-testbot -->',
-      '### Skyramp Testbot — No Tests Generated',
+      '### Skyramp Testbot — Internal Error',
       '',
-      'Testbot analyzed this PR and determined that no new tests were required.',
-      'This typically happens when the changes are non-functional (e.g. documentation, configuration, CI/deployment).',
+      'Testbot encountered an unexpected internal error: the agent completed successfully but did not produce a report.',
+      `This was retried ${config.testbotMaxRetries} times without success.`,
       '',
-      'To request tests explicitly, comment with `@skyramp-testbot` followed by your request.',
+      'Please file an issue at https://github.com/skyramp/testbot/issues with a link to this workflow run.',
     ].join('\n')
     fs.writeFileSync(paths.combinedResultPath, noTestsMsg)
     core.setOutput('test_summary', noTestsMsg)
-    core.notice('Agent produced no output — posting skip indication to PR')
+    core.error(`Agent produced no report after ${config.testbotMaxRetries} attempts — posting error to PR`)
   }
 
   // ── 18. Auto-commit test changes ───────────────────────────────────
