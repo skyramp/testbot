@@ -307,6 +307,8 @@ export function formatStartupFailureComment(opts: {
     `**Command:** \`${command}\``,
     '',
     `**Error:** ${analysis.summary}`,
+    '',
+    '> **Check if the code changes in this PR are causing this failure** — a newly introduced bug, missing dependency, or broken configuration can prevent the service from starting.',
     outputSection,
     '**How to fix:**',
     fixList,

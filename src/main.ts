@@ -9,6 +9,8 @@ import { createAgent } from './agents'
 import { loadConfig } from './config'
 import { checkSelfTrigger } from './self-trigger'
 import { setGitHubToken, postInitialProgress, updateProgress, appendReportToProgress, postStandaloneComment, postValidationError, replaceProgressWithFailure } from './progress'
+import { createProgressTracker, advanceSteps, loadToolPhaseMap } from './progress-tracker'
+import { createInitialSteps, ProgressStep } from './progress'
 import { installMcp, configureMcp } from './mcp'
 import { installAgentCli, initializeAgent, buildAgentCommand, buildPrompt, runAgentWithRetry } from './agent'
 import { startServices, exportServiceBaseUrlEnvVars, generateAuthToken } from './services'
@@ -268,9 +270,15 @@ async function run(): Promise<void> {
   await generateGitDiff(paths.gitDiffPath, workingDir, baseBranch || undefined)
 
   // ── 6. Post initial progress comment ────────────────────────────────
+  const steps = createInitialSteps(isCommentTrigger)
   let progressCommentId: number | null = null
   if (config.postPrComment && prNumber) {
-    progressCommentId = await postInitialProgress(prNumber, isCommentTrigger)
+    advanceSteps(steps, ProgressStep.Setup, Date.now())
+    progressCommentId = await postInitialProgress(prNumber, steps)
+    if (progressCommentId) {
+      core.saveState('progressCommentId', String(progressCommentId))
+      core.saveState('steps', JSON.stringify(steps))
+    }
   }
 
   // ── 7. Inject & validate license ───────────────────────────────────
@@ -292,6 +300,9 @@ async function run(): Promise<void> {
   // ── 8. Install Skyramp MCP ─────────────────────────────────────────
   const mcp = await installMcp(config, inputs, tempDir)
   mcp.licensePath = paths.licensePath
+
+  // Load tool-to-phase mapping from the MCP package (falls back to defaults)
+  loadToolPhaseMap()
 
   // ── 9. Validate license via MCP/Skyramp ────────────────────────────
   await withGroup('Validating Skyramp license', async () => {
@@ -457,13 +468,14 @@ async function run(): Promise<void> {
       '',
       ':warning: **Your service is returning errors**',
       '',
-      'Testbot checked your endpoints before running tests and found issues:',
+      'Testbot checked your endpoints before running tests and found issues.',
+      '**Check if the code changes in this PR are causing the service to fail** — a newly introduced bug, missing dependency, or misconfiguration can prevent the service from starting or responding correctly.',
       '',
       issueBlocks.join('\n\n---\n\n'),
       '',
       `[View full workflow logs ↗](${workflowUrl})`,
       '',
-      '_Re-run the workflow to retry._',
+      '_Fix the issue and push again, or re-run the workflow to retry._',
     ].join('\n')
   }
 
@@ -579,10 +591,41 @@ async function run(): Promise<void> {
     }
   }
 
-  // ── 15. Update progress (step 2: analyzing changes) ────────────────
+  // ── 15. Update progress & start tracker ─────────────────────────────
+  advanceSteps(steps, ProgressStep.Analyzing, Date.now())
   if (progressCommentId) {
-    await updateProgress(progressCommentId, 2, isCommentTrigger)
+    await updateProgress(progressCommentId, steps)
   }
+
+  // Debounce: minimum 5s between PR comment updates
+  let lastUpdateTime = Date.now()
+  const DEBOUNCE_MS = 5000
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  const tracker = createProgressTracker({
+    logFile: paths.agentLogPath,
+    steps,
+    pollIntervalMs: 500,
+    onStepChange: async (updatedSteps) => {
+      // Persist latest steps so the post step has current state on cancellation
+      core.saveState('steps', JSON.stringify(updatedSteps))
+      if (!progressCommentId) return
+      const now = Date.now()
+      if (now - lastUpdateTime < DEBOUNCE_MS) {
+        if (debounceTimer) clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(async () => {
+          if (progressCommentId) {
+            await updateProgress(progressCommentId, updatedSteps)
+            lastUpdateTime = Date.now()
+          }
+        }, DEBOUNCE_MS - (now - lastUpdateTime))
+        return
+      }
+      await updateProgress(progressCommentId, updatedSteps)
+      lastUpdateTime = now
+    },
+  })
+  tracker.start()
 
   // ── 16. Run Skyramp Testbot ─────────────────────────────────────────
   const result = await withGroup('Running Skyramp Testbot', async () => {
@@ -645,6 +688,16 @@ async function run(): Promise<void> {
 
     return agentResult
   })
+
+  // Stop the progress tracker now that the agent has exited
+  tracker.stop()
+  // Clear any pending debounce timer so it can't overwrite the final report
+  if (debounceTimer) {
+    clearTimeout(debounceTimer)
+    debounceTimer = null
+  }
+  // Persist latest step state for the post step (cancellation detection)
+  core.saveState('steps', JSON.stringify(steps))
 
   // ── 17. Read summary & parse metrics ───────────────────────────────
   const { summary, commitMessage: reportCommitMessage, report, renderOptions } = readSummary(paths, config.reportCollapsed, userPrompt || undefined, config.autoCommit)
@@ -740,7 +793,7 @@ async function run(): Promise<void> {
     await withGroup('Posting final PR comment', async () => {
       let posted = false
       if (progressCommentId) {
-        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath, isCommentTrigger)
+        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath, steps)
         if (posted) {
           core.notice('Progress comment updated with final report')
         } else {
@@ -756,6 +809,9 @@ async function run(): Promise<void> {
       }
     })
   }
+
+  // Mark run as completed so the post step knows this wasn't a cancellation
+  core.saveState('completed', 'true')
 
   // If the testbot agent failed AND it produced file changes, fail the action.
   // When there are no changes to commit (e.g. setup PR, no testable code),

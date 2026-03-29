@@ -131,6 +131,16 @@ export async function runAgentWithRetry(
     let stderr = ''
     let exitCode: number
 
+    // Open a streaming write to the log file so the progress tracker can tail it
+    let logStream: fs.WriteStream | null = null
+    if (opts.logFile) {
+      logStream = fs.createWriteStream(opts.logFile, { flags: 'w' })
+      logStream.on('error', (err) => {
+        core.warning(`Log stream error: ${err.message}`)
+        logStream = null
+      })
+    }
+
     try {
       const args = [...agentCmd.args, prompt]
       const result = await exec(agentCmd.command, args, {
@@ -138,15 +148,11 @@ export async function runAgentWithRetry(
         silent: !!opts.logFile,
         input: Buffer.from(''),
         timeout: timeoutMs,
+        stdoutStream: logStream ?? undefined,
       })
       exitCode = result.exitCode
       stdout = result.stdout
       stderr = result.stderr
-
-      // Write log file if requested (debug artifact)
-      if (opts.logFile) {
-        fs.writeFileSync(opts.logFile, stdout + stderr)
-      }
 
       if (exitCode === 0) {
         // Save stdout capture if requested (report fallback)
@@ -158,6 +164,11 @@ export async function runAgentWithRetry(
     } catch (err) {
       exitCode = 1
       stderr = String(err)
+    } finally {
+      if (logStream) {
+        logStream.end()
+        await new Promise<void>(resolve => logStream!.on('finish', resolve))
+      }
     }
 
     // Check for retryable transient errors

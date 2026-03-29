@@ -8,68 +8,139 @@ vi.mock('@actions/github', () => ({
   },
 }))
 
-import { generateProgressBody } from '../progress'
+import { generateProgressBody, createInitialSteps, ProgressStep, formatElapsed } from '../progress'
+import type { StepState } from '../progress'
+
+/** Helper: advance steps up to a given step, marking prior as completed and target as active. */
+function advanceTo(steps: StepState[], targetStep: ProgressStep, now = Date.now()): StepState[] {
+  const result = steps.map(s => ({ ...s }))
+  for (const s of result) {
+    if (s.step === targetStep) {
+      s.status = 'active'
+      s.startedAt = now
+      break
+    }
+    s.status = 'completed'
+    s.startedAt = s.startedAt ?? now - 60000
+    s.completedAt = s.completedAt ?? now
+  }
+  return result
+}
 
 describe('generateProgressBody', () => {
-  it('step 0: all checkboxes unchecked', () => {
-    const body = generateProgressBody(0)
-    expect(body).toContain('[ ] Analyzing Pull Request')
-    expect(body).toContain('[ ] Running tests')
-    expect(body).toContain('[ ] Generating report')
+  it('all pending: all checkboxes unchecked', () => {
+    const steps = createInitialSteps()
+    const body = generateProgressBody(steps)
+    expect(body).toContain('[ ] Setting up environment')
+    expect(body).toContain('[ ] Analyzing code changes')
+    expect(body).toContain('[ ] Generating tests')
   })
 
-  it('step 1: first checkbox checked', () => {
-    const body = generateProgressBody(1)
-    expect(body).toContain('[x] Analyzing Pull Request')
-    expect(body).toContain('[ ] Running tests')
-    expect(body).toContain('[ ] Generating report')
+  it('setup active: shows spinner on setup', () => {
+    const steps = createInitialSteps()
+    steps[0].status = 'active'
+    steps[0].startedAt = Date.now()
+    const body = generateProgressBody(steps)
+    expect(body).toMatch(/Setting up environment\.\.\./)
+    expect(body).toContain('[ ] Analyzing code changes')
   })
 
-  it('step 2: first two checkboxes checked', () => {
-    const body = generateProgressBody(2)
-    expect(body).toContain('[x] Analyzing Pull Request')
-    expect(body).toContain('[x] Running tests')
-    expect(body).toContain('[ ] Generating report')
+  it('analyzing active: setup completed with elapsed time', () => {
+    const steps = advanceTo(createInitialSteps(), ProgressStep.Analyzing)
+    const body = generateProgressBody(steps)
+    expect(body).toContain('[x] Setting up environment (')
+    expect(body).toMatch(/Analyzing code changes\.\.\./)
+    expect(body).toContain('[ ] Generating tests')
   })
 
-  it('step 3: all checkboxes checked', () => {
-    const body = generateProgressBody(3)
-    expect(body).toContain('[x] Analyzing Pull Request')
-    expect(body).toContain('[x] Running tests')
-    expect(body).toContain('[x] Generating report')
+  it('all completed: all checkboxes checked with elapsed times', () => {
+    const now = Date.now()
+    const steps = createInitialSteps()
+    for (const s of steps) {
+      s.status = 'completed'
+      s.startedAt = now - 60000
+      s.completedAt = now
+    }
+    const body = generateProgressBody(steps)
+    expect(body).toContain('[x] Setting up environment (1m 0s)')
+    expect(body).toContain('[x] Generating report (1m 0s)')
   })
 
   it('replaces checklist with report content when provided', () => {
-    const body = generateProgressBody(3, '### Test Report\nAll passed.')
+    const steps = createInitialSteps()
+    const body = generateProgressBody(steps, '### Test Report\nAll passed.')
     expect(body).toContain('### Test Report\nAll passed.')
     expect(body).toContain('workflow run')
-    // Checklist should be gone
-    expect(body).not.toContain('Analyzing')
-    expect(body).not.toContain('Running tests')
-    expect(body).not.toContain('Generating report')
+    expect(body).not.toContain('Setting up environment')
   })
 
   it('does not append anything when reportContent is undefined', () => {
-    const body = generateProgressBody(3)
-    // Body should end after the checklist (with no trailing double newline)
-    expect(body.trimEnd().endsWith('Generating report')).toBe(true)
+    const steps = createInitialSteps()
+    const body = generateProgressBody(steps)
+    expect(body).not.toContain('undefined')
   })
 
   it('includes workflow run link', () => {
-    const body = generateProgressBody(1)
+    const steps = createInitialSteps()
+    const body = generateProgressBody(steps)
     expect(body).toContain('actions/runs/12345')
     expect(body).toContain('workflow run')
   })
 
-  it('shows "Analyzing user request" for comment-triggered runs', () => {
-    const body = generateProgressBody(1, undefined, true)
+  it('shows comment trigger label', () => {
+    const steps = createInitialSteps(true)
+    steps[1].status = 'active'
+    steps[1].startedAt = Date.now()
+    const body = generateProgressBody(steps)
     expect(body).toContain('Analyzing user request')
-    expect(body).not.toContain('Analyzing Pull Request')
+    expect(body).not.toContain('Analyzing code changes')
+  })
+})
+
+describe('formatElapsed', () => {
+  it('formats seconds under 60', () => {
+    expect(formatElapsed(45000)).toBe('45s')
   })
 
-  it('shows "Analyzing Pull Request" for normal runs', () => {
-    const body = generateProgressBody(1, undefined, false)
-    expect(body).toContain('Analyzing Pull Request')
-    expect(body).not.toContain('Analyzing user request')
+  it('formats minutes and seconds', () => {
+    expect(formatElapsed(135000)).toBe('2m 15s')
+  })
+
+  it('formats zero', () => {
+    expect(formatElapsed(0)).toBe('0s')
+  })
+
+  it('rounds down partial seconds', () => {
+    expect(formatElapsed(45999)).toBe('45s')
+  })
+})
+
+describe('createInitialSteps', () => {
+  it('creates 6 steps all pending', () => {
+    const steps = createInitialSteps()
+    expect(steps).toHaveLength(6)
+    expect(steps.every(s => s.status === 'pending')).toBe(true)
+  })
+
+  it('uses comment trigger label when isCommentTrigger is true', () => {
+    const steps = createInitialSteps(true)
+    expect(steps[1].label).toBe('Analyzing user request')
+  })
+
+  it('uses PR label by default', () => {
+    const steps = createInitialSteps()
+    expect(steps[1].label).toBe('Analyzing code changes')
+  })
+
+  it('has correct step order', () => {
+    const steps = createInitialSteps()
+    expect(steps.map(s => s.step)).toEqual([
+      ProgressStep.Setup,
+      ProgressStep.Analyzing,
+      ProgressStep.Generating,
+      ProgressStep.Executing,
+      ProgressStep.Maintaining,
+      ProgressStep.Reporting,
+    ])
   })
 })

@@ -19,7 +19,15 @@ interface ExecResult {
 export async function exec(
   command: string,
   args: string[] = [],
-  options: { cwd?: string; silent?: boolean; ignoreReturnCode?: boolean; env?: Record<string, string>; input?: Buffer; timeout?: number } = {}
+  options: {
+    cwd?: string
+    silent?: boolean
+    ignoreReturnCode?: boolean
+    env?: Record<string, string>
+    input?: Buffer
+    timeout?: number
+    stdoutStream?: import('fs').WriteStream
+  } = {}
 ): Promise<ExecResult> {
   let stdout = ''
   let stderr = ''
@@ -31,7 +39,10 @@ export async function exec(
     env: options.env ? { ...process.env, ...options.env } as { [key: string]: string } : undefined,
     input: options.input,
     listeners: {
-      stdout: (data: Buffer) => { stdout += data.toString() },
+      stdout: (data: Buffer) => {
+        stdout += data.toString()
+        if (options.stdoutStream) options.stdoutStream.write(data)
+      },
       stderr: (data: Buffer) => { stderr += data.toString() },
     },
   }
@@ -50,6 +61,7 @@ export async function exec(
       child.stdout?.on('data', (data: Buffer) => {
         stdout += data.toString()
         if (!options.silent) process.stdout.write(data)
+        if (options.stdoutStream) options.stdoutStream.write(data)
       })
       child.stderr?.on('data', (data: Buffer) => {
         stderr += data.toString()
