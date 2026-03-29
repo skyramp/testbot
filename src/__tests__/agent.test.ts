@@ -20,7 +20,7 @@ describe('buildPrompt', () => {
       prBody: 'Implements search endpoint',
       testDirectory: 'tests/python',
       summaryPath: '/tmp/summary.json',
-      authToken: 'Bearer abc123',
+      hasAuthToken: true,
       repositoryPath: '/home/runner/work/repo',
     })
 
@@ -38,12 +38,12 @@ describe('buildPrompt', () => {
       prBody: '',
       testDirectory: 'tests',
       summaryPath: '/tmp/summary.json',
-      authToken: 'tok-xyz',
+      hasAuthToken: true,
       repositoryPath: '.',
     })
 
     expect(prompt).toContain('AUTHENTICATION:')
-    expect(prompt).toContain('pass this authentication token to the tool\'s authToken parameter: tok-xyz')
+    expect(prompt).toContain('read the SKYRAMP_AUTH_TOKEN environment variable')
   })
 
   it('handles empty auth token and empty description', () => {
@@ -52,12 +52,12 @@ describe('buildPrompt', () => {
       prBody: '',
       testDirectory: 'tests',
       summaryPath: '/tmp/summary.json',
-      authToken: '',
+      hasAuthToken: false,
       repositoryPath: '.',
     })
 
     expect(prompt).toContain('prDescription=&')
-    expect(prompt).toContain('If the token is empty, pass an empty string')
+    expect(prompt).toContain('pass an empty string for the token parameter')
   })
 
   it('includes service context for all services', () => {
@@ -66,7 +66,7 @@ describe('buildPrompt', () => {
       prBody: '',
       testDirectory: 'tests',
       summaryPath: '/tmp/summary.json',
-      authToken: '',
+      hasAuthToken: false,
       repositoryPath: '.',
       services: [
         {
@@ -103,7 +103,7 @@ describe('buildPrompt', () => {
       prBody: '',
       testDirectory: 'tests',
       summaryPath: '/tmp/summary.json',
-      authToken: '',
+      hasAuthToken: false,
       repositoryPath: '.',
       services: [],
     })
@@ -118,7 +118,7 @@ describe('buildPrompt', () => {
       prBody: '',
       testDirectory: 'tests',
       summaryPath: '/tmp/summary.json',
-      authToken: '',
+      hasAuthToken: false,
       repositoryPath: '.',
     })
 
@@ -134,7 +134,7 @@ describe('buildPrompt', () => {
       prBody: '',
       testDirectory: 'tests',
       summaryPath: '/tmp/summary.json',
-      authToken: '',
+      hasAuthToken: false,
       repositoryPath: '.',
       services: [{
         serviceName: 'minimal',

@@ -19,6 +19,26 @@ import { readSummary, renderReport, parseMetrics } from './report'
 import { extractAgentLogSummary, pushAgentUsageEvent } from './telemetry'
 import { exec, withRetry, withGroup, setDebugEnabled, debug } from './utils'
 
+/**
+ * Reply to an unauthorized @skyramp-testbot trigger with a PR comment.
+ */
+async function replyPermissionDenied(
+  octokit: ReturnType<typeof github.getOctokit>,
+  author: string,
+): Promise<void> {
+  const issueNumber = github.context.payload.issue?.number
+  if (!issueNumber) return
+  try {
+    await octokit.rest.issues.createComment({
+      ...github.context.repo,
+      issue_number: issueNumber,
+      body: `@${author} Sorry, only collaborators with **write** access can trigger Skyramp Testbot.`,
+    })
+  } catch (err) {
+    core.info(`Failed to post permission-denied comment: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
 async function run(): Promise<void> {
   // ── 1. Self-trigger check ───────────────────────────────────────────
   const { skip, botName, botEmail } = await checkSelfTrigger()
@@ -89,6 +109,31 @@ async function run(): Promise<void> {
   } else if (isCommentTrigger) {
     const commentBody = github.context.payload.comment?.body as string | undefined
     if (commentBody?.includes('@skyramp-testbot')) {
+      // Verify the commenter has write access to prevent unauthorized triggers
+      const commentAuthor = github.context.payload.comment?.user?.login as string | undefined
+      if (commentAuthor) {
+        const octokit = github.getOctokit(githubToken)
+        try {
+          const { data: permData } = await octokit.rest.repos.getCollaboratorPermissionLevel({
+            ...github.context.repo,
+            username: commentAuthor,
+          })
+          if (!['admin', 'write'].includes(permData.permission)) {
+            core.info(`Ignoring @skyramp-testbot from ${commentAuthor} (permission: ${permData.permission})`)
+            await replyPermissionDenied(octokit, commentAuthor)
+            return
+          }
+        } catch (error) {
+          core.info(
+            `Ignoring @skyramp-testbot from ${commentAuthor} — permission check failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+          await replyPermissionDenied(octokit, commentAuthor)
+          return
+        }
+      }
+
       // Extract prompt after @skyramp-testbot
       const match = commentBody.match(/@skyramp-testbot\s+([\s\S]*)/i)
       if (match) {
@@ -383,6 +428,11 @@ async function run(): Promise<void> {
   const dynamicToken = await generateAuthToken(config, workingDir)
   const authToken = dynamicToken || process.env.SKYRAMP_TEST_TOKEN || ''
 
+  // Mask the token so it never appears in logs or uploaded artifacts
+  if (authToken) {
+    core.setSecret(authToken)
+  }
+
   const tokenSource = dynamicToken ? 'authTokenCommand' : process.env.SKYRAMP_TEST_TOKEN ? 'SKYRAMP_TEST_TOKEN env var' : 'none'
   debug(`Auth token source: ${tokenSource}, length: ${authToken.length}`)
 
@@ -534,13 +584,16 @@ async function run(): Promise<void> {
     const localDiffPath = path.join(workingDir, '.skyramp_git_diff')
     fs.copyFileSync(paths.gitDiffPath, localDiffPath)
 
+    // Pass auth token via env var so it doesn't appear in the prompt CLI arg
+    process.env.SKYRAMP_AUTH_TOKEN = authToken
+
     const prompt = buildPrompt({
       prTitle,
       prBody,
       baseBranch,
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
-      authToken,
+      hasAuthToken: !!authToken,
       repositoryPath: workingDir,
       services: config.services,
       userPrompt,

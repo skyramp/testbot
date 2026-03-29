@@ -100345,14 +100345,6 @@ function getInputs() {
     commitMessage: getInput("commitMessage"),
     postPrComment: getBooleanInput("postPrComment"),
     testExecutionTimeout: parseInt(getInput("testExecutionTimeout"), 10) || 300,
-    maxRecommendations: (() => {
-      const parsed = parseInt(getInput("maxRecommendations"), 10);
-      return isNaN(parsed) ? 20 : Math.max(0, parsed);
-    })(),
-    maxGenerate: (() => {
-      const parsed = parseInt(getInput("maxGenerate"), 10);
-      return isNaN(parsed) ? 3 : Math.max(0, parsed);
-    })(),
     testbotMaxRetries: parseInt(getInput("testbotMaxRetries"), 10) || 3,
     testbotRetryDelay: parseInt(getInput("testbotRetryDelay"), 10) || 10,
     testbotTimeout: parseInt(getInput("testbotTimeout"), 10) || 60,
@@ -100763,8 +100755,6 @@ async function loadConfig(inputs) {
     commitMessage: inputs.commitMessage,
     postPrComment: inputs.postPrComment,
     testExecutionTimeout: inputs.testExecutionTimeout,
-    maxRecommendations: inputs.maxRecommendations,
-    maxGenerate: inputs.maxGenerate,
     testbotMaxRetries: inputs.testbotMaxRetries,
     testbotRetryDelay: inputs.testbotRetryDelay,
     testbotTimeout: inputs.testbotTimeout,
@@ -101074,16 +101064,13 @@ function buildPrompt(opts) {
   const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
   const userPromptParam = opts.userPrompt ? `&userPrompt=${encodeURIComponent(opts.userPrompt)}` : "";
   const prNumberParam = opts.prNumber ? `&prNumber=${opts.prNumber}` : "";
-  const maxRecommendationsParam = opts.maxRecommendations != null && Number.isFinite(opts.maxRecommendations) ? `&maxRecommendations=${opts.maxRecommendations}` : "";
-  const maxGenerateParam = opts.maxGenerate != null && Number.isFinite(opts.maxGenerate) ? `&maxGenerate=${opts.maxGenerate}` : "";
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${userPromptParam}${prNumberParam}${maxRecommendationsParam}${maxGenerateParam}
+${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${userPromptParam}${prNumberParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
 AUTHENTICATION:
-When executing any tests using the Skyramp MCP execute tool, pass this authentication token to the tool's authToken parameter: ${opts.authToken}
-If the token is empty, pass an empty string for the token parameter.
+When executing any tests using the Skyramp MCP execute tool, ${opts.hasAuthToken ? "read the SKYRAMP_AUTH_TOKEN environment variable and pass its value to the tool's authToken parameter." : "pass an empty string for the token parameter."}
 CRITICAL \u2014 GENERATED TEST FILE INTEGRITY:
 When the CLI generates a test file, preserve it exactly as-is. The ONLY permitted edit is fixing chaining \u2014 replacing literal/hardcoded IDs in path params and request bodies with dynamic response IDs. Do NOT add, remove, or modify auth headers, cookies, tokens, env vars, imports, assertions, or request bodies (other than chaining IDs).`;
 }
@@ -104620,65 +104607,25 @@ function renderReport(report, options = {}) {
     for (const t of report.newTestsCreated) {
       const id = t.testId ? ` [\`Test ID-${t.testId}\`]` : "";
       const endpoint2 = t.endpoint ? ` \u2014 \`${t.endpoint}\`` : "";
-      const desc = t.description ? `
-  ${t.description}` : "";
-      const file = t.fileName ? ` (\`${t.fileName}\`)` : "";
-      lines.push(`- ${t.testType}${endpoint2}${id}${file}${desc}`);
+      const desc = t.description ? `: ${t.description}` : "";
+      const file = t.fileName ? t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\`` : "";
+      lines.push(`- ${t.testType}${id}${endpoint2}${desc}${file}`);
     }
     sectionEnd();
   }
   if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
     const recs = report.additionalRecommendations;
     const count = recs.length;
-    const TEST_TYPE_ORDER = {
-      contract: 0,
-      integration: 1,
-      e2e: 2,
-      ui: 3
-    };
-    const TEST_TYPE_LABEL = {
-      contract: "\u{1F4CB} Contract",
-      integration: "\u{1F517} Integration",
-      e2e: "\u{1F310} E2E",
-      ui: "\u{1F5A5}\uFE0F UI"
-    };
-    const CATEGORY_RISK = {
-      security_boundary: 0,
-      breaking_change: 1,
-      data_integrity: 2,
-      business_rule: 3,
-      workflow: 4
-    };
-    const typeKey = (t) => t.toLowerCase();
-    const sorted = [...recs].sort((a, b) => {
-      const ta = TEST_TYPE_ORDER[typeKey(a.testType)] ?? 99;
-      const tb = TEST_TYPE_ORDER[typeKey(b.testType)] ?? 99;
-      if (ta !== tb) return ta - tb;
-      const ca = CATEGORY_RISK[a.category ?? ""] ?? 99;
-      const cb = CATEGORY_RISK[b.category ?? ""] ?? 99;
-      return ca !== cb ? ca - cb : (a.scenarioName ?? "").localeCompare(b.scenarioName ?? "");
-    });
-    const groups = /* @__PURE__ */ new Map();
-    for (const rec of sorted) {
-      const key = typeKey(rec.testType);
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(rec);
-    }
+    const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
+    const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
     sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
     lines.push("To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).");
     lines.push("");
-    for (const [type2, groupRecs] of groups) {
-      const label = TEST_TYPE_LABEL[type2] ?? type2;
-      lines.push(`**${label}**`);
-      lines.push("");
-      for (const rec of groupRecs) {
-        const endpoint2 = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path ? `\`${rec.steps[0].method} ${rec.steps[0].path}\`` : "";
-        const endpointSuffix = endpoint2 ? ` \u2014 ${endpoint2}` : "";
-        const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : "";
-        lines.push(`-${endpointSuffix}${id}
-  ${rec.description}`);
-      }
-      lines.push("");
+    for (const rec of sorted) {
+      const endpoint2 = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path ? `\`${rec.steps[0].method} ${rec.steps[0].path}\`` : "";
+      const endpointSuffix = endpoint2 ? ` \u2014 ${endpoint2}` : "";
+      const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : "";
+      lines.push(`- **${rec.testType}**${id}${endpointSuffix}: ${rec.description}`);
     }
     sectionEnd();
   }
@@ -104858,6 +104805,19 @@ async function pushAgentUsageEvent(usage, model, licensePath) {
 }
 
 // src/main.ts
+async function replyPermissionDenied(octokit, author) {
+  const issueNumber = context2.payload.issue?.number;
+  if (!issueNumber) return;
+  try {
+    await octokit.rest.issues.createComment({
+      ...context2.repo,
+      issue_number: issueNumber,
+      body: `@${author} Sorry, only collaborators with **write** access can trigger Skyramp Testbot.`
+    });
+  } catch (err) {
+    info(`Failed to post permission-denied comment: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 async function run() {
   const { skip, botName, botEmail } = await checkSelfTrigger();
   setOutput("skipped_self_trigger", String(skip));
@@ -104914,6 +104874,27 @@ async function run() {
   } else if (isCommentTrigger) {
     const commentBody = context2.payload.comment?.body;
     if (commentBody?.includes("@skyramp-testbot")) {
+      const commentAuthor = context2.payload.comment?.user?.login;
+      if (commentAuthor) {
+        const octokit = getOctokit(githubToken);
+        try {
+          const { data: permData } = await octokit.rest.repos.getCollaboratorPermissionLevel({
+            ...context2.repo,
+            username: commentAuthor
+          });
+          if (!["admin", "write"].includes(permData.permission)) {
+            info(`Ignoring @skyramp-testbot from ${commentAuthor} (permission: ${permData.permission})`);
+            await replyPermissionDenied(octokit, commentAuthor);
+            return;
+          }
+        } catch (error2) {
+          info(
+            `Ignoring @skyramp-testbot from ${commentAuthor} \u2014 permission check failed: ${error2 instanceof Error ? error2.message : String(error2)}`
+          );
+          await replyPermissionDenied(octokit, commentAuthor);
+          return;
+        }
+      }
       const match = commentBody.match(/@skyramp-testbot\s+([\s\S]*)/i);
       if (match) {
         userPrompt = match[1].trim();
@@ -105161,6 +105142,9 @@ ${stdout}`);
   exportServiceBaseUrlEnvVars(config.services);
   const dynamicToken = await generateAuthToken(config, workingDir);
   const authToken = dynamicToken || process.env.SKYRAMP_TEST_TOKEN || "";
+  if (authToken) {
+    setSecret(authToken);
+  }
   const tokenSource = dynamicToken ? "authTokenCommand" : process.env.SKYRAMP_TEST_TOKEN ? "SKYRAMP_TEST_TOKEN env var" : "none";
   debug2(`Auth token source: ${tokenSource}, length: ${authToken.length}`);
   const workflowUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${process.env.GITHUB_REPOSITORY ?? context2.repo.owner + "/" + context2.repo.repo}/actions/runs/${process.env.GITHUB_RUN_ID ?? context2.runId}`;
@@ -105267,19 +105251,18 @@ ${stdout}`);
   const result = await withGroup("Running Skyramp Testbot", async () => {
     const localDiffPath = path10.join(workingDir, ".skyramp_git_diff");
     fs15.copyFileSync(paths.gitDiffPath, localDiffPath);
+    process.env.SKYRAMP_AUTH_TOKEN = authToken;
     const prompt = buildPrompt({
       prTitle,
       prBody,
       baseBranch,
       testDirectory: config.testDirectory,
       summaryPath: paths.summaryPath,
-      authToken,
+      hasAuthToken: !!authToken,
       repositoryPath: workingDir,
       services: config.services,
       userPrompt,
-      prNumber,
-      maxRecommendations: config.maxRecommendations,
-      maxGenerate: config.maxGenerate
+      prNumber
     });
     const useNdjsonLog = agentCmd.args.includes("stream-json");
     debug2(`Agent command: ${agentCmd.command} ${agentCmd.args.join(" ")}`);
