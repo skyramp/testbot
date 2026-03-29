@@ -6,8 +6,8 @@ import { withGroup, debug, abortAfter, sleep } from './utils'
 
 const PROBE_TIMEOUT_MS = 5_000
 const MAX_ENDPOINTS = 3
-const PROBE_RETRIES = 2
-const PROBE_RETRY_DELAY_S = 2
+const PROBE_RETRIES = 3
+const PROBE_RETRY_DELAY_S = 10
 
 /**
  * Returns true when a probe status code warrants a retry.

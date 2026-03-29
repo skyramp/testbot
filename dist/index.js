@@ -100345,6 +100345,14 @@ function getInputs() {
     commitMessage: getInput("commitMessage"),
     postPrComment: getBooleanInput("postPrComment"),
     testExecutionTimeout: parseInt(getInput("testExecutionTimeout"), 10) || 300,
+    maxRecommendations: (() => {
+      const parsed = parseInt(getInput("maxRecommendations"), 10);
+      return isNaN(parsed) ? 20 : Math.max(0, parsed);
+    })(),
+    maxGenerate: (() => {
+      const parsed = parseInt(getInput("maxGenerate"), 10);
+      return isNaN(parsed) ? 3 : Math.max(0, parsed);
+    })(),
     testbotMaxRetries: parseInt(getInput("testbotMaxRetries"), 10) || 3,
     testbotRetryDelay: parseInt(getInput("testbotRetryDelay"), 10) || 10,
     testbotTimeout: parseInt(getInput("testbotTimeout"), 10) || 60,
@@ -100755,6 +100763,8 @@ async function loadConfig(inputs) {
     commitMessage: inputs.commitMessage,
     postPrComment: inputs.postPrComment,
     testExecutionTimeout: inputs.testExecutionTimeout,
+    maxRecommendations: inputs.maxRecommendations,
+    maxGenerate: inputs.maxGenerate,
     testbotMaxRetries: inputs.testbotMaxRetries,
     testbotRetryDelay: inputs.testbotRetryDelay,
     testbotTimeout: inputs.testbotTimeout,
@@ -101064,8 +101074,10 @@ function buildPrompt(opts) {
   const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
   const userPromptParam = opts.userPrompt ? `&userPrompt=${encodeURIComponent(opts.userPrompt)}` : "";
   const prNumberParam = opts.prNumber ? `&prNumber=${opts.prNumber}` : "";
+  const maxRecommendationsParam = opts.maxRecommendations != null && Number.isFinite(opts.maxRecommendations) ? `&maxRecommendations=${opts.maxRecommendations}` : "";
+  const maxGenerateParam = opts.maxGenerate != null && Number.isFinite(opts.maxGenerate) ? `&maxGenerate=${opts.maxGenerate}` : "";
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${userPromptParam}${prNumberParam}
+${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${userPromptParam}${prNumberParam}${maxRecommendationsParam}${maxGenerateParam}
 ${serviceContext}
 After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
 
@@ -104052,8 +104064,8 @@ var safeDump = renamed("safeDump", "dump");
 // src/preflight.ts
 var PROBE_TIMEOUT_MS = 5e3;
 var MAX_ENDPOINTS = 3;
-var PROBE_RETRIES = 2;
-var PROBE_RETRY_DELAY_S = 2;
+var PROBE_RETRIES = 3;
+var PROBE_RETRY_DELAY_S = 10;
 function isRetryableStatus(status) {
   return status === 404 || status === 401 || status === 403 || status >= 500;
 }
@@ -104607,25 +104619,65 @@ function renderReport(report, options = {}) {
     for (const t of report.newTestsCreated) {
       const id = t.testId ? ` [\`Test ID-${t.testId}\`]` : "";
       const endpoint2 = t.endpoint ? ` \u2014 \`${t.endpoint}\`` : "";
-      const desc = t.description ? `: ${t.description}` : "";
-      const file = t.fileName ? t.description ? ` (\`${t.fileName}\`)` : `: \`${t.fileName}\`` : "";
-      lines.push(`- ${t.testType}${id}${endpoint2}${desc}${file}`);
+      const desc = t.description ? `
+  ${t.description}` : "";
+      const file = t.fileName ? ` (\`${t.fileName}\`)` : "";
+      lines.push(`- ${t.testType}${endpoint2}${id}${file}${desc}`);
     }
     sectionEnd();
   }
   if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
     const recs = report.additionalRecommendations;
     const count = recs.length;
-    const priorityOrder = (p) => p === "high" ? 0 : p === "medium" ? 1 : 2;
-    const sorted = [...recs].sort((a, b) => priorityOrder(a.priority) - priorityOrder(b.priority));
+    const TEST_TYPE_ORDER = {
+      contract: 0,
+      integration: 1,
+      e2e: 2,
+      ui: 3
+    };
+    const TEST_TYPE_LABEL = {
+      contract: "\u{1F4CB} Contract",
+      integration: "\u{1F517} Integration",
+      e2e: "\u{1F310} E2E",
+      ui: "\u{1F5A5}\uFE0F UI"
+    };
+    const CATEGORY_RISK = {
+      security_boundary: 0,
+      breaking_change: 1,
+      data_integrity: 2,
+      business_rule: 3,
+      workflow: 4
+    };
+    const typeKey = (t) => t.toLowerCase();
+    const sorted = [...recs].sort((a, b) => {
+      const ta = TEST_TYPE_ORDER[typeKey(a.testType)] ?? 99;
+      const tb = TEST_TYPE_ORDER[typeKey(b.testType)] ?? 99;
+      if (ta !== tb) return ta - tb;
+      const ca = CATEGORY_RISK[a.category ?? ""] ?? 99;
+      const cb = CATEGORY_RISK[b.category ?? ""] ?? 99;
+      return ca !== cb ? ca - cb : (a.scenarioName ?? "").localeCompare(b.scenarioName ?? "");
+    });
+    const groups = /* @__PURE__ */ new Map();
+    for (const rec of sorted) {
+      const key = typeKey(rec.testType);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(rec);
+    }
     sectionStart(`\u{1F4CC} Additional Recommendations (${count})`);
     lines.push("To generate any of these tests, mention `@skyramp-testbot` in a comment and ask to add them (e.g. `@skyramp-testbot add the contract test for /products`).");
     lines.push("");
-    for (const rec of sorted) {
-      const endpoint2 = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path ? `\`${rec.steps[0].method} ${rec.steps[0].path}\`` : "";
-      const endpointSuffix = endpoint2 ? ` \u2014 ${endpoint2}` : "";
-      const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : "";
-      lines.push(`- **${rec.testType}**${id}${endpointSuffix}: ${rec.description}`);
+    for (const [type2, groupRecs] of groups) {
+      const label = TEST_TYPE_LABEL[type2] ?? type2;
+      lines.push(`**${label}**`);
+      lines.push("");
+      for (const rec of groupRecs) {
+        const endpoint2 = rec.steps.length > 0 && rec.steps[0].method && rec.steps[0].path ? `\`${rec.steps[0].method} ${rec.steps[0].path}\`` : "";
+        const endpointSuffix = endpoint2 ? ` \u2014 ${endpoint2}` : "";
+        const id = rec.testId ? ` [\`Test ID-${rec.testId}\`]` : "";
+        lines.push(`-${endpointSuffix}${id}
+  ${rec.description}`);
+      }
+      lines.push("");
     }
     sectionEnd();
   }
@@ -105150,11 +105202,17 @@ ${stdout}`);
   const workflowUrl = `${process.env.GITHUB_SERVER_URL ?? "https://github.com"}/${process.env.GITHUB_REPOSITORY ?? context2.repo.owner + "/" + context2.repo.repo}/actions/runs/${process.env.GITHUB_RUN_ID ?? context2.runId}`;
   const formatPreflightFailureBody = (issueBlocks) => {
     return [
-      "### :x: Skyramp Testbot \u2014 SUT Pre-flight Validation Failed",
+      "### Skyramp Testbot",
+      "",
+      ":warning: **Your service is returning errors**",
+      "",
+      "Testbot checked your endpoints before running tests and found issues:",
       "",
       issueBlocks.join("\n\n---\n\n"),
       "",
-      `[View full workflow logs \u2197](${workflowUrl})`
+      `[View full workflow logs \u2197](${workflowUrl})`,
+      "",
+      "_Re-run the workflow to retry._"
     ].join("\n");
   };
   const postPreflightFailure = async (body2) => {
@@ -105262,7 +105320,9 @@ ${stdout}`);
       repositoryPath: workingDir,
       services: config.services,
       userPrompt,
-      prNumber
+      prNumber,
+      maxRecommendations: config.maxRecommendations,
+      maxGenerate: config.maxGenerate
     });
     const useNdjsonLog = agentCmd.args.includes("stream-json");
     debug2(`Agent command: ${agentCmd.command} ${agentCmd.args.join(" ")}`);

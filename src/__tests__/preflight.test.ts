@@ -603,7 +603,7 @@ describe('runPreflightCheck', () => {
   })
 
   it('returns STALE_IMAGE and ready=false when endpoint → 404', async () => {
-    mockFetch([{ status: 404 }, { status: 404 }, { status: 404 }])
+    mockFetch([{ status: 404 }, { status: 404 }, { status: 404 }, { status: 404 }])
 
     const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
     expect(result.ready).toBe(false)
@@ -611,7 +611,7 @@ describe('runPreflightCheck', () => {
   })
 
   it('returns AUTH_FAILURE issue and ready=false (blocking)', async () => {
-    mockFetch([{ status: 401 }, { status: 401 }, { status: 401 }])
+    mockFetch([{ status: 401 }, { status: 401 }, { status: 401 }, { status: 401 }])
 
     const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
     expect(result.ready).toBe(false)
@@ -619,8 +619,8 @@ describe('runPreflightCheck', () => {
   })
 
   it('returns UNHEALTHY issue and ready=false when all retries return 500', async () => {
-    // PROBE_RETRIES = 2, so 3 calls total (1 initial + 2 retries)
-    mockFetch([{ status: 500 }, { status: 500 }, { status: 500 }])
+    // PROBE_RETRIES = 3, so 4 calls total (1 initial + 3 retries)
+    mockFetch([{ status: 500 }, { status: 500 }, { status: 500 }, { status: 500 }])
 
     const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
     expect(result.ready).toBe(false)
@@ -628,7 +628,7 @@ describe('runPreflightCheck', () => {
   })
 
   it('returns STALE_IMAGE issue and ready=false when all retries return 404', async () => {
-    mockFetch([{ status: 404 }, { status: 404 }, { status: 404 }])
+    mockFetch([{ status: 404 }, { status: 404 }, { status: 404 }, { status: 404 }])
 
     const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
     expect(result.ready).toBe(false)
@@ -636,7 +636,7 @@ describe('runPreflightCheck', () => {
   })
 
   it('returns AUTH_FAILURE issue and ready=false when all retries return 401', async () => {
-    mockFetch([{ status: 401 }, { status: 401 }, { status: 401 }])
+    mockFetch([{ status: 401 }, { status: 401 }, { status: 401 }, { status: 401 }])
 
     const result = await runPreflightCheck({ diffContent: CRON_DIFF, services, authToken: '' })
     expect(result.ready).toBe(false)

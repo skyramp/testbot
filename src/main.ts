@@ -453,11 +453,17 @@ async function run(): Promise<void> {
     //   ? '\n<details>\n<summary>Debug logs for Pre-flight validation failure</summary>\n\n```\n' + tail + '\n```\n</details>\n'
     //   : ''
     return [
-      '### :x: Skyramp Testbot — SUT Pre-flight Validation Failed',
+      '### Skyramp Testbot',
+      '',
+      ':warning: **Your service is returning errors**',
+      '',
+      'Testbot checked your endpoints before running tests and found issues:',
       '',
       issueBlocks.join('\n\n---\n\n'),
-      "",
+      '',
       `[View full workflow logs ↗](${workflowUrl})`,
+      '',
+      '_Re-run the workflow to retry._',
     ].join('\n')
   }
 
