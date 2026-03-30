@@ -47,6 +47,52 @@ interface RenderOptions {
  * When collapsed is true, each section is wrapped in a collapsible <details> block
  * and an optional commitMessage is rendered as a non-collapsed summary at the top.
  */
+
+// Shared comparator for additional recommendations — used in both the
+// Additional Recommendations section and the Next Steps top-2 pick.
+const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }
+const CATEGORY_RISK: Record<string, number> = {
+  security_boundary: 0,
+  breaking_change: 1,
+  data_integrity: 2,
+  business_rule: 3,
+  workflow: 4,
+}
+
+type RecLike = {
+  testType: string
+  category?: string
+  priority?: string
+  scenarioName?: string
+  steps: { expectedStatusCode?: number }[]
+}
+
+function sortRecommendations(
+  a: RecLike,
+  b: RecLike,
+  typeOrder: Record<string, number>,
+  typeKey: (t: string) => string,
+): number {
+  // 1. Test type: contract → integration → e2e → ui
+  const ta = typeOrder[typeKey(a.testType)] ?? 99
+  const tb = typeOrder[typeKey(b.testType)] ?? 99
+  if (ta !== tb) return ta - tb
+  // 2. Priority: high → medium → low
+  const pa = PRIORITY_ORDER[(a.priority ?? '').toLowerCase()] ?? 99
+  const pb = PRIORITY_ORDER[(b.priority ?? '').toLowerCase()] ?? 99
+  if (pa !== pb) return pa - pb
+  // 3. Category risk: security_boundary → ... → workflow
+  const ca = CATEGORY_RISK[a.category ?? ''] ?? 99
+  const cb = CATEGORY_RISK[b.category ?? ''] ?? 99
+  if (ca !== cb) return ca - cb
+  // 4. Error/edge-case step boost: tests expecting 4xx/5xx sort before happy-path
+  const errA = a.steps.some(s => (s.expectedStatusCode ?? 0) >= 400) ? 0 : 1
+  const errB = b.steps.some(s => (s.expectedStatusCode ?? 0) >= 400) ? 0 : 1
+  if (errA !== errB) return errA - errB
+  // 5. Alphabetical by scenarioName
+  return (a.scenarioName ?? '').localeCompare(b.scenarioName ?? '')
+}
+
 export function renderReport(report: TestbotReport, options: RenderOptions = {}): string {
   const { commitMessage, collapsed = false, userPrompt, autoCommit = false } = options
   const lines: string[] = []
@@ -147,25 +193,8 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
       e2e: '🌐 E2E',
       ui: '🖥️ UI',
     }
-    // Within each test type, sub-sort by category risk level so high-risk items float up
-    const CATEGORY_RISK: Record<string, number> = {
-      security_boundary: 0,
-      breaking_change: 1,
-      data_integrity: 2,
-      business_rule: 3,
-      workflow: 4,
-    }
-
     const typeKey = (t: string) => t.toLowerCase()
-    const sorted = [...recs].sort((a, b) => {
-      const ta = TEST_TYPE_ORDER[typeKey(a.testType)] ?? 99
-      const tb = TEST_TYPE_ORDER[typeKey(b.testType)] ?? 99
-      if (ta !== tb) return ta - tb
-      // Within same test type, sort by category risk then alphabetically
-      const ca = CATEGORY_RISK[a.category ?? ''] ?? 99
-      const cb = CATEGORY_RISK[b.category ?? ''] ?? 99
-      return ca !== cb ? ca - cb : (a.scenarioName ?? '').localeCompare(b.scenarioName ?? '')
-    })
+    const sorted = [...recs].sort((a, b) => sortRecommendations(a, b, TEST_TYPE_ORDER, typeKey))
 
     // Group by test type
     const groups = new Map<string, typeof sorted>()
@@ -252,16 +281,10 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
   const hasTests = report.newTestsCreated.length > 0 || report.testMaintenance.length > 0 || report.testResults.length > 0
 
   // Surface top 2 additional recommendations as call-to-action (from sorted order)
-  const sortedRecs = [...(report.additionalRecommendations ?? [])].sort((a, b) => {
-    const TYPE_ORDER: Record<string, number> = { contract: 0, integration: 1, e2e: 2, ui: 3 }
-    const CAT_RISK: Record<string, number> = { security_boundary: 0, breaking_change: 1, data_integrity: 2, business_rule: 3, workflow: 4 }
-    const ta = TYPE_ORDER[a.testType.toLowerCase()] ?? 99
-    const tb = TYPE_ORDER[b.testType.toLowerCase()] ?? 99
-    if (ta !== tb) return ta - tb
-    const ca = CAT_RISK[a.category ?? ''] ?? 99
-    const cb = CAT_RISK[b.category ?? ''] ?? 99
-    return ca !== cb ? ca - cb : (a.scenarioName ?? '').localeCompare(b.scenarioName ?? '')
-  })
+  const NEXT_STEPS_TYPE_ORDER: Record<string, number> = { contract: 0, integration: 1, e2e: 2, ui: 3 }
+  const sortedRecs = [...(report.additionalRecommendations ?? [])].sort((a, b) =>
+    sortRecommendations(a, b, NEXT_STEPS_TYPE_ORDER, (t: string) => t.toLowerCase()),
+  )
   const topRecs = sortedRecs.slice(0, 2)
 
   if (hasTests && !hasIssues && steps.length === 0 && topRecs.length === 0 && !autoCommit) {
