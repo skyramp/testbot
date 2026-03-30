@@ -101264,6 +101264,29 @@ function tryParseReport(raw) {
     return null;
   }
 }
+var PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
+var CATEGORY_RISK = {
+  security_boundary: 0,
+  breaking_change: 1,
+  data_integrity: 2,
+  business_rule: 3,
+  workflow: 4
+};
+function sortRecommendations(a, b, typeOrder, typeKey) {
+  const ta = typeOrder[typeKey(a.testType)] ?? 99;
+  const tb = typeOrder[typeKey(b.testType)] ?? 99;
+  if (ta !== tb) return ta - tb;
+  const pa = PRIORITY_ORDER[(a.priority ?? "").toLowerCase()] ?? 99;
+  const pb = PRIORITY_ORDER[(b.priority ?? "").toLowerCase()] ?? 99;
+  if (pa !== pb) return pa - pb;
+  const ca = CATEGORY_RISK[a.category ?? ""] ?? 99;
+  const cb = CATEGORY_RISK[b.category ?? ""] ?? 99;
+  if (ca !== cb) return ca - cb;
+  const errA = a.steps.some((s) => (s.expectedStatusCode ?? 0) >= 400) ? 0 : 1;
+  const errB = b.steps.some((s) => (s.expectedStatusCode ?? 0) >= 400) ? 0 : 1;
+  if (errA !== errB) return errA - errB;
+  return (a.scenarioName ?? "").localeCompare(b.scenarioName ?? "");
+}
 function renderReport(report, options = {}) {
   const { commitMessage, collapsed = false, userPrompt, autoCommit: autoCommit2 = false } = options;
   const lines = [];
@@ -101342,22 +101365,8 @@ function renderReport(report, options = {}) {
       e2e: "\u{1F310} E2E",
       ui: "\u{1F5A5}\uFE0F UI"
     };
-    const CATEGORY_RISK = {
-      security_boundary: 0,
-      breaking_change: 1,
-      data_integrity: 2,
-      business_rule: 3,
-      workflow: 4
-    };
     const typeKey = (t) => t.toLowerCase();
-    const sorted = [...recs].sort((a, b) => {
-      const ta = TEST_TYPE_ORDER[typeKey(a.testType)] ?? 99;
-      const tb = TEST_TYPE_ORDER[typeKey(b.testType)] ?? 99;
-      if (ta !== tb) return ta - tb;
-      const ca = CATEGORY_RISK[a.category ?? ""] ?? 99;
-      const cb = CATEGORY_RISK[b.category ?? ""] ?? 99;
-      return ca !== cb ? ca - cb : (a.scenarioName ?? "").localeCompare(b.scenarioName ?? "");
-    });
+    const sorted = [...recs].sort((a, b) => sortRecommendations(a, b, TEST_TYPE_ORDER, typeKey));
     const groups = /* @__PURE__ */ new Map();
     for (const rec of sorted) {
       const key = typeKey(rec.testType);
@@ -101427,16 +101436,10 @@ function renderReport(report, options = {}) {
   const steps = [...report.nextSteps ?? []];
   const hasIssues = report.issuesFound.length > 0;
   const hasTests = report.newTestsCreated.length > 0 || report.testMaintenance.length > 0 || report.testResults.length > 0;
-  const sortedRecs = [...report.additionalRecommendations ?? []].sort((a, b) => {
-    const TYPE_ORDER = { contract: 0, integration: 1, e2e: 2, ui: 3 };
-    const CAT_RISK = { security_boundary: 0, breaking_change: 1, data_integrity: 2, business_rule: 3, workflow: 4 };
-    const ta = TYPE_ORDER[a.testType.toLowerCase()] ?? 99;
-    const tb = TYPE_ORDER[b.testType.toLowerCase()] ?? 99;
-    if (ta !== tb) return ta - tb;
-    const ca = CAT_RISK[a.category ?? ""] ?? 99;
-    const cb = CAT_RISK[b.category ?? ""] ?? 99;
-    return ca !== cb ? ca - cb : (a.scenarioName ?? "").localeCompare(b.scenarioName ?? "");
-  });
+  const NEXT_STEPS_TYPE_ORDER = { contract: 0, integration: 1, e2e: 2, ui: 3 };
+  const sortedRecs = [...report.additionalRecommendations ?? []].sort(
+    (a, b) => sortRecommendations(a, b, NEXT_STEPS_TYPE_ORDER, (t) => t.toLowerCase())
+  );
   const topRecs = sortedRecs.slice(0, 2);
   if (hasTests && !hasIssues && steps.length === 0 && topRecs.length === 0 && !autoCommit2) {
     steps.push("Enable `autoCommit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.");
