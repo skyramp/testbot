@@ -129,6 +129,16 @@ async function runAgentOnce(
   let stderr = ''
   let exitCode: number
 
+  // Open a streaming write to the log file so the progress tracker can tail it
+  let logStream: fs.WriteStream | null = null
+  if (opts.logFile) {
+    logStream = fs.createWriteStream(opts.logFile, { flags: 'w' })
+    logStream.on('error', (err) => {
+      core.warning(`Log stream error: ${err.message}`)
+      logStream = null
+    })
+  }
+
   try {
     const args = [...agentCmd.args, prompt]
     const result = await exec(agentCmd.command, args, {
@@ -136,42 +146,22 @@ async function runAgentOnce(
       silent: !!opts.logFile,
       input: Buffer.from(''),
       timeout: timeoutMs,
+      stdoutStream: logStream ?? undefined,
     })
     exitCode = result.exitCode
     stdout = result.stdout
     stderr = result.stderr
-
-    // Open a streaming write to the log file so the progress tracker can tail it
-    let logStream: fs.WriteStream | null = null
-    if (opts.logFile) {
-      logStream = fs.createWriteStream(opts.logFile, { flags: 'w' })
-      logStream.on('error', (err) => {
-        core.warning(`Log stream error: ${err.message}`)
-        logStream = null
-      })
+  } catch (err) {
+    exitCode = 1
+    stderr = String(err)
+  } finally {
+    if (logStream) {
+      logStream.end()
+      await new Promise<void>(resolve => logStream!.on('finish', resolve))
     }
+  }
 
-    try {
-      const args = [...agentCmd.args, prompt]
-      const result = await exec(agentCmd.command, args, {
-        ignoreReturnCode: true,
-        silent: !!opts.logFile,
-        input: Buffer.from(''),
-        timeout: timeoutMs,
-        stdoutStream: logStream ?? undefined,
-      })
-      exitCode = result.exitCode
-      stdout = result.stdout
-      stderr = result.stderr
-    } catch (err) {
-      exitCode = 1
-      stderr = String(err)
-    } finally {
-      if (logStream) {
-        logStream.end()
-        await new Promise<void>(resolve => logStream!.on('finish', resolve))
-      }
-    }
+  try {
     if (exitCode === 0 && opts.stdoutFile) {
       fs.writeFileSync(opts.stdoutFile, stdout)
     }

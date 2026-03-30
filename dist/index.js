@@ -101645,46 +101645,36 @@ async function runAgentOnce(agentCmd, prompt, config, opts = {}) {
   let stdout = "";
   let stderr = "";
   let exitCode;
+  let logStream = null;
+  if (opts.logFile) {
+    logStream = fs13.createWriteStream(opts.logFile, { flags: "w" });
+    logStream.on("error", (err) => {
+      warning(`Log stream error: ${err.message}`);
+      logStream = null;
+    });
+  }
   try {
     const args = [...agentCmd.args, prompt];
     const result = await exec2(agentCmd.command, args, {
       ignoreReturnCode: true,
       silent: !!opts.logFile,
       input: Buffer.from(""),
-      timeout: timeoutMs
+      timeout: timeoutMs,
+      stdoutStream: logStream ?? void 0
     });
     exitCode = result.exitCode;
     stdout = result.stdout;
     stderr = result.stderr;
-    let logStream = null;
-    if (opts.logFile) {
-      logStream = fs13.createWriteStream(opts.logFile, { flags: "w" });
-      logStream.on("error", (err) => {
-        warning(`Log stream error: ${err.message}`);
-        logStream = null;
-      });
+  } catch (err) {
+    exitCode = 1;
+    stderr = String(err);
+  } finally {
+    if (logStream) {
+      logStream.end();
+      await new Promise((resolve5) => logStream.on("finish", resolve5));
     }
-    try {
-      const args2 = [...agentCmd.args, prompt];
-      const result2 = await exec2(agentCmd.command, args2, {
-        ignoreReturnCode: true,
-        silent: !!opts.logFile,
-        input: Buffer.from(""),
-        timeout: timeoutMs,
-        stdoutStream: logStream ?? void 0
-      });
-      exitCode = result2.exitCode;
-      stdout = result2.stdout;
-      stderr = result2.stderr;
-    } catch (err) {
-      exitCode = 1;
-      stderr = String(err);
-    } finally {
-      if (logStream) {
-        logStream.end();
-        await new Promise((resolve5) => logStream.on("finish", resolve5));
-      }
-    }
+  }
+  try {
     if (exitCode === 0 && opts.stdoutFile) {
       fs13.writeFileSync(opts.stdoutFile, stdout);
     }
