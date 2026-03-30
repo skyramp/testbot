@@ -100853,9 +100853,9 @@ function createInitialSteps(isCommentTrigger = false) {
   return [
     { step: "setup" /* Setup */, label: "Setting up environment", status: "pending" },
     { step: "analyzing" /* Analyzing */, label: isCommentTrigger ? "Analyzing user request" : "Analyzing code changes", status: "pending" },
+    { step: "maintaining" /* Maintaining */, label: "Recommending tests", status: "pending" },
     { step: "generating" /* Generating */, label: "Generating tests", status: "pending" },
     { step: "executing" /* Executing */, label: "Executing tests", status: "pending" },
-    { step: "maintaining" /* Maintaining */, label: "Maintaining existing tests", status: "pending" },
     { step: "reporting" /* Reporting */, label: "Generating report", status: "pending" }
   ];
 }
@@ -101038,9 +101038,9 @@ function toolToStep(rawName) {
 var STEP_ORDER = [
   "setup" /* Setup */,
   "analyzing" /* Analyzing */,
+  "maintaining" /* Maintaining */,
   "generating" /* Generating */,
   "executing" /* Executing */,
-  "maintaining" /* Maintaining */,
   "reporting" /* Reporting */
 ];
 function advanceSteps(steps, targetStep, now) {
@@ -101459,7 +101459,10 @@ function renderReport(report, options = {}) {
     }
     lines.push("");
   }
-  return lines.join("\n");
+  return escapeIssueReferences(lines.join("\n"));
+}
+function escapeIssueReferences(markdown) {
+  return markdown.replace(/#(\d)/g, "<span>#</span>$1");
 }
 function readSummary(paths, reportCollapsed = false, userPrompt, autoCommit2 = false) {
   startGroup("Reading test summary");
@@ -101642,46 +101645,36 @@ async function runAgentOnce(agentCmd, prompt, config, opts = {}) {
   let stdout = "";
   let stderr = "";
   let exitCode;
+  let logStream = null;
+  if (opts.logFile) {
+    logStream = fs13.createWriteStream(opts.logFile, { flags: "w" });
+    logStream.on("error", (err) => {
+      warning(`Log stream error: ${err.message}`);
+      logStream = null;
+    });
+  }
   try {
     const args = [...agentCmd.args, prompt];
     const result = await exec2(agentCmd.command, args, {
       ignoreReturnCode: true,
       silent: !!opts.logFile,
       input: Buffer.from(""),
-      timeout: timeoutMs
+      timeout: timeoutMs,
+      stdoutStream: logStream ?? void 0
     });
     exitCode = result.exitCode;
     stdout = result.stdout;
     stderr = result.stderr;
-    let logStream = null;
-    if (opts.logFile) {
-      logStream = fs13.createWriteStream(opts.logFile, { flags: "w" });
-      logStream.on("error", (err) => {
-        warning(`Log stream error: ${err.message}`);
-        logStream = null;
-      });
+  } catch (err) {
+    exitCode = 1;
+    stderr = String(err);
+  } finally {
+    if (logStream) {
+      logStream.end();
+      await new Promise((resolve5) => logStream.on("finish", resolve5));
     }
-    try {
-      const args2 = [...agentCmd.args, prompt];
-      const result2 = await exec2(agentCmd.command, args2, {
-        ignoreReturnCode: true,
-        silent: !!opts.logFile,
-        input: Buffer.from(""),
-        timeout: timeoutMs,
-        stdoutStream: logStream ?? void 0
-      });
-      exitCode = result2.exitCode;
-      stdout = result2.stdout;
-      stderr = result2.stderr;
-    } catch (err) {
-      exitCode = 1;
-      stderr = String(err);
-    } finally {
-      if (logStream) {
-        logStream.end();
-        await new Promise((resolve5) => logStream.on("finish", resolve5));
-      }
-    }
+  }
+  try {
     if (exitCode === 0 && opts.stdoutFile) {
       fs13.writeFileSync(opts.stdoutFile, stdout);
     }
@@ -105720,6 +105713,26 @@ ${stdout}`);
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
+  startGroup("Testbot step timing");
+  let totalMs = 0;
+  for (const s of steps) {
+    if (s.startedAt != null && s.completedAt != null) {
+      const elapsed = s.completedAt - s.startedAt;
+      totalMs += elapsed;
+      info(`${s.label}: ${formatElapsed(elapsed)}`);
+      setOutput(`duration_${s.step}`, String(Math.floor(elapsed / 1e3)));
+    } else if (s.status === "completed") {
+      info(`${s.label}: completed (no timing data)`);
+      setOutput(`duration_${s.step}`, "0");
+    } else {
+      info(`${s.label}: ${s.status}`);
+      setOutput(`duration_${s.step}`, "");
+    }
+  }
+  const totalSeconds = Math.floor(totalMs / 1e3);
+  info(`Total: ${formatElapsed(totalMs)}`);
+  setOutput("duration_total", String(totalSeconds));
+  endGroup();
   saveState("steps", JSON.stringify(steps));
   if (reportCommitMessage) {
     let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").trim();
