@@ -101459,7 +101459,10 @@ function renderReport(report, options = {}) {
     }
     lines.push("");
   }
-  return lines.join("\n");
+  return escapeIssueReferences(lines.join("\n"));
+}
+function escapeIssueReferences(markdown) {
+  return markdown.replace(/#(\d)/g, "<span>#</span>$1");
 }
 function readSummary(paths, reportCollapsed = false, userPrompt, autoCommit2 = false) {
   startGroup("Reading test summary");

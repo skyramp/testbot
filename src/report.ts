@@ -286,7 +286,18 @@ export function renderReport(report: TestbotReport, options: RenderOptions = {})
     lines.push('')
   }
 
-  return lines.join('\n')
+  return escapeIssueReferences(lines.join('\n'))
+}
+
+/**
+ * Escape `#<number>` patterns so GitHub Flavored Markdown doesn't convert
+ * them into issue/PR auto-links (e.g. "#3" → link to PR #3).
+ * Wraps `#` in an HTML span to break the autolink pattern while rendering
+ * identically. HTML entities and backslash escaping do NOT work — GitHub
+ * resolves them before autolink processing.
+ */
+export function escapeIssueReferences(markdown: string): string {
+  return markdown.replace(/#(\d)/g, '<span>#</span>$1')
 }
 
 /**

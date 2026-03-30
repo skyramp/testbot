@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import { tryParseReport, renderReport, readSummary, parseMetrics } from '../report'
+import { tryParseReport, renderReport, readSummary, parseMetrics, escapeIssueReferences } from '../report'
 import type { Paths, TestbotReport } from '../types'
 
 const validReport: TestbotReport = {
@@ -489,5 +489,29 @@ describe('Next Steps section', () => {
     // Even in collapsed mode, Next Steps uses ### heading, not <details>
     expect(md).toContain('### 💡 Next Steps')
     expect(md).not.toContain('<summary>💡 Next Steps</summary>')
+  })
+})
+
+describe('escapeIssueReferences', () => {
+  it('escapes #<number> patterns to prevent GFM auto-linking', () => {
+    expect(escapeIssueReferences('See recommendation #3 for details')).toBe(
+      'See recommendation <span>#</span>3 for details',
+    )
+  })
+
+  it('escapes multiple occurrences', () => {
+    expect(escapeIssueReferences('#1 and #2 and #10')).toBe(
+      '<span>#</span>1 and <span>#</span>2 and <span>#</span>10',
+    )
+  })
+
+  it('does not escape # not followed by a digit', () => {
+    expect(escapeIssueReferences('### Heading')).toBe('### Heading')
+    expect(escapeIssueReferences('C# language')).toBe('C# language')
+  })
+
+  it('preserves HTML comments like <!-- skyramp-testbot -->', () => {
+    const marker = '<!-- skyramp-testbot -->'
+    expect(escapeIssueReferences(marker)).toBe(marker)
   })
 })
