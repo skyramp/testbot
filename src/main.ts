@@ -8,7 +8,7 @@ import { getInputs, detectAgentType } from './inputs'
 import { createAgent } from './agents'
 import { loadConfig } from './config'
 import { checkSelfTrigger } from './self-trigger'
-import { setGitHubToken, postInitialProgress, updateProgress, appendReportToProgress, postStandaloneComment, postValidationError, replaceProgressWithFailure } from './progress'
+import { setGitHubToken, postInitialProgress, updateProgress, appendReportToProgress, postStandaloneComment, postValidationError, replaceProgressWithFailure, formatElapsed } from './progress'
 import { createProgressTracker, advanceSteps, loadToolPhaseMap } from './progress-tracker'
 import { createInitialSteps, ProgressStep } from './progress'
 import { installMcp, configureMcp } from './mcp'
@@ -641,6 +641,29 @@ async function run(): Promise<void> {
     clearTimeout(debounceTimer)
     debounceTimer = null
   }
+
+  // Log step timing summary to CI logs and set as action outputs
+  core.startGroup('Testbot step timing')
+  let totalMs = 0
+  for (const s of steps) {
+    if (s.startedAt != null && s.completedAt != null) {
+      const elapsed = s.completedAt - s.startedAt
+      totalMs += elapsed
+      core.info(`${s.label}: ${formatElapsed(elapsed)}`)
+      core.setOutput(`duration_${s.step}`, String(Math.floor(elapsed / 1000)))
+    } else if (s.status === 'completed') {
+      core.info(`${s.label}: completed (no timing data)`)
+      core.setOutput(`duration_${s.step}`, '0')
+    } else {
+      core.info(`${s.label}: ${s.status}`)
+      core.setOutput(`duration_${s.step}`, '')
+    }
+  }
+  const totalSeconds = Math.floor(totalMs / 1000)
+  core.info(`Total: ${formatElapsed(totalMs)}`)
+  core.setOutput('duration_total', String(totalSeconds))
+  core.endGroup()
+
   // Persist latest step state for the post step (cancellation detection)
   core.saveState('steps', JSON.stringify(steps))
 

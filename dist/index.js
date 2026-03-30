@@ -105720,6 +105720,26 @@ ${stdout}`);
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
+  startGroup("Testbot step timing");
+  let totalMs = 0;
+  for (const s of steps) {
+    if (s.startedAt != null && s.completedAt != null) {
+      const elapsed = s.completedAt - s.startedAt;
+      totalMs += elapsed;
+      info(`${s.label}: ${formatElapsed(elapsed)}`);
+      setOutput(`duration_${s.step}`, String(Math.floor(elapsed / 1e3)));
+    } else if (s.status === "completed") {
+      info(`${s.label}: completed (no timing data)`);
+      setOutput(`duration_${s.step}`, "0");
+    } else {
+      info(`${s.label}: ${s.status}`);
+      setOutput(`duration_${s.step}`, "");
+    }
+  }
+  const totalSeconds = Math.floor(totalMs / 1e3);
+  info(`Total: ${formatElapsed(totalMs)}`);
+  setOutput("duration_total", String(totalSeconds));
+  endGroup();
   saveState("steps", JSON.stringify(steps));
   if (reportCommitMessage) {
     let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").trim();

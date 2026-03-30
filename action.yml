@@ -155,6 +155,20 @@ outputs:
     description: 'Whether execution was skipped due to detecting own commit'
   commit_sha:
     description: 'SHA of the commit made by testbot (empty if no commit)'
+  duration_setup:
+    description: 'Duration of the setup step in seconds'
+  duration_analyzing:
+    description: 'Duration of the analyzing step in seconds'
+  duration_generating:
+    description: 'Duration of the generating step in seconds'
+  duration_executing:
+    description: 'Duration of the executing step in seconds'
+  duration_maintaining:
+    description: 'Duration of the maintaining step in seconds'
+  duration_reporting:
+    description: 'Duration of the reporting step in seconds'
+  duration_total:
+    description: 'Total duration of all steps in seconds'
 
 runs:
   using: 'node24'
