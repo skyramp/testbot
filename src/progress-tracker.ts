@@ -69,9 +69,9 @@ export function toolToStep(rawName: string): ProgressStep | null {
 const STEP_ORDER: ProgressStep[] = [
   ProgressStep.Setup,
   ProgressStep.Analyzing,
+  ProgressStep.Maintaining,
   ProgressStep.Generating,
   ProgressStep.Executing,
-  ProgressStep.Maintaining,
   ProgressStep.Reporting,
 ]
 

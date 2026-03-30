@@ -137,9 +137,9 @@ describe('createInitialSteps', () => {
     expect(steps.map(s => s.step)).toEqual([
       ProgressStep.Setup,
       ProgressStep.Analyzing,
+      ProgressStep.Maintaining,
       ProgressStep.Generating,
       ProgressStep.Executing,
-      ProgressStep.Maintaining,
       ProgressStep.Reporting,
     ])
   })

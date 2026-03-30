@@ -33,9 +33,9 @@ export function createInitialSteps(isCommentTrigger = false): StepState[] {
   return [
     { step: ProgressStep.Setup, label: 'Setting up environment', status: 'pending' },
     { step: ProgressStep.Analyzing, label: isCommentTrigger ? 'Analyzing user request' : 'Analyzing code changes', status: 'pending' },
+    { step: ProgressStep.Maintaining, label: 'Recommending tests', status: 'pending' },
     { step: ProgressStep.Generating, label: 'Generating tests', status: 'pending' },
     { step: ProgressStep.Executing, label: 'Executing tests', status: 'pending' },
-    { step: ProgressStep.Maintaining, label: 'Maintaining existing tests', status: 'pending' },
     { step: ProgressStep.Reporting, label: 'Generating report', status: 'pending' },
   ]
 }

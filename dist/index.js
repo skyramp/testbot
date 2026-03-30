@@ -100853,9 +100853,9 @@ function createInitialSteps(isCommentTrigger = false) {
   return [
     { step: "setup" /* Setup */, label: "Setting up environment", status: "pending" },
     { step: "analyzing" /* Analyzing */, label: isCommentTrigger ? "Analyzing user request" : "Analyzing code changes", status: "pending" },
+    { step: "maintaining" /* Maintaining */, label: "Recommending tests", status: "pending" },
     { step: "generating" /* Generating */, label: "Generating tests", status: "pending" },
     { step: "executing" /* Executing */, label: "Executing tests", status: "pending" },
-    { step: "maintaining" /* Maintaining */, label: "Maintaining existing tests", status: "pending" },
     { step: "reporting" /* Reporting */, label: "Generating report", status: "pending" }
   ];
 }
@@ -101038,9 +101038,9 @@ function toolToStep(rawName) {
 var STEP_ORDER = [
   "setup" /* Setup */,
   "analyzing" /* Analyzing */,
+  "maintaining" /* Maintaining */,
   "generating" /* Generating */,
   "executing" /* Executing */,
-  "maintaining" /* Maintaining */,
   "reporting" /* Reporting */
 ];
 function advanceSteps(steps, targetStep, now) {

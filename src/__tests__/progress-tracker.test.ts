@@ -70,6 +70,7 @@ describe('advanceSteps', () => {
     steps[0].status = 'active'
     steps[0].startedAt = 1000
 
+    // Generating is at index 3 (after Setup, Analyzing, Maintaining)
     const changed = advanceSteps(steps, ProgressStep.Generating, 5000)
     expect(changed).toBe(true)
 
@@ -77,9 +78,10 @@ describe('advanceSteps', () => {
     expect(steps[0].completedAt).toBe(5000)
     expect(steps[1].status).toBe('completed')
     expect(steps[1].completedAt).toBe(5000)
-    expect(steps[2].status).toBe('active')
-    expect(steps[2].startedAt).toBe(5000)
-    expect(steps[3].status).toBe('pending')
+    expect(steps[2].status).toBe('completed')
+    expect(steps[2].completedAt).toBe(5000)
+    expect(steps[3].status).toBe('active')
+    expect(steps[3].startedAt).toBe(5000)
     expect(steps[4].status).toBe('pending')
     expect(steps[5].status).toBe('pending')
   })
@@ -115,6 +117,7 @@ describe('advanceSteps', () => {
     steps[0].status = 'active'
     steps[0].startedAt = 1000
 
+    // Executing is at index 4 (after Setup, Analyzing, Maintaining, Generating)
     advanceSteps(steps, ProgressStep.Executing, 5000)
 
     expect(steps[1].status).toBe('completed')
@@ -123,8 +126,11 @@ describe('advanceSteps', () => {
     expect(steps[2].status).toBe('completed')
     expect(steps[2].startedAt).toBe(5000)
     expect(steps[2].completedAt).toBe(5000)
-    expect(steps[3].status).toBe('active')
+    expect(steps[3].status).toBe('completed')
     expect(steps[3].startedAt).toBe(5000)
+    expect(steps[3].completedAt).toBe(5000)
+    expect(steps[4].status).toBe('active')
+    expect(steps[4].startedAt).toBe(5000)
   })
 })
 
