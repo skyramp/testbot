@@ -101423,7 +101423,7 @@ function renderReport(report, options = {}) {
   lines.push("| Test Type | Endpoint | Status | Details |");
   lines.push("|-----------|----------|--------|---------|");
   for (const r of report.testResults) {
-    lines.push(`| ${r.testType} | ${r.endpoint} | ${r.status} | ${r.details} |`);
+    lines.push(`| ${escapeCell(r.testType)} | ${escapeCell(r.endpoint)} | ${escapeCell(r.status)} | ${escapeCell(r.details)} |`);
   }
   sectionEnd();
   if (report.issuesFound.length > 0) {
