@@ -100620,6 +100620,7 @@ var CopilotAgent = class extends AgentStrategy {
 };
 
 // src/agents/claude.ts
+var DISALLOWED_TOOLS = ["TodoWrite", "TodoRead", "Write"];
 var ClaudeAgent = class extends AgentStrategy {
   label = "Claude Code";
   binary = "claude";
@@ -100663,8 +100664,11 @@ var ClaudeAgent = class extends AgentStrategy {
       "sonnet",
       "-p",
       "--output-format",
-      "stream-json"
+      "stream-json",
       // always on for telemetry (token usage)
+      "--disallowedTools",
+      ...DISALLOWED_TOOLS
+      // TODO: support disallowed tools for Cursor and Copilot agents too
     ];
     if (enableDebug) {
       args.push("--verbose");
@@ -100675,6 +100679,7 @@ var ClaudeAgent = class extends AgentStrategy {
     if (inputs.anthropicApiKey) {
       process.env.ANTHROPIC_API_KEY = inputs.anthropicApiKey;
       process.env.MCP_TIMEOUT = String(secondsToMilliseconds(config.testExecutionTimeout));
+      process.env.ENABLE_TOOL_SEARCH = "false";
     }
   }
 };
