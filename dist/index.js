@@ -100756,7 +100756,7 @@ async function loadConfig(inputs) {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
   if (!testDirectory) testDirectory = "tests";
-  if (!executorVersion) executorVersion = "v1.3.15";
+  if (!executorVersion) executorVersion = "v1.3.17";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,
@@ -100998,9 +100998,9 @@ var fs9 = __toESM(require("fs"));
 var DEFAULT_PHASE_MAP = {
   skyramp_recommend_tests: "analyzing",
   skyramp_analyze_changes: "analyzing",
-  skyramp_execute_test: "executing",
-  skyramp_execute_tests: "executing",
-  skyramp_execute_tests_batch: "executing",
+  skyramp_execute_test: { before: "maintaining", after: "executing" },
+  skyramp_execute_tests: { before: "maintaining", after: "executing" },
+  skyramp_execute_tests_batch: { before: "maintaining", after: "executing" },
   skyramp_analyze_test_health: "maintaining",
   skyramp_submit_report: "reporting"
 };
@@ -101033,12 +101033,23 @@ function phaseToStep(phase) {
       return null;
   }
 }
-function toolToStep(rawName) {
+function resolvePhase(mapping, generationSeen) {
+  if (typeof mapping === "string") return mapping;
+  return generationSeen ? mapping.after : mapping.before;
+}
+function toolToStepInternal(rawName, generationSeen) {
   const name = rawName.startsWith("mcp__skyramp__") ? rawName.slice("mcp__skyramp__".length) : rawName;
-  const phase = activePhaseMap[name];
-  if (phase) return phaseToStep(phase);
-  if (name.includes("test_generation")) return "generating" /* Generating */;
-  return null;
+  const mapping = activePhaseMap[name];
+  let newGenerationSeen = generationSeen;
+  if (typeof mapping === "string" && mapping === "generating") {
+    newGenerationSeen = true;
+  }
+  if (!mapping && name.includes("test_generation")) {
+    newGenerationSeen = true;
+    return { step: "generating" /* Generating */, sawGeneration: newGenerationSeen };
+  }
+  if (mapping) return { step: phaseToStep(resolvePhase(mapping, newGenerationSeen)), sawGeneration: newGenerationSeen };
+  return { step: null, sawGeneration: newGenerationSeen };
 }
 var STEP_ORDER = [
   "setup" /* Setup */,
@@ -101086,6 +101097,7 @@ function createProgressTracker(opts) {
   let pollTimer = null;
   let stopped = false;
   let leftover = "";
+  let generationSeen = false;
   function processNewLines() {
     if (!fs9.existsSync(logFile)) return;
     const stat2 = fs9.statSync(logFile);
@@ -101105,7 +101117,8 @@ function createProgressTracker(opts) {
     for (const line of lines) {
       const toolNames = extractToolNames(line);
       for (const toolName of toolNames) {
-        const targetStep = toolToStep(toolName);
+        const { step: targetStep, sawGeneration } = toolToStepInternal(toolName, generationSeen);
+        generationSeen = sawGeneration;
         if (targetStep && advanceSteps(steps, targetStep, now)) {
           debug2(`Progress: advanced to ${targetStep} (tool: ${toolName})`);
           changed = true;
@@ -101131,6 +101144,7 @@ function createProgressTracker(opts) {
       stopped = false;
       readPosition = 0;
       leftover = "";
+      generationSeen = false;
       pollTimer = setInterval(() => {
         if (!stopped) processNewLines();
       }, pollIntervalMs);
@@ -101146,7 +101160,7 @@ function createProgressTracker(opts) {
         const toolNames = extractToolNames(leftover);
         const now2 = Date.now();
         for (const toolName of toolNames) {
-          const targetStep = toolToStep(toolName);
+          const { step: targetStep } = toolToStepInternal(toolName, generationSeen);
           if (targetStep) advanceSteps(steps, targetStep, now2);
         }
         leftover = "";
@@ -101404,15 +101418,18 @@ function renderReport(report, options = {}) {
       (m) => typeof m === "object" && m !== null && "beforeStatus" in m
     );
     if (hasBeforeAfter) {
-      lines.push("| File | Change | Before | After |");
-      lines.push("|------|--------|--------|-------|");
+      lines.push("| Test Type | Endpoint | File | Change | Before | After |");
+      lines.push("|-----------|----------|------|--------|--------|-------|");
       for (const m of report.testMaintenance) {
         if (typeof m === "object" && m !== null && "beforeStatus" in m) {
-          const before = `${m.beforeStatus} (${escapeCell(m.beforeDetails)})`;
-          const after = `${m.afterStatus} (${escapeCell(m.afterDetails)})`;
-          lines.push(`| \`${m.fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
+          const testType = escapeCell("testType" in m && m.testType || "\u2014");
+          const endpoint2 = escapeCell("endpoint" in m && m.endpoint || "\u2014");
+          const fileName = escapeCell(m.fileName);
+          const before = `${escapeCell(m.beforeStatus)} (${escapeCell(m.beforeDetails)})`;
+          const after = `${escapeCell(m.afterStatus)} (${escapeCell(m.afterDetails)})`;
+          lines.push(`| ${testType} | ${endpoint2} | \`${fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
         } else {
-          lines.push(`| \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
+          lines.push(`| \u2014 | \u2014 | \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
         }
       }
     } else {
@@ -101428,7 +101445,8 @@ function renderReport(report, options = {}) {
   lines.push("| Test Type | Endpoint | Status | Details |");
   lines.push("|-----------|----------|--------|---------|");
   for (const r of report.testResults) {
-    lines.push(`| ${escapeCell(r.testType)} | ${escapeCell(r.endpoint)} | ${escapeCell(r.status)} | ${escapeCell(r.details)} |`);
+    const details = r.details.replace(/(\S+\.(?:py|ts|js|spec\.\w+))/gi, "`$1`");
+    lines.push(`| ${escapeCell(r.testType)} | ${escapeCell(r.endpoint)} | ${escapeCell(r.status)} | ${escapeCell(details)} |`);
   }
   sectionEnd();
   if (report.issuesFound.length > 0) {
