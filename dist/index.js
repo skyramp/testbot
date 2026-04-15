@@ -25238,7 +25238,7 @@ var require_brace_expansion = __commonJS({
           var x = numeric(n[0]);
           var y = numeric(n[1]);
           var width = Math.max(n[0].length, n[1].length);
-          var incr = n.length == 3 ? Math.abs(numeric(n[2])) : 1;
+          var incr = n.length == 3 ? Math.max(Math.abs(numeric(n[2])), 1) : 1;
           var test = lte;
           var reverse = y < x;
           if (reverse) {
@@ -38917,7 +38917,7 @@ var require_commonjs4 = __commonJS({
     var openPattern = /\\{/g;
     var closePattern = /\\}/g;
     var commaPattern = /\\,/g;
-    var periodPattern = /\\./g;
+    var periodPattern = /\\\./g;
     exports2.EXPANSION_MAX = 1e5;
     function numeric(str2) {
       return !isNaN(str2) ? parseInt(str2, 10) : str2.charCodeAt(0);
@@ -39012,7 +39012,7 @@ var require_commonjs4 = __commonJS({
           const x = numeric(n[0]);
           const y = numeric(n[1]);
           const width = Math.max(n[0].length, n[1].length);
-          let incr = n.length === 3 && n[2] !== void 0 ? Math.abs(numeric(n[2])) : 1;
+          let incr = n.length === 3 && n[2] !== void 0 ? Math.max(Math.abs(numeric(n[2])), 1) : 1;
           let test = lte;
           const reverse = y < x;
           if (reverse) {
@@ -103474,7 +103474,16 @@ var CopilotAgent = class extends AgentStrategy {
 };
 
 // src/agents/claude.ts
-var DISALLOWED_TOOLS = ["TodoWrite", "TodoRead", "Write"];
+var DISALLOWED_TOOLS = [
+  "TodoWrite",
+  "TodoRead",
+  "Write",
+  "CronCreate",
+  "CronDelete",
+  "CronList",
+  "AskUserQuestion",
+  "NotebookEdit"
+];
 var ClaudeAgent = class extends AgentStrategy {
   label = "Claude Code";
   binary = "claude";
@@ -103610,7 +103619,7 @@ async function loadConfig(inputs) {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
   if (!testDirectory) testDirectory = "tests";
-  if (!executorVersion) executorVersion = "v1.3.18";
+  if (!executorVersion) executorVersion = "v1.3.19";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,
@@ -107516,7 +107525,7 @@ function renderReport(report, options = {}) {
   const { commitMessage, collapsed = false, userPrompt, autoCommit: autoCommit2 = false } = options;
   const lines = [];
   lines.push("<!-- skyramp-testbot -->");
-  const isMinimalReport = report.newTestsCreated.length === 0 && report.testResults.length === 0 && report.testMaintenance.length === 0 && report.issuesFound.length > 0;
+  const isMinimalReport = report.newTestsCreated.length === 0 && report.testResults.length === 0 && report.testMaintenance.length === 0 && report.issuesFound.length > 0 && (!report.additionalRecommendations || report.additionalRecommendations.length === 0);
   if (isMinimalReport) {
     lines.push("### \u26A0\uFE0F Skyramp Testbot");
     lines.push("");
@@ -107674,10 +107683,10 @@ function renderReport(report, options = {}) {
   const sortedRecs = [...report.additionalRecommendations ?? []].sort(
     (a, b) => sortRecommendations(a, b, NEXT_STEPS_TYPE_ORDER, (t) => t.toLowerCase())
   );
-  const hasCriticalIssues = report.issuesFound.some(
+  const hasCriticalOrHighIssues = report.issuesFound.some(
     (i) => i.severity === "critical" || i.severity === "high"
   );
-  const topRecs = hasCriticalIssues ? [] : sortedRecs.slice(0, 2);
+  const topRecs = steps.length > 0 || hasCriticalOrHighIssues ? [] : sortedRecs.slice(0, 2);
   if (hasTests && !hasIssues && steps.length === 0 && topRecs.length === 0 && !autoCommit2) {
     steps.push("Enable `autoCommit: true` in your workflow to have Skyramp Testbot commit generated tests automatically.");
   }
@@ -107850,35 +107859,14 @@ function buildAgentCommand(agent, enableDebug) {
   return agent.buildCommand(enableDebug);
 }
 function buildPrompt(opts) {
-  const serviceContext = opts.services?.length ? buildServiceContext(opts.services) : "";
   const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
   const userPromptParam = opts.userPrompt ? `&userPrompt=${encodeURIComponent(opts.userPrompt)}` : "";
   const prNumberParam = opts.prNumber ? `&prNumber=${opts.prNumber}` : "";
   const maxRecommendationsParam = opts.maxRecommendations != null && Number.isFinite(opts.maxRecommendations) ? `&maxRecommendations=${opts.maxRecommendations}` : "";
   const maxGenerateParam = opts.maxGenerate != null && Number.isFinite(opts.maxGenerate) ? `&maxGenerate=${opts.maxGenerate}` : "";
   return `You are the Skyramp TestBot. Read the Skyramp MCP resource at this URI:
-${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&testDirectory=${encodeURIComponent(opts.testDirectory)}&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${userPromptParam}${prNumberParam}${maxRecommendationsParam}${maxGenerateParam}
-${serviceContext}
-After reading the resource, follow EVERY task returned by it. ALL tasks (Task 1: Recommend New Tests, Task 2: Existing Test Maintenance, Task 3: Submit Report) are MANDATORY. Do NOT skip any task.
-
-AUTHENTICATION:
-When executing any tests using the Skyramp MCP execute tool, ${opts.hasAuthToken ? "read the SKYRAMP_AUTH_TOKEN environment variable and pass its value to the tool's authToken parameter." : "pass an empty string for the token parameter."}
-CRITICAL \u2014 GENERATED TEST FILE INTEGRITY:
-When the CLI generates a test file, preserve it exactly as-is. The ONLY permitted edit is fixing chaining \u2014 replacing literal/hardcoded IDs in path params and request bodies with dynamic response IDs. Do NOT add, remove, or modify auth headers, cookies, tokens, env vars, imports, assertions, or request bodies (other than chaining IDs).`;
-}
-function buildServiceContext(services) {
-  const blocks2 = services.map((svc) => {
-    const parts = [`<service name="${svc.serviceName}">`];
-    if (svc.language) parts.push(`  <language>${svc.language}</language>`);
-    if (svc.framework) parts.push(`  <framework>${svc.framework}</framework>`);
-    if (svc.baseUrl) parts.push(`  <base_url>${svc.baseUrl}</base_url>`);
-    if (svc.testDirectory) parts.push(`  <output_dir>${svc.testDirectory}</output_dir>`);
-    parts.push("</service>");
-    return parts.join("\n");
-  });
-  return `<services>
-${blocks2.join("\n")}
-</services>`;
+${SKYRAMP_MCP_SERVER_NAME}://prompts/testbot?prTitle=${encodeURIComponent(opts.prTitle)}&prDescription=${encodeURIComponent(opts.prBody)}&diffFile=.skyramp_git_diff&summaryOutputFile=${encodeURIComponent(opts.summaryPath)}&stateOutputFile=${encodeURIComponent(opts.stateFilePath)}&repositoryPath=${encodeURIComponent(opts.repositoryPath)}${baseBranchParam}${userPromptParam}${prNumberParam}${maxRecommendationsParam}${maxGenerateParam}
+After reading the resource, follow EVERY instruction it returns. ALL tasks are MANDATORY. Do NOT skip any tasks.`;
 }
 async function runAgentOnce(agentCmd, prompt, config, opts = {}) {
   const timeoutMs = secondsToMilliseconds(config.testbotTimeout * 60);
@@ -107950,7 +107938,7 @@ async function executeAgent(opts) {
   let lastReport;
   let lastRenderOptions = {};
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    for (const f of [paths.summaryPath, paths.agentStdoutPath, paths.combinedResultPath]) {
+    for (const f of [paths.summaryPath, paths.agentStdoutPath, paths.combinedResultPath, paths.stateFilePath]) {
       if (fs17.existsSync(f)) fs17.rmSync(f, { force: true });
     }
     lastResult = await withGroup(`Running Skyramp Testbot (attempt ${attempt}/${maxRetries})`, async () => {
@@ -107961,11 +107949,9 @@ async function executeAgent(opts) {
         prTitle,
         prBody,
         baseBranch,
-        testDirectory: config.testDirectory,
         summaryPath: paths.summaryPath,
-        hasAuthToken: !!authToken,
+        stateFilePath: paths.stateFilePath,
         repositoryPath: workingDir,
-        services: config.services,
         userPrompt,
         prNumber,
         maxRecommendations: config.maxRecommendations,
@@ -111692,7 +111678,8 @@ async function run() {
     summaryPath: path19.join(tempDir, "testbot-result.txt"),
     agentLogPath: path19.join(tempDir, "agent-log.ndjson"),
     agentStdoutPath: path19.join(tempDir, "agent-stdout.txt"),
-    combinedResultPath: path19.join(tempDir, "combined-result.txt")
+    combinedResultPath: path19.join(tempDir, "combined-result.txt"),
+    stateFilePath: path19.join(tempDir, "analyze-changes-state.json")
   };
   const workingDir = path19.resolve(inputs.workingDirectory);
   debug2(`Paths: tempDir=${tempDir}, workingDir=${workingDir}`);
@@ -112073,7 +112060,7 @@ ${stdout}`);
   }
   try {
     const artifact = new DefaultArtifactClient();
-    const reportFiles = [paths.summaryPath, paths.combinedResultPath, paths.agentStdoutPath].filter((f) => fs20.existsSync(f));
+    const reportFiles = [paths.summaryPath, paths.combinedResultPath, paths.agentStdoutPath, paths.stateFilePath].filter((f) => fs20.existsSync(f));
     if (reportFiles.length > 0) {
       await artifact.uploadArtifact("skyramp-testbot-report", reportFiles, tempDir);
     }
