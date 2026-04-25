@@ -26463,8 +26463,9 @@ var require_workspace = __commonJS({
       testDirectory: z.string().optional(),
       api: z.object({
         schemaPath: z.string().optional(),
-        authType: z.enum(["bearer", "basic", "oauth", "apiKey", "none"]).optional(),
+        authType: z.enum(["bearer", "basic", "oauth", "apiKey", "cookie", "session", "token", "none"]).optional(),
         authHeader: z.string().optional(),
+        authScheme: z.string().optional(),
         baseUrl: z.string().optional()
       }).strict().optional(),
       runtimeDetails: z.object({
@@ -31567,6 +31568,7 @@ function getInputs() {
     testDirectory: getInput("testDirectory"),
     targetSetupCommand: getInput("targetSetupCommand"),
     authTokenCommand: getInput("authTokenCommand"),
+    uiCredentials: getInput("uiCredentials"),
     targetTeardownCommand: getInput("targetTeardownCommand"),
     skipTargetTeardown: getBooleanInput("skipTargetTeardown"),
     skyrampExecutorVersion: getInput("skyrampExecutorVersion"),
@@ -31665,7 +31667,7 @@ async function loadConfig(inputs) {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
   if (!testDirectory) testDirectory = "tests";
-  if (!executorVersion) executorVersion = "v1.3.19";
+  if (!executorVersion) executorVersion = "v1.3.21";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,

@@ -39,6 +39,10 @@ inputs:
     description: 'Shell command to generate an authentication token. Runs after services start; stdout is captured and set as SKYRAMP_TEST_TOKEN for test execution.'
     required: false
     default: ''
+  uiCredentials:
+    description: 'Browser login credentials for apps that require authentication before UI test recording. Format: "username:password" (one credential per line for multiple users). Store in GitHub Secrets.'
+    required: false
+    default: ''
   targetTeardownCommand:
     description: 'Command to tear down services after test execution (runs in post step, guaranteed even on failure/cancellation)'
     required: false
