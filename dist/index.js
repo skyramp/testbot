@@ -105293,7 +105293,7 @@ async function loadConfig(inputs) {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
   if (!testDirectory) testDirectory = "tests";
-  if (!executorVersion) executorVersion = "v1.3.21";
+  if (!executorVersion) executorVersion = "v1.3.22";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,
