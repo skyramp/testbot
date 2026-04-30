@@ -104856,7 +104856,8 @@ function getInputs() {
     targetSetupRetries: parseInt(getInput("targetSetupRetries"), 10) || 3,
     targetSetupRetryDelay: parseInt(getInput("targetSetupRetryDelay"), 10) || 10,
     reportCollapsed: getBooleanInput("reportCollapsed"),
-    enableDebug: getBooleanInput("enableDebug")
+    enableDebug: getBooleanInput("enableDebug"),
+    allowedAuthors: getInput("allowedAuthors").split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
   };
 }
 function detectAgentType(inputs) {
@@ -113207,6 +113208,7 @@ async function run() {
   let checkRunId;
   let prHeadSha;
   let prHeadRef;
+  let prAuthor = "";
   if (isDispatchTrigger) {
     const inputPrNumber = context2.payload.inputs?.pr_number;
     if (inputPrNumber) {
@@ -113222,6 +113224,7 @@ async function run() {
         baseBranch = pr.base.ref;
         prHeadSha = pr.head.sha;
         prHeadRef = pr.head.ref;
+        prAuthor = pr.user?.login ?? "";
         notice(`Retrigger via workflow_dispatch for PR #${prNumber}`);
         if (prHeadSha) {
           try {
@@ -113246,6 +113249,11 @@ async function run() {
   } else if (isCommentTrigger) {
     const commentBody = context2.payload.comment?.body;
     if (commentBody?.includes("@skyramp-testbot")) {
+      prAuthor = context2.payload.issue?.user?.login ?? "";
+      if (inputs.allowedAuthors.length > 0 && !inputs.allowedAuthors.includes(prAuthor)) {
+        info(`Skipping: PR author '${prAuthor}' is not in allowedAuthors list`);
+        return;
+      }
       const commentAuthor = context2.payload.comment?.user?.login;
       if (commentAuthor) {
         const octokit = getOctokit(githubToken);
@@ -113314,6 +113322,17 @@ async function run() {
     prTitle = context2.payload.pull_request?.title ?? "";
     prBody = context2.payload.pull_request?.body ?? "";
     baseBranch = context2.payload.pull_request?.base?.ref ?? "";
+    prAuthor = context2.payload.pull_request?.user?.login ?? "";
+  }
+  if (inputs.allowedAuthors.length > 0) {
+    if (!prAuthor) {
+      info("Skipping: PR author could not be resolved and allowedAuthors is configured");
+      return;
+    }
+    if (!inputs.allowedAuthors.includes(prAuthor)) {
+      info(`Skipping: PR author '${prAuthor}' is not in allowedAuthors list`);
+      return;
+    }
   }
   if (userPrompt && !prNumber) {
     setFailed("userPrompt requires a PR context (prNumber). This should not happen for issue_comment events.");

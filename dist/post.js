@@ -31607,7 +31607,8 @@ function getInputs() {
     targetSetupRetries: parseInt(getInput("targetSetupRetries"), 10) || 3,
     targetSetupRetryDelay: parseInt(getInput("targetSetupRetryDelay"), 10) || 10,
     reportCollapsed: getBooleanInput("reportCollapsed"),
-    enableDebug: getBooleanInput("enableDebug")
+    enableDebug: getBooleanInput("enableDebug"),
+    allowedAuthors: getInput("allowedAuthors").split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
   };
 }
 

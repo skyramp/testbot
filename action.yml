@@ -28,6 +28,10 @@ inputs:
     required: false
 
   # High priority optional inputs (names align with .skyramp/workspace.yml service fields where applicable, e.g. testDirectory)
+  allowedAuthors:
+    description: 'Newline-separated list of GitHub usernames whose PRs Testbot will act on. When empty (default), all authors are allowed.'
+    required: false
+    default: ''
   testDirectory:
     description: 'Directory containing Skyramp tests. Falls back to workspace.yml testDirectory, then "tests".'
     required: false
