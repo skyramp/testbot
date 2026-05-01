@@ -109302,43 +109302,50 @@ function renderReport(report, options = {}) {
     }
     sectionEnd();
   }
-  sectionStart("\u2705 Test Maintenance");
-  if (report.testMaintenance.length > 0) {
-    const hasBeforeAfter = report.testMaintenance.some(
-      (m) => typeof m === "object" && m !== null && "beforeStatus" in m
-    );
-    if (hasBeforeAfter) {
-      lines.push("| Test Type | Endpoint | File | Change | Before | After |");
-      lines.push("|-----------|----------|------|--------|--------|-------|");
-      for (const m of report.testMaintenance) {
-        if (typeof m === "object" && m !== null && "beforeStatus" in m) {
-          const testType = escapeCell("testType" in m && m.testType || "\u2014");
-          const endpoint2 = escapeCell("endpoint" in m && m.endpoint || "\u2014");
-          const fileName = escapeCell(m.fileName);
-          const before = `${escapeCell(m.beforeStatus)} (${escapeCell(m.beforeDetails)})`;
-          const after = `${escapeCell(m.afterStatus)} (${escapeCell(m.afterDetails)})`;
-          lines.push(`| ${testType} | ${endpoint2} | \`${fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
-        } else {
-          lines.push(`| \u2014 | \u2014 | \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
+  const isBoilerplateMaintenance = report.testMaintenance.length === 0 || report.testMaintenance.length === 1 && typeof report.testMaintenance[0] === "object" && report.testMaintenance[0] !== null && !("beforeStatus" in report.testMaintenance[0]) && /no existing skyramp tests|all scored ignore|0 tests to maintain/i.test(
+    report.testMaintenance[0].description ?? ""
+  );
+  if (!isBoilerplateMaintenance) {
+    sectionStart("\u2705 Test Maintenance");
+    if (report.testMaintenance.length > 0) {
+      const hasBeforeAfter = report.testMaintenance.some(
+        (m) => typeof m === "object" && m !== null && "beforeStatus" in m
+      );
+      if (hasBeforeAfter) {
+        lines.push("| Test Type | Endpoint | File | Change | Before | After |");
+        lines.push("|-----------|----------|------|--------|--------|-------|");
+        for (const m of report.testMaintenance) {
+          if (typeof m === "object" && m !== null && "beforeStatus" in m) {
+            const testType = escapeCell("testType" in m && m.testType || "\u2014");
+            const endpoint2 = escapeCell("endpoint" in m && m.endpoint || "\u2014");
+            const fileName = escapeCell(m.fileName);
+            const before = `${escapeCell(m.beforeStatus)} (${escapeCell(m.beforeDetails)})`;
+            const after = `${escapeCell(m.afterStatus)} (${escapeCell(m.afterDetails)})`;
+            lines.push(`| ${testType} | ${endpoint2} | \`${fileName}\` | ${escapeCell(m.description)} | ${before} | ${after} |`);
+          } else {
+            lines.push(`| \u2014 | \u2014 | \u2014 | ${escapeCell(m.description)} | \u2014 | \u2014 |`);
+          }
+        }
+      } else {
+        for (const m of report.testMaintenance) {
+          lines.push(`- ${m.description}`);
         }
       }
     } else {
-      for (const m of report.testMaintenance) {
-        lines.push(`- ${m.description}`);
-      }
+      lines.push("No existing Skyramp tests required maintenance for this PR.");
     }
-  } else {
-    lines.push("No existing Skyramp tests required maintenance for this PR.");
+    sectionEnd();
   }
-  sectionEnd();
-  sectionStart("\u{1F9EA} Test Results");
-  lines.push("| Test Type | Endpoint | Status | Details |");
-  lines.push("|-----------|----------|--------|---------|");
-  for (const r of report.testResults) {
-    const details = r.details.replace(/(\S+\.(?:py|ts|js|spec\.\w+))/gi, "`$1`");
-    lines.push(`| ${escapeCell(r.testType)} | ${escapeCell(r.endpoint)} | ${escapeCell(r.status)} | ${escapeCell(details)} |`);
+  if (report.testResults.length > 0) {
+    sectionStart("\u{1F9EA} Test Results");
+    lines.push("| Test Type | Endpoint | Status | Details |");
+    lines.push("|-----------|----------|--------|---------|");
+    for (const r of report.testResults) {
+      const details = r.details.replace(/(\S+\.(?:py|ts|js|spec\.\w+))/gi, "`$1`");
+      lines.push(`| ${escapeCell(r.testType)} | ${escapeCell(r.endpoint)} | ${escapeCell(r.status)} | ${escapeCell(details)} |`);
+    }
+    sectionEnd();
   }
-  sectionEnd();
   if (report.issuesFound.length > 0) {
     const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
     const sorted = [...report.issuesFound].sort(
