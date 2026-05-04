@@ -105294,7 +105294,7 @@ async function loadConfig(inputs) {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
   if (!testDirectory) testDirectory = "tests";
-  if (!executorVersion) executorVersion = "v1.3.22";
+  if (!executorVersion) executorVersion = "v1.3.23";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     testDirectory,
@@ -109540,6 +109540,22 @@ async function initializeAgent(agent) {
 function buildAgentCommand(agent, enableDebug) {
   return agent.buildCommand(enableDebug);
 }
+var LOGGABLE_AGENT_FLAGS = /* @__PURE__ */ new Set(["--model", "--output-format"]);
+function sanitizeAgentArgs(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (!LOGGABLE_AGENT_FLAGS.has(arg)) continue;
+    const next = args[i + 1];
+    if (next !== void 0 && !next.startsWith("-")) {
+      out.push(arg, next);
+      i++;
+    } else {
+      out.push(arg);
+    }
+  }
+  return out.join(" ");
+}
 function buildPrompt(opts) {
   const baseBranchParam = opts.baseBranch ? `&baseBranch=${encodeURIComponent(opts.baseBranch)}` : "";
   const userPromptParam = opts.userPrompt ? `&userPrompt=${encodeURIComponent(opts.userPrompt)}` : "";
@@ -109643,7 +109659,8 @@ async function executeAgent(opts) {
         uiCredentials
       });
       const useNdjsonLog = agentCmd.args.includes("stream-json");
-      debug2(`Agent command: ${agentCmd.command} ${agentCmd.args.join(" ")}`);
+      const sanitizedArgs = sanitizeAgentArgs(agentCmd.args);
+      debug2(`Agent command: ${sanitizedArgs ? `testbot ${sanitizedArgs}` : "testbot"}`);
       debug2(`Agent log file: ${useNdjsonLog ? paths.agentLogPath : "none (streaming to console)"}`);
       debug2(`Prompt length: ${prompt.length} chars`);
       const agentResult = await runAgentOnce(agentCmd, prompt, config, {
