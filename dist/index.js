@@ -104807,7 +104807,31 @@ If the error persists, please check whether Actions and API requests are operati
 // node_modules/@actions/artifact/lib/artifact.js
 var client = new DefaultArtifactClient();
 
+// src/types.ts
+var GeneratedTestsMode = /* @__PURE__ */ ((GeneratedTestsMode2) => {
+  GeneratedTestsMode2["SameBranch"] = "same-branch";
+  GeneratedTestsMode2["SeparateBranch"] = "separate-branch";
+  return GeneratedTestsMode2;
+})(GeneratedTestsMode || {});
+var SKYRAMP_MCP_SERVER_NAME = "skyramp";
+var AgentStrategy = class {
+  supportsNdjsonLog = false;
+  /** Export API key via core.exportVariable. Override for custom behavior (e.g., process.env). */
+  exportEnv(inputs, _config) {
+    const key = inputs[this.apiKeyField];
+    if (key) exportVariable(this.envVar, key);
+  }
+};
+
 // src/inputs.ts
+function parseGeneratedTestsMode(raw) {
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "") return "separate-branch" /* SeparateBranch */;
+  const valid = Object.values(GeneratedTestsMode);
+  if (valid.includes(normalized)) return normalized;
+  warning(`Invalid generatedTestsMode '${raw}'. Falling back to '${"separate-branch" /* SeparateBranch */}'.`);
+  return "separate-branch" /* SeparateBranch */;
+}
 function getInputs() {
   return {
     skyrampLicenseFile: getInput("skyrampLicenseFile", { required: true }),
@@ -104840,6 +104864,7 @@ function getInputs() {
     workingDirectory: getInput("workingDirectory"),
     autoCommit: getBooleanInput("autoCommit"),
     commitMessage: getInput("commitMessage"),
+    generatedTestsMode: parseGeneratedTestsMode(getInput("generatedTestsMode")),
     postPrComment: getBooleanInput("postPrComment"),
     testExecutionTimeout: parseInt(getInput("testExecutionTimeout"), 10) || 300,
     maxRecommendations: (() => {
@@ -104882,17 +104907,6 @@ function detectAgentType(inputs) {
   }
   throw new Error("No agent API key provided. Please provide one of: cursorApiKey, copilotApiKey, or anthropicApiKey.");
 }
-
-// src/types.ts
-var SKYRAMP_MCP_SERVER_NAME = "skyramp";
-var AgentStrategy = class {
-  supportsNdjsonLog = false;
-  /** Export API key via core.exportVariable. Override for custom behavior (e.g., process.env). */
-  exportEnv(inputs, _config) {
-    const key = inputs[this.apiKeyField];
-    if (key) exportVariable(this.envVar, key);
-  }
-};
 
 // src/agents/cursor.ts
 var fs6 = __toESM(require("fs"));
@@ -105313,6 +105327,7 @@ async function loadConfig(inputs) {
     targetReadyCheckDiagnosticsCommand: inputs.targetReadyCheckDiagnosticsCommand,
     autoCommit: inputs.autoCommit,
     commitMessage: inputs.commitMessage,
+    generatedTestsMode: inputs.generatedTestsMode,
     postPrComment: inputs.postPrComment,
     testExecutionTimeout: inputs.testExecutionTimeout,
     maxRecommendations: inputs.maxRecommendations,
@@ -105343,44 +105358,53 @@ async function loadConfig(inputs) {
 // src/constants.ts
 var BOT_NAME = "Skyramp Testbot";
 var BOT_EMAIL = "test-bot@skyramp.dev";
+var BOT_GITHUB_LOGIN = "skyramp-testbot[bot]";
 
 // src/self-trigger.ts
 async function checkSelfTrigger() {
-  startGroup("Checking for self-triggered execution");
-  let commitAuthor = "";
-  let commitEmail = "";
-  const ctx = context2;
-  const headCommit = ctx.payload.head_commit;
-  if (headCommit?.author?.name) {
-    commitAuthor = headCommit.author.name;
-    commitEmail = headCommit.author.email ?? "";
-  }
-  if (!commitAuthor) {
-    const prHeadSha = ctx.payload.pull_request?.head?.sha;
-    const ref = prHeadSha || "HEAD";
-    if (prHeadSha) {
-      info(`Using pull_request head SHA: ${prHeadSha}`);
+  let result = { skip: false, botName: BOT_NAME, botEmail: BOT_EMAIL };
+  await withGroup("Checking for self-triggered execution", async () => {
+    const ctx = context2;
+    const prAuthor = ctx.payload.pull_request?.user?.login;
+    if (ctx.eventName === "pull_request" && prAuthor === BOT_GITHUB_LOGIN) {
+      notice(`Detected side PR opened by ${BOT_GITHUB_LOGIN}. Skipping to prevent recursion.`);
+      result = { skip: true, botName: BOT_NAME, botEmail: BOT_EMAIL };
+      return;
     }
-    commitAuthor = (await exec2("git", ["log", "-1", "--pretty=format:%an", ref], { silent: true })).stdout.trim();
-    commitEmail = (await exec2("git", ["log", "-1", "--pretty=format:%ae", ref], { silent: true })).stdout.trim();
-  }
-  info(`Commit author: ${commitAuthor}`);
-  info(`Commit email: ${commitEmail}`);
-  info(`Expected name: ${BOT_NAME}`);
-  info(`Expected email: ${BOT_EMAIL}`);
-  const isBotCommit = commitAuthor === BOT_NAME && commitEmail === BOT_EMAIL;
-  const action5 = ctx.payload.action;
-  const isSynchronize = ctx.eventName === "pull_request" && action5 === "synchronize";
-  const skip = isBotCommit && isSynchronize;
-  if (isBotCommit && !isSynchronize) {
-    notice(`Head commit is by ${BOT_NAME} but event is '${ctx.eventName}' action='${action5 ?? "N/A"}' (not pull_request/synchronize). Proceeding normally.`);
-  } else if (skip) {
-    notice(`Detected self-triggered execution (commit by ${BOT_NAME} on synchronize event). Skipping to prevent recursion.`);
-  } else {
-    notice("Not a self-triggered execution. Proceeding with test maintenance.");
-  }
-  endGroup();
-  return { skip, botName: BOT_NAME, botEmail: BOT_EMAIL };
+    let commitAuthor = "";
+    let commitEmail = "";
+    const headCommit = ctx.payload.head_commit;
+    if (headCommit?.author?.name) {
+      commitAuthor = headCommit.author.name;
+      commitEmail = headCommit.author.email ?? "";
+    }
+    if (!commitAuthor) {
+      const prHeadSha = ctx.payload.pull_request?.head?.sha;
+      const ref = prHeadSha || "HEAD";
+      if (prHeadSha) {
+        info(`Using pull_request head SHA: ${prHeadSha}`);
+      }
+      commitAuthor = (await exec2("git", ["log", "-1", "--pretty=format:%an", ref], { silent: true })).stdout.trim();
+      commitEmail = (await exec2("git", ["log", "-1", "--pretty=format:%ae", ref], { silent: true })).stdout.trim();
+    }
+    info(`Commit author: ${commitAuthor}`);
+    info(`Commit email: ${commitEmail}`);
+    info(`Expected name: ${BOT_NAME}`);
+    info(`Expected email: ${BOT_EMAIL}`);
+    const isBotCommit = commitAuthor === BOT_NAME && commitEmail === BOT_EMAIL;
+    const action5 = ctx.payload.action;
+    const isSynchronize = ctx.eventName === "pull_request" && action5 === "synchronize";
+    const skip = isBotCommit && isSynchronize;
+    if (isBotCommit && !isSynchronize) {
+      notice(`Head commit is by ${BOT_NAME} but event is '${ctx.eventName}' action='${action5 ?? "N/A"}' (not pull_request/synchronize). Proceeding normally.`);
+    } else if (skip) {
+      notice(`Detected self-triggered execution (commit by ${BOT_NAME} on synchronize event). Skipping to prevent recursion.`);
+    } else {
+      notice("Not a self-triggered execution. Proceeding with test maintenance.");
+    }
+    result = { skip, botName: BOT_NAME, botEmail: BOT_EMAIL };
+  });
+  return result;
 }
 
 // src/progress.ts
@@ -105399,7 +105423,7 @@ function createInitialSteps(isCommentTrigger = false) {
     { step: "maintaining" /* Maintaining */, label: "Recommending tests", status: "pending" },
     { step: "generating" /* Generating */, label: "Generating tests", status: "pending" },
     { step: "executing" /* Executing */, label: "Executing tests", status: "pending" },
-    { step: "reporting" /* Reporting */, label: "Generating report", status: "pending" }
+    { step: "reporting" /* Reporting */, label: "Generating pull request and report", status: "pending" }
   ];
 }
 var _githubToken = "";
@@ -105411,11 +105435,14 @@ function generateProgressBody(steps, reportContent, _isCommentTrigger = false) {
   const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context2.runId}`;
   if (reportContent) {
     const content = reportContent.replace(/^\s*<!--\s*skyramp-testbot\s*-->\s*\n?/, "");
-    return `<!-- skyramp-testbot -->
-### Skyramp Testbot
-([workflow run](${runUrl}))
-
-${content}`;
+    return [
+      "<!-- skyramp-testbot -->",
+      "### Skyramp Testbot",
+      "",
+      content,
+      "",
+      `<sub>[Workflow run](${runUrl})</sub>`
+    ].join("\n");
   }
   const lines = steps.map((s) => {
     if (s.status === "completed") {
@@ -105439,11 +105466,39 @@ function getOctokit2() {
   }
   return getOctokit(_githubToken);
 }
+var TESTBOT_COMMENT_MARKER = "<!-- skyramp-testbot -->";
+async function findExistingTestbotComment(prNumber) {
+  try {
+    const octokit = getOctokit2();
+    for await (const { data } of octokit.paginate.iterator(
+      octokit.rest.issues.listComments,
+      { ...context2.repo, issue_number: prNumber, per_page: 100 }
+    )) {
+      for (const c of data) {
+        if (c.body?.includes(TESTBOT_COMMENT_MARKER)) return c.id;
+      }
+    }
+  } catch (err) {
+    warning(`Failed to list PR comments while looking for prior testbot comment: ${err}`);
+  }
+  return null;
+}
 async function postInitialProgress(prNumber, steps) {
   startGroup("Posting initial progress comment");
   try {
     const octokit = getOctokit2();
     const body2 = generateProgressBody(steps);
+    const existing = await findExistingTestbotComment(prNumber);
+    if (existing) {
+      await octokit.rest.issues.updateComment({
+        ...context2.repo,
+        comment_id: existing,
+        body: body2
+      });
+      notice(`Progress comment reused (ID: ${existing})`);
+      endGroup();
+      return existing;
+    }
     const { data } = await octokit.rest.issues.createComment({
       ...context2.repo,
       issue_number: prNumber,
@@ -109197,8 +109252,13 @@ function sortRecommendations(a, b, typeOrder, typeKey) {
   return (a.scenarioName ?? "").localeCompare(b.scenarioName ?? "");
 }
 function renderReport(report, options = {}) {
-  const { commitMessage, collapsed = false, userPrompt, autoCommit: autoCommit2 = false } = options;
+  const { collapsed = false, userPrompt, autoCommit: autoCommit2 = false, audience } = options;
   const lines = [];
+  const includeBusinessCase = audience !== "comment" /* Comment */;
+  const includeTests = audience !== "comment" /* Comment */;
+  const includeIssuesAndNextSteps = audience !== "side-pr" /* SidePr */;
+  const businessCaseBlockquote = audience !== "side-pr" /* SidePr */;
+  const testsImplementedAlwaysOpen = audience === "side-pr" /* SidePr */;
   lines.push("<!-- skyramp-testbot -->");
   const isMinimalReport = report.newTestsCreated.length === 0 && report.testResults.length === 0 && report.testMaintenance.length === 0 && report.issuesFound.length > 0 && (!report.additionalRecommendations || report.additionalRecommendations.length === 0);
   if (isMinimalReport) {
@@ -109222,10 +109282,6 @@ function renderReport(report, options = {}) {
     lines.push(`> Following user instruction: *${userPrompt}*`);
     lines.push("");
   }
-  if (collapsed && commitMessage) {
-    lines.push(`**Summary:** ${commitMessage}`);
-    lines.push("");
-  }
   const sectionStart = (title) => {
     if (collapsed) {
       lines.push("<details>");
@@ -109242,12 +109298,20 @@ function renderReport(report, options = {}) {
     }
     lines.push("");
   };
-  for (const bcaLine of report.businessCaseAnalysis.split(/\r?\n/)) {
-    lines.push(`> ${bcaLine}`);
+  if (includeBusinessCase) {
+    const prefix2 = businessCaseBlockquote ? "> " : "";
+    for (const bcaLine of report.businessCaseAnalysis.split(/\r?\n/)) {
+      lines.push(`${prefix2}${bcaLine}`);
+    }
+    lines.push("");
   }
-  lines.push("");
-  if (report.newTestsCreated.length > 0) {
-    sectionStart("\u{1F4A1} Test Recommendations Implemented");
+  if (includeTests && report.newTestsCreated.length > 0) {
+    const implementedTitle = `\u{1F4A1} Test Recommendations Implemented (${report.newTestsCreated.length})`;
+    if (testsImplementedAlwaysOpen) {
+      lines.push(`### ${implementedTitle}`);
+    } else {
+      sectionStart(implementedTitle);
+    }
     for (const t of report.newTestsCreated) {
       const id = t.testId ? `\`${t.testId}\`` : t.testType;
       const endpointLine = t.endpoint ? `
@@ -109257,9 +109321,13 @@ function renderReport(report, options = {}) {
       const file = t.fileName ? ` (\`${t.fileName}\`)` : "";
       lines.push(`- ${id}${file}${endpointLine}${desc}`);
     }
-    sectionEnd();
+    if (testsImplementedAlwaysOpen) {
+      lines.push("");
+    } else {
+      sectionEnd();
+    }
   }
-  if (report.additionalRecommendations && report.additionalRecommendations.length > 0) {
+  if (includeTests && report.additionalRecommendations && report.additionalRecommendations.length > 0) {
     const recs = report.additionalRecommendations;
     const count = recs.length;
     const TEST_TYPE_ORDER = {
@@ -109305,7 +109373,7 @@ function renderReport(report, options = {}) {
   const isBoilerplateMaintenance = report.testMaintenance.length === 0 || report.testMaintenance.length === 1 && typeof report.testMaintenance[0] === "object" && report.testMaintenance[0] !== null && !("beforeStatus" in report.testMaintenance[0]) && /no existing skyramp tests|all scored ignore|0 tests to maintain/i.test(
     report.testMaintenance[0].description ?? ""
   );
-  if (!isBoilerplateMaintenance) {
+  if (includeTests && !isBoilerplateMaintenance) {
     sectionStart("\u2705 Test Maintenance");
     if (report.testMaintenance.length > 0) {
       const hasBeforeAfter = report.testMaintenance.some(
@@ -109336,7 +109404,7 @@ function renderReport(report, options = {}) {
     }
     sectionEnd();
   }
-  if (report.testResults.length > 0) {
+  if (includeTests && report.testResults.length > 0) {
     sectionStart("\u{1F9EA} Test Results");
     lines.push("| Test Type | Endpoint | Status | Details |");
     lines.push("|-----------|----------|--------|---------|");
@@ -109346,17 +109414,28 @@ function renderReport(report, options = {}) {
     }
     sectionEnd();
   }
-  if (report.issuesFound.length > 0) {
+  if (includeIssuesAndNextSteps && report.issuesFound.length > 0) {
     const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
     const sorted = [...report.issuesFound].sort(
       (a, b) => (SEVERITY_ORDER[a.severity ?? ""] ?? 4) - (SEVERITY_ORDER[b.severity ?? ""] ?? 4)
     );
-    sectionStart("\u26A0\uFE0F Issues Found");
+    if (audience === "comment" /* Comment */) {
+      lines.push("### \u26A0\uFE0F Issues Found");
+    } else {
+      sectionStart("\u26A0\uFE0F Issues Found");
+    }
     for (const issue2 of sorted) {
       const badge = issue2.severity ? `**[${issue2.severity.toUpperCase()}]** ` : "";
       lines.push(`- ${badge}${issue2.description}`);
     }
-    sectionEnd();
+    if (audience === "comment" /* Comment */) {
+      lines.push("");
+    } else {
+      sectionEnd();
+    }
+  }
+  if (!includeIssuesAndNextSteps) {
+    return escapeIssueReferences(lines.join("\n"));
   }
   const steps = [...report.nextSteps ?? []];
   const hasIssues = report.issuesFound.length > 0;
@@ -113106,8 +113185,7 @@ async function configureGitIdentity(botName, botEmail) {
   notice(`Git identity configured as ${botName} <${botEmail}>`);
   endGroup();
 }
-async function autoCommit(config) {
-  startGroup("Auto-committing test changes");
+async function stageTestFiles(config) {
   const dirs = /* @__PURE__ */ new Set();
   for (const svc of config.services) {
     if (svc.testDirectory) dirs.add(svc.testDirectory);
@@ -113128,7 +113206,15 @@ async function autoCommit(config) {
     ["diff", "--cached", "--quiet"],
     { ignoreReturnCode: true }
   );
-  if (diffExitCode === 0) {
+  return diffExitCode !== 0;
+}
+function sidePrBranchName(prNumber) {
+  return `skyramp-testbot/pr-${prNumber}`;
+}
+async function autoCommit(config) {
+  startGroup("Auto-committing test changes");
+  const hasStaged = await stageTestFiles(config);
+  if (!hasStaged) {
     notice("No test file changes to commit");
     setOutput("commit_sha", "");
     endGroup();
@@ -113161,6 +113247,259 @@ async function autoCommit(config) {
   endGroup();
   return { sha, hasChanges: true };
 }
+var STALE_BANNER_MARKER = "<!-- skyramp-testbot-no-changes-banner -->";
+function buildStaleBanner(originalPrNumber) {
+  return [
+    STALE_BANNER_MARKER,
+    `> \u26A0\uFE0F The latest push on #${originalPrNumber} did not require any new test changes.`,
+    `> This PR still reflects testbot's analysis from an earlier push; consider regenerating via \`@skyramp-testbot\` or merging as-is if still relevant.`,
+    ""
+  ].join("\n");
+}
+function stripStaleBanner(body2) {
+  const re = new RegExp(
+    `${STALE_BANNER_MARKER}\\r?\\n(?:> [^\\n]*\\r?\\n){2}\\r?\\n?`,
+    "g"
+  );
+  return body2.replace(re, "");
+}
+async function createSidePr(config, options) {
+  startGroup("Creating side PR for generated tests");
+  const hasStaged = await stageTestFiles(config);
+  if (!hasStaged) {
+    notice("No test file changes to commit \u2014 skipping side PR creation");
+    setOutput("commit_sha", "");
+    const octokit2 = getOctokit(options.githubToken);
+    const { owner: owner2, repo: repo2 } = context2.repo;
+    const branch2 = sidePrBranchName(options.prNumber);
+    const existing = await findExistingSidePr(octokit2, owner2, repo2, branch2);
+    if (existing) {
+      const baseBody = stripStaleBanner(existing.body);
+      const annotated = buildStaleBanner(options.prNumber) + baseBody;
+      try {
+        await octokit2.rest.pulls.update({
+          owner: owner2,
+          repo: repo2,
+          pull_number: existing.number,
+          body: annotated
+        });
+        notice(`Annotated existing side PR #${existing.number} with no-changes banner`);
+      } catch (err) {
+        warning(`Failed to annotate side PR #${existing.number}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      setOutput("side_pr_url", existing.html_url);
+      setOutput("side_pr_number", String(existing.number));
+      endGroup();
+      return {
+        url: existing.html_url,
+        number: existing.number,
+        sha: "",
+        hasChanges: false,
+        annotatedStale: true
+      };
+    }
+    setOutput("side_pr_url", "");
+    setOutput("side_pr_number", "");
+    endGroup();
+    return { url: "", number: 0, sha: "", hasChanges: false };
+  }
+  const branch = sidePrBranchName(options.prNumber);
+  await exec2("git", ["stash", "push", "--include-untracked", "-m", "skyramp-testbot side-pr changes"]);
+  try {
+    await exec2("git", ["checkout", "-B", branch, options.headSha]);
+  } catch (err) {
+    await exec2("git", ["stash", "pop"], { ignoreReturnCode: true });
+    const message = err instanceof Error ? err.message : String(err);
+    warning(`Failed to check out side branch at ${options.headSha}: ${message}`);
+    setOutput("commit_sha", "");
+    setOutput("side_pr_url", "");
+    setOutput("side_pr_number", "");
+    endGroup();
+    return { url: "", number: 0, sha: "", hasChanges: true, commitError: message };
+  }
+  await exec2("git", ["stash", "pop"]);
+  await stageTestFiles(config);
+  const {
+    exitCode: commitExitCode,
+    stdout: commitStdout,
+    stderr: commitStderr
+  } = await exec2("git", ["commit", "-m", config.commitMessage], { ignoreReturnCode: true });
+  if (commitExitCode !== 0) {
+    const errorOutput = commitStderr.trim() || commitStdout.trim() || `git commit exited with code ${commitExitCode}`;
+    warning(`git commit failed (exit code ${commitExitCode})`);
+    setOutput("commit_sha", "");
+    setOutput("side_pr_url", "");
+    setOutput("side_pr_number", "");
+    endGroup();
+    return { url: "", number: 0, sha: "", hasChanges: true, commitError: errorOutput };
+  }
+  const { stdout: shaStdout } = await exec2("git", ["rev-parse", "HEAD"], { silent: true });
+  const sha = shaStdout.trim();
+  await exec2("git", ["push", "--force", "origin", `HEAD:refs/heads/${branch}`]);
+  debug2(`Pushed side branch ${branch} @ ${sha}`);
+  const octokit = getOctokit(options.githubToken);
+  const { owner, repo } = context2.repo;
+  const title = options.title;
+  const backlink = `Generated by Skyramp Testbot for #${options.prNumber}.`;
+  const reportBody = options.reportMarkdown ?? buildSidePrBody(options.prNumber);
+  const body2 = reportBody.includes(backlink) ? reportBody : `${backlink}
+
+${reportBody}`;
+  try {
+    const { data: created } = await octokit.rest.pulls.create({
+      owner,
+      repo,
+      head: branch,
+      base: options.headRef,
+      title,
+      body: body2
+    });
+    notice(`Opened side PR #${created.number}: ${created.html_url}`);
+    setOutput("commit_sha", sha);
+    setOutput("side_pr_url", created.html_url);
+    setOutput("side_pr_number", String(created.number));
+    endGroup();
+    return { url: created.html_url, number: created.number, sha, hasChanges: true };
+  } catch (err) {
+    const existing = await findExistingSidePr(octokit, owner, repo, branch);
+    if (existing) {
+      try {
+        await octokit.rest.pulls.update({
+          owner,
+          repo,
+          pull_number: existing.number,
+          title,
+          body: body2
+        });
+        notice(`Updated existing side PR #${existing.number}: ${existing.html_url}`);
+      } catch (updateErr) {
+        warning(`Reusing side PR #${existing.number} but failed to refresh body: ${updateErr instanceof Error ? updateErr.message : String(updateErr)}`);
+      }
+      setOutput("commit_sha", sha);
+      setOutput("side_pr_url", existing.html_url);
+      setOutput("side_pr_number", String(existing.number));
+      endGroup();
+      return { url: existing.html_url, number: existing.number, sha, hasChanges: true };
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    warning(`Failed to open side PR: ${message}`);
+    setOutput("commit_sha", sha);
+    setOutput("side_pr_url", "");
+    setOutput("side_pr_number", "");
+    endGroup();
+    return { url: "", number: 0, sha, hasChanges: true, prCreationError: message };
+  }
+}
+async function findExistingSidePr(octokit, owner, repo, branch) {
+  try {
+    const { data } = await octokit.rest.pulls.list({
+      owner,
+      repo,
+      state: "open",
+      head: `${owner}:${branch}`,
+      per_page: 1
+    });
+    if (data.length > 0) {
+      return { number: data[0].number, html_url: data[0].html_url, body: data[0].body ?? "" };
+    }
+  } catch (err) {
+    info(`Failed to look up existing side PR on ${branch}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return null;
+}
+function buildSidePrBody(originalPrNumber) {
+  return [
+    "<!-- skyramp-testbot-side-pr -->",
+    `Generated by Skyramp Testbot for #${originalPrNumber}.`,
+    "",
+    "Merging this PR adds the generated/maintained tests to the feature branch. Close it if you want to discard them."
+  ].join("\n");
+}
+async function deliverGeneratedTests(config, ctx) {
+  if (config.generatedTestsMode === "separate-branch" /* SeparateBranch */) {
+    if (!ctx.prNumber || !ctx.prHeadRef || !ctx.prHeadSha) {
+      const missing = [];
+      if (!ctx.prNumber) missing.push("prNumber");
+      if (!ctx.prHeadRef) missing.push("prHeadRef");
+      if (!ctx.prHeadSha) missing.push("prHeadSha");
+      const description = `Skyramp Testbot could not open a side PR because the required pull_request context is missing (${missing.join(", ")}). This usually means the workflow ran outside a \`pull_request\` event, or \`actions/checkout\` wasn't able to populate the PR payload. Set \`generatedTestsMode: same-branch\` to commit directly to the feature branch instead.`;
+      warning(description);
+      return { hasChanges: false, errorDescription: description };
+    }
+    const effectiveTitle = ctx.sidePrTitle ?? config.commitMessage;
+    const sideResult = await createSidePr(config, {
+      githubToken: ctx.githubToken,
+      prNumber: ctx.prNumber,
+      headRef: ctx.prHeadRef,
+      headSha: ctx.prHeadSha,
+      title: effectiveTitle,
+      reportMarkdown: ctx.reportMarkdown
+    });
+    if (sideResult.commitError) {
+      const isHookFailure = /hook/i.test(sideResult.commitError);
+      const description = isHookFailure ? `Git pre-commit hook blocked the test commit for the side PR. Error: \`${sideResult.commitError.split("\n")[0]}\`. Install the missing tool(s) in your testbot workflow, or set \`generatedTestsMode: same-branch\` (or \`autoCommit: false\`) as a workaround.` : `Failed to commit generated tests to the side PR branch. Error: \`${sideResult.commitError.split("\n")[0]}\`. Check your repository's git hooks or testbot workflow configuration.`;
+      warning(`Side PR commit failed: ${sideResult.commitError}`);
+      return { hasChanges: sideResult.hasChanges, errorDescription: description };
+    }
+    if (sideResult.prCreationError) {
+      return {
+        hasChanges: sideResult.hasChanges,
+        errorDescription: `Failed to open a side PR for generated tests. Error: \`${sideResult.prCreationError.split("\n")[0]}\`. Verify the testbot GitHub App has \`contents: write\` and \`pull_requests: write\`, or set \`generatedTestsMode: same-branch\` to fall back to direct commits.`
+      };
+    }
+    return {
+      hasChanges: sideResult.hasChanges,
+      sidePrUrl: sideResult.url || void 0,
+      sidePrNumber: sideResult.number || void 0,
+      sidePrTitle: sideResult.url && !sideResult.annotatedStale ? effectiveTitle : void 0,
+      annotatedStale: sideResult.annotatedStale
+    };
+  }
+  const commitResult = await autoCommit(config);
+  if (commitResult.commitError) {
+    const isHookFailure = /hook/i.test(commitResult.commitError);
+    const description = isHookFailure ? `Git pre-commit hook blocked the test commit. Error: \`${commitResult.commitError.split("\n")[0]}\`. Install the missing tool(s) in your testbot workflow (as a step before the Skyramp Testbot action), or configure \`autoCommit: false\` and commit manually.` : `Failed to commit generated tests. Error: \`${commitResult.commitError.split("\n")[0]}\`. Check your repository's git hooks or testbot workflow configuration.`;
+    warning(`Auto-commit failed: ${commitResult.commitError}`);
+    return { hasChanges: commitResult.hasChanges, errorDescription: description };
+  }
+  return { hasChanges: commitResult.hasChanges };
+}
+async function handleDevPrClosed(options) {
+  const octokit = getOctokit(options.githubToken);
+  const { owner, repo } = context2.repo;
+  const branch = sidePrBranchName(options.prNumber);
+  const existing = await findExistingSidePr(octokit, owner, repo, branch);
+  if (!existing) {
+    return { sidePrFound: false, sidePrNumber: 0, sidePrUrl: "", outcome: "noop" };
+  }
+  if (options.merged) {
+    try {
+      await octokit.rest.pulls.update({
+        owner,
+        repo,
+        pull_number: existing.number,
+        base: options.baseBranch
+      });
+      notice(`Retargeted side PR #${existing.number} from feature branch to '${options.baseBranch}'`);
+    } catch (err) {
+      warning(`Failed to retarget side PR #${existing.number}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return { sidePrFound: true, sidePrNumber: existing.number, sidePrUrl: existing.html_url, outcome: "retargeted" };
+  } else {
+    try {
+      await octokit.rest.pulls.update({
+        owner,
+        repo,
+        pull_number: existing.number,
+        state: "closed"
+      });
+      notice(`Closed side PR #${existing.number} (dev PR abandoned)`);
+    } catch (err) {
+      warning(`Failed to close side PR #${existing.number}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return { sidePrFound: true, sidePrNumber: existing.number, sidePrUrl: existing.html_url, outcome: "closed" };
+  }
+}
 
 // src/playwright.ts
 var os9 = __toESM(require("os"));
@@ -113191,6 +113530,30 @@ async function installPlaywright() {
 }
 
 // src/main.ts
+async function handleClosedEvent(githubToken, pr) {
+  const { number: prNumber, merged, base: { ref: baseBranch } } = pr;
+  const result = await handleDevPrClosed({ githubToken, prNumber, merged, baseBranch });
+  if (result.outcome === "noop") return;
+  const msg = result.outcome === "retargeted" ? `Dev PR merged \u2014 Testbot PR [#${result.sidePrNumber}](${result.sidePrUrl}) is still open, now targeting \`${baseBranch}\`.` : `Dev PR closed \u2014 Testbot PR [#${result.sidePrNumber}](${result.sidePrUrl}) has been closed automatically.`;
+  const commentBody = `<!-- skyramp-testbot -->
+${msg}`;
+  const existingCommentId = await findExistingTestbotComment(prNumber);
+  if (existingCommentId) {
+    const octokit = getOctokit(githubToken);
+    try {
+      await octokit.rest.issues.updateComment({
+        ...context2.repo,
+        comment_id: existingCommentId,
+        body: commentBody
+      });
+    } catch (err) {
+      warning(`Failed to update testbot comment: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  } else {
+    await postStandaloneComment(prNumber, commentBody);
+  }
+  notice(msg);
+}
 async function replyPermissionDenied(octokit, author) {
   const issueNumber = context2.payload.issue?.number;
   if (!issueNumber) return;
@@ -113222,6 +113585,11 @@ async function run() {
   }
   const githubToken = getInput("githubToken");
   setGitHubToken(githubToken);
+  if (context2.eventName === "pull_request" && context2.payload.action === "closed") {
+    const pr = context2.payload.pull_request;
+    if (pr) await handleClosedEvent(githubToken, pr);
+    return;
+  }
   const isCommentTrigger = context2.eventName === "issue_comment";
   const isDispatchTrigger = context2.eventName === "workflow_dispatch";
   let prNumber;
@@ -113347,6 +113715,8 @@ async function run() {
     prBody = context2.payload.pull_request?.body ?? "";
     baseBranch = context2.payload.pull_request?.base?.ref ?? "";
     prAuthor = context2.payload.pull_request?.user?.login ?? "";
+    prHeadRef = context2.payload.pull_request?.head?.ref;
+    prHeadSha = context2.payload.pull_request?.head?.sha;
   }
   if (inputs.allowedAuthors.length > 0) {
     if (!prAuthor) {
@@ -113737,6 +114107,7 @@ ${stdout}`);
   setOutput("duration_total", String(totalSeconds));
   endGroup();
   saveState("steps", JSON.stringify(steps));
+  let sidePrTitle;
   if (reportCommitMessage) {
     let sanitized = reportCommitMessage.replace(/[\r\n\t]+/g, " ").replace(/[^\x20-\x7E]/g, "").trim();
     if (sanitized.toLowerCase().startsWith("skyramp testbot:")) {
@@ -113744,6 +114115,7 @@ ${stdout}`);
     }
     if (sanitized) {
       config.commitMessage = `Skyramp Testbot: ${sanitized.slice(0, 72)}`;
+      sidePrTitle = sanitized;
       debug2(`Using agent-provided commit message: ${config.commitMessage}`);
     }
   }
@@ -113768,26 +114140,48 @@ ${stdout}`);
     error(`Agent produced no report after ${config.testbotMaxRetries} attempts \u2014 posting error to PR`);
   }
   let commitHasChanges = false;
+  let sidePrUrl;
+  let commentReportPath;
   if (config.autoCommit) {
     config.prHeadRef = prHeadRef;
     await configureGitIdentity(botName, botEmail);
-    const commitResult = await autoCommit(config);
-    commitHasChanges = commitResult.hasChanges;
-    if (commitResult.commitError) {
-      const isHookFailure = /hook/i.test(commitResult.commitError);
-      const issueDescription = isHookFailure ? `Git pre-commit hook blocked the test commit. Error: \`${commitResult.commitError.split("\n")[0]}\`. Install the missing tool(s) in your testbot workflow (as a step before the Skyramp Testbot action), or configure \`autoCommit: false\` and commit manually.` : `Failed to commit generated tests. Error: \`${commitResult.commitError.split("\n")[0]}\`. Check your repository's git hooks or testbot workflow configuration.`;
+    const sideBodyMarkdown = report ? renderReport(report, { ...renderOptions, audience: "side-pr" /* SidePr */ }) : fs20.existsSync(paths.combinedResultPath) ? fs20.readFileSync(paths.combinedResultPath, "utf-8") : void 0;
+    const delivery = await deliverGeneratedTests(config, {
+      githubToken,
+      prNumber,
+      prHeadRef,
+      prHeadSha,
+      reportMarkdown: sideBodyMarkdown,
+      sidePrTitle
+    });
+    commitHasChanges = delivery.hasChanges;
+    sidePrUrl = delivery.sidePrUrl;
+    if (delivery.errorDescription) {
       if (report) {
-        report.issuesFound.push({ description: issueDescription });
+        report.issuesFound.push({ description: delivery.errorDescription });
         const reRendered = renderReport(report, renderOptions);
         fs20.writeFileSync(paths.combinedResultPath, reRendered);
         setOutput("test_summary", reRendered);
       } else if (fs20.existsSync(paths.combinedResultPath)) {
         fs20.appendFileSync(paths.combinedResultPath, `
 
-**\u26A0\uFE0F ${issueDescription}**
+**\u26A0\uFE0F ${delivery.errorDescription}**
 `);
       }
-      warning(`Auto-commit failed: ${commitResult.commitError}`);
+    } else if (sidePrUrl) {
+      const effectiveTitle = delivery.sidePrTitle ?? sidePrTitle ?? config.commitMessage;
+      const breadcrumb = delivery.annotatedStale ? `This push produced no new test changes. The prior [testbot PR](${sidePrUrl}) from an earlier push is still open for review.` : `Testbot PR : [${effectiveTitle}](${sidePrUrl})`;
+      if (fs20.existsSync(paths.combinedResultPath)) {
+        const existing = fs20.readFileSync(paths.combinedResultPath, "utf-8");
+        const body2 = existing.replace(/^\s*<!--\s*skyramp-testbot\s*-->\s*\n?/, "");
+        const withBreadcrumb = `<!-- skyramp-testbot -->
+${breadcrumb}
+
+${body2}`;
+        const tmpPath = path20.join(tempDir, "testbot-comment.md");
+        fs20.writeFileSync(tmpPath, withBreadcrumb);
+        commentReportPath = tmpPath;
+      }
     }
   }
   try {
@@ -113804,18 +114198,19 @@ ${stdout}`);
   }
   if (config.postPrComment && prNumber) {
     await withGroup("Posting final PR comment", async () => {
+      const commentFile = commentReportPath ?? paths.combinedResultPath;
       let posted = false;
       if (progressCommentId) {
-        posted = await appendReportToProgress(progressCommentId, paths.combinedResultPath, steps);
+        posted = await appendReportToProgress(progressCommentId, commentFile, steps);
         if (posted) {
-          notice("Progress comment updated with final report");
+          notice(sidePrUrl ? `Progress comment updated with side-PR breadcrumb + actions (${sidePrUrl})` : "Progress comment updated with final report");
         } else {
           warning("Failed to update progress comment, falling back to standalone comment");
-          posted = await postStandaloneComment(prNumber, paths.combinedResultPath, true);
+          posted = await postStandaloneComment(prNumber, commentFile, true);
         }
       } else {
         notice("Creating standalone PR comment (no progress comment to update)");
-        posted = await postStandaloneComment(prNumber, paths.combinedResultPath, true);
+        posted = await postStandaloneComment(prNumber, commentFile, true);
       }
       if (!posted) {
         error("Failed to post testbot report to PR \u2014 report is available in action outputs only");

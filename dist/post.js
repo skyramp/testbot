@@ -31558,7 +31558,22 @@ function getOctokit(token, options, ...additionalPlugins) {
 // src/post.ts
 var path5 = __toESM(require("path"));
 
+// src/types.ts
+var GeneratedTestsMode = /* @__PURE__ */ ((GeneratedTestsMode2) => {
+  GeneratedTestsMode2["SameBranch"] = "same-branch";
+  GeneratedTestsMode2["SeparateBranch"] = "separate-branch";
+  return GeneratedTestsMode2;
+})(GeneratedTestsMode || {});
+
 // src/inputs.ts
+function parseGeneratedTestsMode(raw) {
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "") return "separate-branch" /* SeparateBranch */;
+  const valid = Object.values(GeneratedTestsMode);
+  if (valid.includes(normalized)) return normalized;
+  warning(`Invalid generatedTestsMode '${raw}'. Falling back to '${"separate-branch" /* SeparateBranch */}'.`);
+  return "separate-branch" /* SeparateBranch */;
+}
 function getInputs() {
   return {
     skyrampLicenseFile: getInput("skyrampLicenseFile", { required: true }),
@@ -31591,6 +31606,7 @@ function getInputs() {
     workingDirectory: getInput("workingDirectory"),
     autoCommit: getBooleanInput("autoCommit"),
     commitMessage: getInput("commitMessage"),
+    generatedTestsMode: parseGeneratedTestsMode(getInput("generatedTestsMode")),
     postPrComment: getBooleanInput("postPrComment"),
     testExecutionTimeout: parseInt(getInput("testExecutionTimeout"), 10) || 300,
     maxRecommendations: (() => {
@@ -31687,6 +31703,7 @@ async function loadConfig(inputs) {
     targetReadyCheckDiagnosticsCommand: inputs.targetReadyCheckDiagnosticsCommand,
     autoCommit: inputs.autoCommit,
     commitMessage: inputs.commitMessage,
+    generatedTestsMode: inputs.generatedTestsMode,
     postPrComment: inputs.postPrComment,
     testExecutionTimeout: inputs.testExecutionTimeout,
     maxRecommendations: inputs.maxRecommendations,

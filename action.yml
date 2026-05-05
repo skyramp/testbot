@@ -106,6 +106,10 @@ inputs:
     description: 'Commit message for test changes'
     required: false
     default: 'Skyramp Testbot: test maintenance suggestions'
+  generatedTestsMode:
+    description: 'Where generated/maintained tests are delivered. "separate-branch" (default) opens a new PR/MR from a bot-owned branch into the feature branch, keeping the feature PR clean. "same-branch" pushes a commit directly onto the feature branch (legacy behavior). Note: for downstream CI (lint/tests/etc.) to auto-run on the side PR, the `githubToken` input must be a GitHub App installation token or PAT — the default `GITHUB_TOKEN` will not trigger other workflows.'
+    required: false
+    default: 'separate-branch'
   postPrComment:
     description: 'Post summary as PR comment'
     required: false
@@ -163,6 +167,10 @@ outputs:
     description: 'Whether execution was skipped due to detecting own commit'
   commit_sha:
     description: 'SHA of the commit made by testbot (empty if no commit)'
+  side_pr_url:
+    description: 'URL of the side PR opened by testbot (empty unless generatedTestsMode=separate-pr and changes were produced)'
+  side_pr_number:
+    description: 'Number of the side PR opened by testbot (empty unless generatedTestsMode=separate-pr and changes were produced)'
   duration_setup:
     description: 'Duration of the setup step in seconds'
   duration_analyzing:
