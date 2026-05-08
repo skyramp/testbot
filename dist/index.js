@@ -80723,11 +80723,62 @@ var XMLParser = class {
   }
 };
 
+// node_modules/fast-xml-builder/src/util.js
+function safeComment(val) {
+  return String(val).replace(/--/g, "- -").replace(/--/g, "- -").replace(/-$/, "- ");
+}
+function safeCdata(val) {
+  return String(val).replace(/\]\]>/g, "]]]]><![CDATA[>");
+}
+function escapeAttribute(val) {
+  return String(val).replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+// node_modules/xml-naming/src/index.js
+var nameStartChar10 = ":A-Za-z_\xC0-\xD6\xD8-\xF6\xF8-\u02FF\u0370-\u037D\u037F-\u0486\u0488-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD";
+var nameChar10 = nameStartChar10 + "\\-\\.\\d\xB7\u0300-\u036F\u203F-\u2040";
+var nameStartChar11 = ":A-Za-z_\xC0-\u02FF\u0370-\u037D\u037F-\u0486\u0488-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\u{10000}-\u{EFFFF}";
+var nameChar11 = nameStartChar11 + "\\-\\.\\d\xB7\u0300-\u036F\u0487\u203F-\u2040";
+var buildRegexes = (startChar, char, flags = "") => {
+  const ncStart = startChar.replace(":", "");
+  const ncChar = char.replace(":", "");
+  const ncNamePat = `[${ncStart}][${ncChar}]*`;
+  return {
+    name: new RegExp(`^[${startChar}][${char}]*$`, flags),
+    ncName: new RegExp(`^${ncNamePat}$`, flags),
+    qName: new RegExp(`^${ncNamePat}(?::${ncNamePat})?$`, flags),
+    nmToken: new RegExp(`^[${char}]+$`, flags),
+    nmTokens: new RegExp(`^[${char}]+(?:\\s+[${char}]+)*$`, flags)
+  };
+};
+var regexes10 = buildRegexes(nameStartChar10, nameChar10);
+var regexes11 = buildRegexes(nameStartChar11, nameChar11, "u");
+var getRegexes = (xmlVersion = "1.0") => xmlVersion === "1.1" ? regexes11 : regexes10;
+var qName = (str2, { xmlVersion = "1.0" } = {}) => getRegexes(xmlVersion).qName.test(str2);
+
 // node_modules/fast-xml-builder/src/orderedJs2Xml.js
 var EOL8 = "\n";
+function detectXmlVersionFromArray(jArray, options) {
+  if (!Array.isArray(jArray) || jArray.length === 0) return "1.0";
+  const first = jArray[0];
+  const firstKey = propName2(first);
+  if (firstKey === "?xml") {
+    const attrs = first[":@"];
+    if (attrs) {
+      const versionKey = options.attributeNamePrefix + "version";
+      if (attrs[versionKey]) return attrs[versionKey];
+    }
+  }
+  return "1.0";
+}
+function resolveTagName(name, isAttribute2, options, matcher, xmlVersion) {
+  if (!options.sanitizeName) return name;
+  if (qName(name, { xmlVersion })) return name;
+  return options.sanitizeName(name, { isAttribute: isAttribute2, matcher: matcher.readOnly() });
+}
 function toXml(jArray, options) {
   let indentation = "";
-  if (options.format && options.indentBy.length > 0) {
+  if (options.format) {
     indentation = EOL8;
   }
   const stopNodeExpressions = [];
@@ -80741,10 +80792,11 @@ function toXml(jArray, options) {
       }
     }
   }
+  const xmlVersion = detectXmlVersionFromArray(jArray, options);
   const matcher = new Matcher();
-  return arrToStr(jArray, options, indentation, matcher, stopNodeExpressions);
+  return arrToStr(jArray, options, indentation, matcher, stopNodeExpressions, xmlVersion);
 }
-function arrToStr(arr, options, indentation, matcher, stopNodeExpressions) {
+function arrToStr(arr, options, indentation, matcher, stopNodeExpressions, xmlVersion) {
   let xmlStr = "";
   let isPreviousElementTag = false;
   if (options.maxNestedTags && matcher.getDepth() > options.maxNestedTags) {
@@ -80760,13 +80812,15 @@ function arrToStr(arr, options, indentation, matcher, stopNodeExpressions) {
   }
   for (let i = 0; i < arr.length; i++) {
     const tagObj = arr[i];
-    const tagName = propName2(tagObj);
-    if (tagName === void 0) continue;
+    const rawTagName = propName2(tagObj);
+    if (rawTagName === void 0) continue;
+    const isSpecialName = rawTagName === options.textNodeName || rawTagName === options.cdataPropName || rawTagName === options.commentPropName || rawTagName[0] === "?";
+    const tagName = isSpecialName ? rawTagName : resolveTagName(rawTagName, false, options, matcher, xmlVersion);
     const attrValues = extractAttributeValues(tagObj[":@"], options);
     matcher.push(tagName, attrValues);
     const isStopNode = checkStopNode(matcher, stopNodeExpressions);
     if (tagName === options.textNodeName) {
-      let tagText = tagObj[tagName];
+      let tagText = tagObj[rawTagName];
       if (!isStopNode) {
         tagText = options.tagValueProcessor(tagName, tagText);
         tagText = replaceEntitiesValue2(tagText, options);
@@ -80782,25 +80836,23 @@ function arrToStr(arr, options, indentation, matcher, stopNodeExpressions) {
       if (isPreviousElementTag) {
         xmlStr += indentation;
       }
-      const val = tagObj[tagName][0][options.textNodeName];
-      const safeVal = String(val).replace(/\]\]>/g, "]]]]><![CDATA[>");
+      const val = tagObj[rawTagName][0][options.textNodeName];
+      const safeVal = safeCdata(val);
       xmlStr += `<![CDATA[${safeVal}]]>`;
       isPreviousElementTag = false;
       matcher.pop();
       continue;
     } else if (tagName === options.commentPropName) {
-      const val = tagObj[tagName][0][options.textNodeName];
-      const safeVal = String(val).replace(/--/g, "- -").replace(/-$/, "- ");
+      const val = tagObj[rawTagName][0][options.textNodeName];
+      const safeVal = safeComment(val);
       xmlStr += indentation + `<!--${safeVal}-->`;
       isPreviousElementTag = true;
       matcher.pop();
       continue;
     } else if (tagName[0] === "?") {
-      const attStr2 = attr_to_str(tagObj[":@"], options, isStopNode);
+      const attStr2 = attr_to_str(tagObj[":@"], options, isStopNode, matcher, xmlVersion);
       const tempInd = tagName === "?xml" ? "" : indentation;
-      let piTextNodeName = tagObj[tagName][0][options.textNodeName];
-      piTextNodeName = piTextNodeName.length !== 0 ? " " + piTextNodeName : "";
-      xmlStr += tempInd + `<${tagName}${piTextNodeName}${attStr2}?>`;
+      xmlStr += tempInd + `<${tagName}${attStr2}?>`;
       isPreviousElementTag = true;
       matcher.pop();
       continue;
@@ -80809,13 +80861,13 @@ function arrToStr(arr, options, indentation, matcher, stopNodeExpressions) {
     if (newIdentation !== "") {
       newIdentation += options.indentBy;
     }
-    const attStr = attr_to_str(tagObj[":@"], options, isStopNode);
+    const attStr = attr_to_str(tagObj[":@"], options, isStopNode, matcher, xmlVersion);
     const tagStart = indentation + `<${tagName}${attStr}`;
     let tagValue;
     if (isStopNode) {
-      tagValue = getRawContent2(tagObj[tagName], options);
+      tagValue = getRawContent2(tagObj[rawTagName], options);
     } else {
-      tagValue = arrToStr(tagObj[tagName], options, newIdentation, matcher, stopNodeExpressions);
+      tagValue = arrToStr(tagObj[rawTagName], options, newIdentation, matcher, stopNodeExpressions, xmlVersion);
     }
     if (options.unpairedTags.indexOf(tagName) !== -1) {
       if (options.suppressUnpairedNode) xmlStr += tagStart + ">";
@@ -80845,7 +80897,7 @@ function extractAttributeValues(attrMap, options) {
   for (let attr in attrMap) {
     if (!Object.prototype.hasOwnProperty.call(attrMap, attr)) continue;
     const cleanAttrName = attr.startsWith(options.attributeNamePrefix) ? attr.substr(options.attributeNamePrefix.length) : attr;
-    attrValues[cleanAttrName] = attrMap[attr];
+    attrValues[cleanAttrName] = escapeAttribute(attrMap[attr]);
     hasAttrs = true;
   }
   return hasAttrs ? attrValues : null;
@@ -80890,7 +80942,7 @@ function attr_to_str_raw(attrMap, options) {
       if (attrVal === true && options.suppressBooleanAttributes) {
         attrStr += ` ${attr.substr(options.attributeNamePrefix.length)}`;
       } else {
-        attrStr += ` ${attr.substr(options.attributeNamePrefix.length)}="${attrVal}"`;
+        attrStr += ` ${attr.substr(options.attributeNamePrefix.length)}="${escapeAttribute(attrVal)}"`;
       }
     }
   }
@@ -80904,11 +80956,13 @@ function propName2(obj) {
     if (key !== ":@") return key;
   }
 }
-function attr_to_str(attrMap, options, isStopNode) {
+function attr_to_str(attrMap, options, isStopNode, matcher, xmlVersion) {
   let attrStr = "";
   if (attrMap && !options.ignoreAttributes) {
     for (let attr in attrMap) {
       if (!Object.prototype.hasOwnProperty.call(attrMap, attr)) continue;
+      const cleanAttrName = attr.substr(options.attributeNamePrefix.length);
+      const resolvedAttrName = isStopNode ? cleanAttrName : resolveTagName(cleanAttrName, true, options, matcher, xmlVersion);
       let attrVal;
       if (isStopNode) {
         attrVal = attrMap[attr];
@@ -80917,9 +80971,9 @@ function attr_to_str(attrMap, options, isStopNode) {
         attrVal = replaceEntitiesValue2(attrVal, options);
       }
       if (attrVal === true && options.suppressBooleanAttributes) {
-        attrStr += ` ${attr.substr(options.attributeNamePrefix.length)}`;
+        attrStr += ` ${resolvedAttrName}`;
       } else {
-        attrStr += ` ${attr.substr(options.attributeNamePrefix.length)}="${attrVal}"`;
+        attrStr += ` ${resolvedAttrName}="${escapeAttribute(attrVal)}"`;
       }
     }
   }
@@ -80999,8 +81053,13 @@ var defaultOptions3 = {
   // transformAttributeName: false,
   oneListGroup: false,
   maxNestedTags: 100,
-  jPath: true
+  jPath: true,
   // When true, callbacks receive string jPath; when false, receive Matcher instance
+  sanitizeName: false
+  // false = allow all names as-is (default, backward-compatible).
+  // Set to a function (name, { isAttribute, matcher }) => string to
+  // validate/sanitize tag and attribute names. Throw inside the function
+  // to reject an invalid name.
 };
 function Builder(options) {
   this.options = Object.assign({}, defaultOptions3, options);
@@ -81045,6 +81104,23 @@ function Builder(options) {
     this.newLine = "";
   }
 }
+function detectXmlVersionFromObj(jObj, options) {
+  const decl = jObj["?xml"];
+  if (decl && typeof decl === "object") {
+    if (options.attributesGroupName && decl[options.attributesGroupName]) {
+      const v2 = decl[options.attributesGroupName][options.attributeNamePrefix + "version"];
+      if (v2) return v2;
+    }
+    const v = decl[options.attributeNamePrefix + "version"];
+    if (v) return v;
+  }
+  return "1.0";
+}
+function resolveTagName2(name, isAttribute2, options, matcher, xmlVersion) {
+  if (!options.sanitizeName) return name;
+  if (qName(name, { xmlVersion })) return name;
+  return options.sanitizeName(name, { isAttribute: isAttribute2, matcher: matcher.readOnly() });
+}
 Builder.prototype.build = function(jObj) {
   if (this.options.preserveOrder) {
     return toXml(jObj, this.options);
@@ -81055,10 +81131,11 @@ Builder.prototype.build = function(jObj) {
       };
     }
     const matcher = new Matcher();
-    return this.j2x(jObj, 0, matcher).val;
+    const xmlVersion = detectXmlVersionFromObj(jObj, this.options);
+    return this.j2x(jObj, 0, matcher, xmlVersion).val;
   }
 };
-Builder.prototype.j2x = function(jObj, level, matcher) {
+Builder.prototype.j2x = function(jObj, level, matcher, xmlVersion) {
   let attrStr = "";
   let val = "";
   if (this.options.maxNestedTags && matcher.getDepth() >= this.options.maxNestedTags) {
@@ -81068,6 +81145,8 @@ Builder.prototype.j2x = function(jObj, level, matcher) {
   const isCurrentStopNode = this.checkStopNode(matcher);
   for (let key in jObj) {
     if (!Object.prototype.hasOwnProperty.call(jObj, key)) continue;
+    const isSpecialKey = key === this.options.textNodeName || key === this.options.cdataPropName || key === this.options.commentPropName || this.options.attributesGroupName && key === this.options.attributesGroupName || this.isAttribute(key) || key[0] === "?";
+    const resolvedKey = isSpecialKey ? key : resolveTagName2(key, false, this.options, matcher, xmlVersion);
     if (typeof jObj[key] === "undefined") {
       if (this.isAttribute(key)) {
         val += "";
@@ -81075,36 +81154,37 @@ Builder.prototype.j2x = function(jObj, level, matcher) {
     } else if (jObj[key] === null) {
       if (this.isAttribute(key)) {
         val += "";
-      } else if (key === this.options.cdataPropName) {
+      } else if (resolvedKey === this.options.cdataPropName || resolvedKey === this.options.commentPropName) {
         val += "";
-      } else if (key[0] === "?") {
-        val += this.indentate(level) + "<" + key + "?" + this.tagEndChar;
+      } else if (resolvedKey[0] === "?") {
+        val += this.indentate(level) + "<" + resolvedKey + "?" + this.tagEndChar;
       } else {
-        val += this.indentate(level) + "<" + key + "/" + this.tagEndChar;
+        val += this.indentate(level) + "<" + resolvedKey + "/" + this.tagEndChar;
       }
     } else if (jObj[key] instanceof Date) {
-      val += this.buildTextValNode(jObj[key], key, "", level, matcher);
+      val += this.buildTextValNode(jObj[key], resolvedKey, "", level, matcher);
     } else if (typeof jObj[key] !== "object") {
       const attr = this.isAttribute(key);
       if (attr && !this.ignoreAttributesFn(attr, jPath)) {
-        attrStr += this.buildAttrPairStr(attr, "" + jObj[key], isCurrentStopNode);
+        const resolvedAttr = resolveTagName2(attr, true, this.options, matcher, xmlVersion);
+        attrStr += this.buildAttrPairStr(resolvedAttr, "" + jObj[key], isCurrentStopNode);
       } else if (!attr) {
         if (key === this.options.textNodeName) {
           let newval = this.options.tagValueProcessor(key, "" + jObj[key]);
           val += this.replaceEntitiesValue(newval);
         } else {
-          matcher.push(key);
+          matcher.push(resolvedKey);
           const isStopNode = this.checkStopNode(matcher);
           matcher.pop();
           if (isStopNode) {
             const textValue = "" + jObj[key];
             if (textValue === "") {
-              val += this.indentate(level) + "<" + key + this.closeTag(key) + this.tagEndChar;
+              val += this.indentate(level) + "<" + resolvedKey + this.closeTag(resolvedKey) + this.tagEndChar;
             } else {
-              val += this.indentate(level) + "<" + key + ">" + textValue + "</" + key + this.tagEndChar;
+              val += this.indentate(level) + "<" + resolvedKey + ">" + textValue + "</" + resolvedKey + this.tagEndChar;
             }
           } else {
-            val += this.buildTextValNode(jObj[key], key, "", level, matcher);
+            val += this.buildTextValNode(jObj[key], resolvedKey, "", level, matcher);
           }
         }
       }
@@ -81116,44 +81196,44 @@ Builder.prototype.j2x = function(jObj, level, matcher) {
         const item = jObj[key][j];
         if (typeof item === "undefined") {
         } else if (item === null) {
-          if (key[0] === "?") val += this.indentate(level) + "<" + key + "?" + this.tagEndChar;
-          else val += this.indentate(level) + "<" + key + "/" + this.tagEndChar;
+          if (resolvedKey[0] === "?") val += this.indentate(level) + "<" + resolvedKey + "?" + this.tagEndChar;
+          else val += this.indentate(level) + "<" + resolvedKey + "/" + this.tagEndChar;
         } else if (typeof item === "object") {
           if (this.options.oneListGroup) {
-            matcher.push(key);
-            const result = this.j2x(item, level + 1, matcher);
+            matcher.push(resolvedKey);
+            const result = this.j2x(item, level + 1, matcher, xmlVersion);
             matcher.pop();
             listTagVal += result.val;
             if (this.options.attributesGroupName && item.hasOwnProperty(this.options.attributesGroupName)) {
               listTagAttr += result.attrStr;
             }
           } else {
-            listTagVal += this.processTextOrObjNode(item, key, level, matcher);
+            listTagVal += this.processTextOrObjNode(item, resolvedKey, level, matcher, xmlVersion);
           }
         } else {
           if (this.options.oneListGroup) {
-            let textValue = this.options.tagValueProcessor(key, item);
+            let textValue = this.options.tagValueProcessor(resolvedKey, item);
             textValue = this.replaceEntitiesValue(textValue);
             listTagVal += textValue;
           } else {
-            matcher.push(key);
+            matcher.push(resolvedKey);
             const isStopNode = this.checkStopNode(matcher);
             matcher.pop();
             if (isStopNode) {
               const textValue = "" + item;
               if (textValue === "") {
-                listTagVal += this.indentate(level) + "<" + key + this.closeTag(key) + this.tagEndChar;
+                listTagVal += this.indentate(level) + "<" + resolvedKey + this.closeTag(resolvedKey) + this.tagEndChar;
               } else {
-                listTagVal += this.indentate(level) + "<" + key + ">" + textValue + "</" + key + this.tagEndChar;
+                listTagVal += this.indentate(level) + "<" + resolvedKey + ">" + textValue + "</" + resolvedKey + this.tagEndChar;
               }
             } else {
-              listTagVal += this.buildTextValNode(item, key, "", level, matcher);
+              listTagVal += this.buildTextValNode(item, resolvedKey, "", level, matcher);
             }
           }
         }
       }
       if (this.options.oneListGroup) {
-        listTagVal = this.buildObjectNode(listTagVal, key, listTagAttr, level);
+        listTagVal = this.buildObjectNode(listTagVal, resolvedKey, listTagAttr, level);
       }
       val += listTagVal;
     } else {
@@ -81161,10 +81241,11 @@ Builder.prototype.j2x = function(jObj, level, matcher) {
         const Ks = Object.keys(jObj[key]);
         const L = Ks.length;
         for (let j = 0; j < L; j++) {
-          attrStr += this.buildAttrPairStr(Ks[j], "" + jObj[key][Ks[j]], isCurrentStopNode);
+          const resolvedAttr = resolveTagName2(Ks[j], true, this.options, matcher, xmlVersion);
+          attrStr += this.buildAttrPairStr(resolvedAttr, "" + jObj[key][Ks[j]], isCurrentStopNode);
         }
       } else {
-        val += this.processTextOrObjNode(jObj[key], key, level, matcher);
+        val += this.processTextOrObjNode(jObj[key], resolvedKey, level, matcher, xmlVersion);
       }
     }
   }
@@ -81177,9 +81258,9 @@ Builder.prototype.buildAttrPairStr = function(attrName, val, isStopNode) {
   }
   if (this.options.suppressBooleanAttributes && val === "true") {
     return " " + attrName;
-  } else return " " + attrName + '="' + val + '"';
+  } else return " " + attrName + '="' + escapeAttribute(val) + '"';
 };
-function processTextOrObjNode(object, key, level, matcher) {
+function processTextOrObjNode(object, key, level, matcher, xmlVersion) {
   const attrValues = this.extractAttributes(object);
   matcher.push(key, attrValues);
   const isStopNode = this.checkStopNode(matcher);
@@ -81189,9 +81270,11 @@ function processTextOrObjNode(object, key, level, matcher) {
     matcher.pop();
     return this.buildObjectNode(rawContent2, key, attrStr, level);
   }
-  const result = this.j2x(object, level + 1, matcher);
+  const result = this.j2x(object, level + 1, matcher, xmlVersion);
   matcher.pop();
-  if (object[this.options.textNodeName] !== void 0 && Object.keys(object).length === 1) {
+  if (key[0] === "?") {
+    return this.buildTextValNode("", key, result.attrStr, level, matcher);
+  } else if (object[this.options.textNodeName] !== void 0 && Object.keys(object).length === 1) {
     return this.buildTextValNode(object[this.options.textNodeName], key, result.attrStr, level, matcher);
   } else {
     return this.buildObjectNode(result.val, key, result.attrStr, level);
@@ -81206,7 +81289,7 @@ Builder.prototype.extractAttributes = function(obj) {
     for (let attrKey in attrGroup) {
       if (!Object.prototype.hasOwnProperty.call(attrGroup, attrKey)) continue;
       const cleanKey = attrKey.startsWith(this.options.attributeNamePrefix) ? attrKey.substring(this.options.attributeNamePrefix.length) : attrKey;
-      attrValues[cleanKey] = attrGroup[attrKey];
+      attrValues[cleanKey] = escapeAttribute(attrGroup[attrKey]);
       hasAttrs = true;
     }
   } else {
@@ -81214,7 +81297,7 @@ Builder.prototype.extractAttributes = function(obj) {
       if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
       const attr = this.isAttribute(key);
       if (attr) {
-        attrValues[attr] = obj[key];
+        attrValues[attr] = escapeAttribute(obj[key]);
         hasAttrs = true;
       }
     }
@@ -81304,6 +81387,8 @@ Builder.prototype.buildObjectNode = function(val, key, attrStr, level) {
     else {
       return this.indentate(level) + "<" + key + attrStr + this.closeTag(key) + this.tagEndChar;
     }
+  } else if (key[0] === "?") {
+    return this.indentate(level) + "<" + key + attrStr + "?" + this.tagEndChar;
   } else {
     let tagEndExp = "</" + key + this.tagEndChar;
     let piClosingChar = "";
@@ -81342,10 +81427,10 @@ Builder.prototype.checkStopNode = function(matcher) {
 };
 Builder.prototype.buildTextValNode = function(val, key, attrStr, level, matcher) {
   if (this.options.cdataPropName !== false && key === this.options.cdataPropName) {
-    const safeVal = String(val).replace(/\]\]>/g, "]]]]><![CDATA[>");
+    const safeVal = safeCdata(val);
     return this.indentate(level) + `<![CDATA[${safeVal}]]>` + this.newLine;
   } else if (this.options.commentPropName !== false && key === this.options.commentPropName) {
-    const safeVal = String(val).replace(/--/g, "- -").replace(/-$/, "- ");
+    const safeVal = safeComment(val);
     return this.indentate(level) + `<!--${safeVal}-->` + this.newLine;
   } else if (key[0] === "?") {
     return this.indentate(level) + "<" + key + attrStr + "?" + this.tagEndChar;
@@ -104838,7 +104923,6 @@ function getInputs() {
     cursorApiKey: getInput("cursorApiKey"),
     copilotApiKey: getInput("copilotApiKey"),
     anthropicApiKey: getInput("anthropicApiKey"),
-    testDirectory: getInput("testDirectory"),
     targetSetupCommand: getInput("targetSetupCommand"),
     authTokenCommand: getInput("authTokenCommand"),
     uiCredentials: getInput("uiCredentials"),
@@ -105261,7 +105345,6 @@ async function loadConfig(inputs) {
   const services = [];
   let targetSetupCommand = inputs.targetSetupCommand;
   let targetTeardownCommand = inputs.targetTeardownCommand;
-  let testDirectory = inputs.testDirectory;
   let executorVersion = inputs.skyrampExecutorVersion;
   let mcpVersion = inputs.skyrampMcpVersion;
   if (await manager.exists()) {
@@ -105290,9 +105373,6 @@ async function loadConfig(inputs) {
       }
       const first = (wsConfig.services ?? [])[0];
       if (first) {
-        if (!testDirectory && first.testDirectory) {
-          testDirectory = first.testDirectory;
-        }
         if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
           targetSetupCommand = first.runtimeDetails.serverStartCommand;
         }
@@ -105307,11 +105387,9 @@ async function loadConfig(inputs) {
   } else {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
-  if (!testDirectory) testDirectory = "tests";
   if (!executorVersion) executorVersion = "v1.3.23";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
-    testDirectory,
     targetSetupCommand,
     authTokenCommand: inputs.authTokenCommand,
     targetTeardownCommand,
@@ -105394,11 +105472,24 @@ async function checkSelfTrigger() {
     const isBotCommit = commitAuthor === BOT_NAME && commitEmail === BOT_EMAIL;
     const action5 = ctx.payload.action;
     const isSynchronize = ctx.eventName === "pull_request" && action5 === "synchronize";
-    const skip = isBotCommit && isSynchronize;
-    if (isBotCommit && !isSynchronize) {
+    let skip = isBotCommit && isSynchronize;
+    if (!skip && isSynchronize) {
+      const prHeadSha = ctx.payload.pull_request?.head?.sha;
+      const ref = prHeadSha || "HEAD";
+      const commitSubject = (await exec2("git", ["log", "-1", "--pretty=format:%s", ref], { silent: true })).stdout.trim();
+      const isRegularMerge = /^Merge pull request #\d+ from [^/]+\/skyramp-testbot\/pr-\d+$/.test(commitSubject);
+      const isSquashMerge = commitAuthor === BOT_GITHUB_LOGIN;
+      if (isRegularMerge || isSquashMerge) {
+        notice(`Detected merge of testbot test PR into dev PR (commit: "${commitSubject}", author: "${commitAuthor}"). Skipping \u2014 tests already generated.`);
+        skip = true;
+      }
+    }
+    if (skip) {
+      if (isBotCommit) {
+        notice(`Detected self-triggered execution (commit by ${BOT_NAME} on synchronize event). Skipping to prevent recursion.`);
+      }
+    } else if (isBotCommit) {
       notice(`Head commit is by ${BOT_NAME} but event is '${ctx.eventName}' action='${action5 ?? "N/A"}' (not pull_request/synchronize). Proceeding normally.`);
-    } else if (skip) {
-      notice(`Detected self-triggered execution (commit by ${BOT_NAME} on synchronize event). Skipping to prevent recursion.`);
     } else {
       notice("Not a self-triggered execution. Proceeding with test maintenance.");
     }
@@ -105466,39 +105557,11 @@ function getOctokit2() {
   }
   return getOctokit(_githubToken);
 }
-var TESTBOT_COMMENT_MARKER = "<!-- skyramp-testbot -->";
-async function findExistingTestbotComment(prNumber) {
-  try {
-    const octokit = getOctokit2();
-    for await (const { data } of octokit.paginate.iterator(
-      octokit.rest.issues.listComments,
-      { ...context2.repo, issue_number: prNumber, per_page: 100 }
-    )) {
-      for (const c of data) {
-        if (c.body?.includes(TESTBOT_COMMENT_MARKER)) return c.id;
-      }
-    }
-  } catch (err) {
-    warning(`Failed to list PR comments while looking for prior testbot comment: ${err}`);
-  }
-  return null;
-}
 async function postInitialProgress(prNumber, steps) {
   startGroup("Posting initial progress comment");
   try {
     const octokit = getOctokit2();
     const body2 = generateProgressBody(steps);
-    const existing = await findExistingTestbotComment(prNumber);
-    if (existing) {
-      await octokit.rest.issues.updateComment({
-        ...context2.repo,
-        comment_id: existing,
-        body: body2
-      });
-      notice(`Progress comment reused (ID: ${existing})`);
-      endGroup();
-      return existing;
-    }
     const { data } = await octokit.rest.issues.createComment({
       ...context2.repo,
       issue_number: prNumber,
@@ -113185,12 +113248,12 @@ async function configureGitIdentity(botName, botEmail) {
   notice(`Git identity configured as ${botName} <${botEmail}>`);
   endGroup();
 }
-async function stageTestFiles(config) {
+async function stageTestFiles(config, opts) {
   const dirs = /* @__PURE__ */ new Set();
   for (const svc of config.services) {
     if (svc.testDirectory) dirs.add(svc.testDirectory);
   }
-  if (dirs.size === 0) dirs.add(config.testDirectory);
+  dirs.add(opts.workspaceFilePath);
   for (const dir of dirs) {
     const { exitCode: addExitCode } = await exec2(
       "git",
@@ -113211,9 +113274,9 @@ async function stageTestFiles(config) {
 function sidePrBranchName(prNumber) {
   return `skyramp-testbot/pr-${prNumber}`;
 }
-async function autoCommit(config) {
+async function autoCommit(config, opts) {
   startGroup("Auto-committing test changes");
-  const hasStaged = await stageTestFiles(config);
+  const hasStaged = await stageTestFiles(config, opts);
   if (!hasStaged) {
     notice("No test file changes to commit");
     setOutput("commit_sha", "");
@@ -113265,7 +113328,7 @@ function stripStaleBanner(body2) {
 }
 async function createSidePr(config, options) {
   startGroup("Creating side PR for generated tests");
-  const hasStaged = await stageTestFiles(config);
+  const hasStaged = await stageTestFiles(config, { workspaceFilePath: options.workspaceFilePath });
   if (!hasStaged) {
     notice("No test file changes to commit \u2014 skipping side PR creation");
     setOutput("commit_sha", "");
@@ -113318,7 +113381,7 @@ async function createSidePr(config, options) {
     return { url: "", number: 0, sha: "", hasChanges: true, commitError: message };
   }
   await exec2("git", ["stash", "pop"]);
-  await stageTestFiles(config);
+  await stageTestFiles(config, { workspaceFilePath: options.workspaceFilePath });
   const {
     exitCode: commitExitCode,
     stdout: commitStdout,
@@ -113433,7 +113496,8 @@ async function deliverGeneratedTests(config, ctx) {
       headRef: ctx.prHeadRef,
       headSha: ctx.prHeadSha,
       title: effectiveTitle,
-      reportMarkdown: ctx.reportMarkdown
+      reportMarkdown: ctx.reportMarkdown,
+      workspaceFilePath: ctx.workspaceFilePath
     });
     if (sideResult.commitError) {
       const isHookFailure = /hook/i.test(sideResult.commitError);
@@ -113455,7 +113519,7 @@ async function deliverGeneratedTests(config, ctx) {
       annotatedStale: sideResult.annotatedStale
     };
   }
-  const commitResult = await autoCommit(config);
+  const commitResult = await autoCommit(config, { workspaceFilePath: ctx.workspaceFilePath });
   if (commitResult.commitError) {
     const isHookFailure = /hook/i.test(commitResult.commitError);
     const description = isHookFailure ? `Git pre-commit hook blocked the test commit. Error: \`${commitResult.commitError.split("\n")[0]}\`. Install the missing tool(s) in your testbot workflow (as a step before the Skyramp Testbot action), or configure \`autoCommit: false\` and commit manually.` : `Failed to commit generated tests. Error: \`${commitResult.commitError.split("\n")[0]}\`. Check your repository's git hooks or testbot workflow configuration.`;
@@ -113473,17 +113537,7 @@ async function handleDevPrClosed(options) {
     return { sidePrFound: false, sidePrNumber: 0, sidePrUrl: "", outcome: "noop" };
   }
   if (options.merged) {
-    try {
-      await octokit.rest.pulls.update({
-        owner,
-        repo,
-        pull_number: existing.number,
-        base: options.baseBranch
-      });
-      notice(`Retargeted side PR #${existing.number} from feature branch to '${options.baseBranch}'`);
-    } catch (err) {
-      warning(`Failed to retarget side PR #${existing.number}: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    notice(`Dev PR merged \u2014 side PR #${existing.number} will be retargeted by GitHub to '${options.baseBranch}'`);
     return { sidePrFound: true, sidePrNumber: existing.number, sidePrUrl: existing.html_url, outcome: "retargeted" };
   } else {
     try {
@@ -113537,21 +113591,7 @@ async function handleClosedEvent(githubToken, pr) {
   const msg = result.outcome === "retargeted" ? `Dev PR merged \u2014 Testbot PR [#${result.sidePrNumber}](${result.sidePrUrl}) is still open, now targeting \`${baseBranch}\`.` : `Dev PR closed \u2014 Testbot PR [#${result.sidePrNumber}](${result.sidePrUrl}) has been closed automatically.`;
   const commentBody = `<!-- skyramp-testbot -->
 ${msg}`;
-  const existingCommentId = await findExistingTestbotComment(prNumber);
-  if (existingCommentId) {
-    const octokit = getOctokit(githubToken);
-    try {
-      await octokit.rest.issues.updateComment({
-        ...context2.repo,
-        comment_id: existingCommentId,
-        body: commentBody
-      });
-    } catch (err) {
-      warning(`Failed to update testbot comment: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  } else {
-    await postStandaloneComment(prNumber, commentBody);
-  }
+  await postStandaloneComment(prNumber, commentBody);
   notice(msg);
 }
 async function replyPermissionDenied(octokit, author) {
@@ -113561,7 +113601,7 @@ async function replyPermissionDenied(octokit, author) {
     await octokit.rest.issues.createComment({
       ...context2.repo,
       issue_number: issueNumber,
-      body: `@${author} Sorry, only collaborators with **write** access can trigger Skyramp Testbot.`
+      body: `Sorry \`@${author}\`, only collaborators with **write** access can trigger Testbot.`
     });
   } catch (err) {
     info(`Failed to post permission-denied comment: ${err instanceof Error ? err.message : String(err)}`);
@@ -113647,6 +113687,7 @@ async function run() {
         return;
       }
       const commentAuthor = context2.payload.comment?.user?.login;
+      if (!commentAuthor || commentAuthor.endsWith("[bot]")) return;
       if (commentAuthor) {
         const octokit = getOctokit(githubToken);
         try {
@@ -113745,9 +113786,9 @@ async function run() {
     throw new Error("skyrampLicenseFile is required but not provided");
   }
   const config = await loadConfig(inputs);
+  const workspaceFilePath = path20.resolve(inputs.workingDirectory, ".skyramp/workspace.yml");
   setDebugEnabled(config.enableDebug);
   debug2(`Resolved config: ${JSON.stringify({
-    testDirectory: config.testDirectory,
     targetSetupCommand: config.targetSetupCommand,
     authTokenCommand: config.authTokenCommand ? "<set>" : "<empty>",
     skyrampExecutorVersion: config.skyrampExecutorVersion,
@@ -114143,16 +114184,19 @@ ${stdout}`);
   let sidePrUrl;
   let commentReportPath;
   if (config.autoCommit) {
-    config.prHeadRef = prHeadRef;
+    const deliveryConfig = await loadConfig(inputs);
+    deliveryConfig.commitMessage = config.commitMessage;
+    deliveryConfig.prHeadRef = prHeadRef;
     await configureGitIdentity(botName, botEmail);
     const sideBodyMarkdown = report ? renderReport(report, { ...renderOptions, audience: "side-pr" /* SidePr */ }) : fs20.existsSync(paths.combinedResultPath) ? fs20.readFileSync(paths.combinedResultPath, "utf-8") : void 0;
-    const delivery = await deliverGeneratedTests(config, {
+    const delivery = await deliverGeneratedTests(deliveryConfig, {
       githubToken,
       prNumber,
       prHeadRef,
       prHeadSha,
       reportMarkdown: sideBodyMarkdown,
-      sidePrTitle
+      sidePrTitle,
+      workspaceFilePath
     });
     commitHasChanges = delivery.hasChanges;
     sidePrUrl = delivery.sidePrUrl;
@@ -114169,7 +114213,7 @@ ${stdout}`);
 `);
       }
     } else if (sidePrUrl) {
-      const effectiveTitle = delivery.sidePrTitle ?? sidePrTitle ?? config.commitMessage;
+      const effectiveTitle = delivery.sidePrTitle ?? sidePrTitle ?? deliveryConfig.commitMessage;
       const breadcrumb = delivery.annotatedStale ? `This push produced no new test changes. The prior [testbot PR](${sidePrUrl}) from an earlier push is still open for review.` : `Testbot PR : [${effectiveTitle}](${sidePrUrl})`;
       if (fs20.existsSync(paths.combinedResultPath)) {
         const existing = fs20.readFileSync(paths.combinedResultPath, "utf-8");

@@ -31580,7 +31580,6 @@ function getInputs() {
     cursorApiKey: getInput("cursorApiKey"),
     copilotApiKey: getInput("copilotApiKey"),
     anthropicApiKey: getInput("anthropicApiKey"),
-    testDirectory: getInput("testDirectory"),
     targetSetupCommand: getInput("targetSetupCommand"),
     authTokenCommand: getInput("authTokenCommand"),
     uiCredentials: getInput("uiCredentials"),
@@ -31637,7 +31636,6 @@ async function loadConfig(inputs) {
   const services = [];
   let targetSetupCommand = inputs.targetSetupCommand;
   let targetTeardownCommand = inputs.targetTeardownCommand;
-  let testDirectory = inputs.testDirectory;
   let executorVersion = inputs.skyrampExecutorVersion;
   let mcpVersion = inputs.skyrampMcpVersion;
   if (await manager.exists()) {
@@ -31666,9 +31664,6 @@ async function loadConfig(inputs) {
       }
       const first = (wsConfig.services ?? [])[0];
       if (first) {
-        if (!testDirectory && first.testDirectory) {
-          testDirectory = first.testDirectory;
-        }
         if (!targetSetupCommand && first.runtimeDetails?.serverStartCommand) {
           targetSetupCommand = first.runtimeDetails.serverStartCommand;
         }
@@ -31683,11 +31678,9 @@ async function loadConfig(inputs) {
   } else {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
-  if (!testDirectory) testDirectory = "tests";
   if (!executorVersion) executorVersion = "v1.3.23";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
-    testDirectory,
     targetSetupCommand,
     authTokenCommand: inputs.authTokenCommand,
     targetTeardownCommand,
