@@ -26469,7 +26469,7 @@ var require_workspace = __commonJS({
         baseUrl: z.string().optional()
       }).strict().optional(),
       runtimeDetails: z.object({
-        serverStartCommand: z.string(),
+        serverStartCommand: z.string().optional(),
         runtime: z.enum(["local", "docker", "k8s"]),
         dockerNetwork: z.string().optional(),
         k8sNamespace: z.string().optional(),
@@ -31678,7 +31678,7 @@ async function loadConfig(inputs) {
   } else {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
-  if (!executorVersion) executorVersion = "v1.3.23";
+  if (!executorVersion) executorVersion = "v1.3.24";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     targetSetupCommand,

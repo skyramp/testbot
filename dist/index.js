@@ -60871,7 +60871,7 @@ var require_workspace = __commonJS({
         baseUrl: z.string().optional()
       }).strict().optional(),
       runtimeDetails: z.object({
-        serverStartCommand: z.string(),
+        serverStartCommand: z.string().optional(),
         runtime: z.enum(["local", "docker", "k8s"]),
         dockerNetwork: z.string().optional(),
         k8sNamespace: z.string().optional(),
@@ -105387,7 +105387,7 @@ async function loadConfig(inputs) {
   } else {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
-  if (!executorVersion) executorVersion = "v1.3.23";
+  if (!executorVersion) executorVersion = "v1.3.24";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     targetSetupCommand,
@@ -109317,7 +109317,7 @@ function sortRecommendations(a, b, typeOrder, typeKey) {
 function renderReport(report, options = {}) {
   const { collapsed = false, userPrompt, autoCommit: autoCommit2 = false, audience } = options;
   const lines = [];
-  const includeBusinessCase = audience !== "comment" /* Comment */;
+  const includeBusinessCase = audience !== "side-pr" /* SidePr */;
   const includeTests = audience !== "comment" /* Comment */;
   const includeIssuesAndNextSteps = audience !== "side-pr" /* SidePr */;
   const businessCaseBlockquote = audience !== "side-pr" /* SidePr */;
@@ -109837,6 +109837,21 @@ async function executeAgent(opts) {
     if ((transientCrash || emptyResult) && attempt < maxRetries) {
       const reason = transientCrash ? "transient error" : "no report produced";
       warning(`Agent ${reason} (attempt ${attempt}/${maxRetries}). Retrying in ${retryDelay}s...`);
+      try {
+        const resetResult = await exec2("git", ["reset", "--hard", "HEAD"], { cwd: workingDir, silent: true, ignoreReturnCode: true });
+        const cleanResult = await exec2("git", ["clean", "-fd"], { cwd: workingDir, silent: true, ignoreReturnCode: true });
+        if (resetResult.exitCode === 0 && cleanResult.exitCode === 0) {
+          debug2("Cleaned up generated test files from failed attempt before retry");
+        } else {
+          const resetOut = (resetResult.stderr || resetResult.stdout).trim().slice(0, 200);
+          const cleanOut = (cleanResult.stderr || cleanResult.stdout).trim().slice(0, 200);
+          warning(
+            `Cleanup before retry exited non-zero (non-fatal): reset=${resetResult.exitCode} clean=${cleanResult.exitCode}` + (resetOut ? ` | reset output: ${resetOut}` : "") + (cleanOut ? ` | clean output: ${cleanOut}` : "")
+          );
+        }
+      } catch (err) {
+        warning(`Cleanup before retry failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+      }
       await sleep(retryDelay);
       continue;
     }
@@ -112781,10 +112796,13 @@ function isRetryableStatus(status) {
 }
 function extractEndpointsFromDiff(diffContent) {
   const addedLines = diffContent.split("\n").filter((line) => line.startsWith("+") && !line.startsWith("+++")).map((line) => line.slice(1));
-  const candidates = /* @__PURE__ */ new Set();
+  const candidates = /* @__PURE__ */ new Map();
   let hasRouteRegistrations = false;
   const pathLiteral = /['"`]([^'"`\s]*\/[^'"`\s]*)['"`]/g;
+  const methodPattern = /[.@](get|post|put|patch|delete)\s*\(/i;
   for (const line of addedLines) {
+    const methodMatch = methodPattern.exec(line);
+    const method = methodMatch ? methodMatch[1].toUpperCase() : "GET";
     pathLiteral.lastIndex = 0;
     let m;
     while ((m = pathLiteral.exec(line)) !== null) {
@@ -112808,14 +112826,16 @@ function extractEndpointsFromDiff(diffContent) {
       }
       if (path21.includes("..") || /\/v\d+\.\d+/.test(path21)) continue;
       if (/\.(png|jpe?g|gif|svg|webp|ico|css|js|html?|md|txt|pdf)(\?|$)/i.test(path21)) continue;
-      candidates.add(path21);
+      if (!candidates.has(path21)) {
+        candidates.set(path21, method);
+      }
     }
   }
   if (candidates.size > 0) {
-    return [...candidates].sort((a, b) => a.split("/").length - b.split("/").length).slice(0, MAX_ENDPOINTS);
+    return [...candidates.entries()].map(([path21, method]) => ({ path: path21, method })).sort((a, b) => a.path.split("/").length - b.path.split("/").length).slice(0, MAX_ENDPOINTS);
   }
   if (hasRouteRegistrations) {
-    return ["/"];
+    return [{ path: "/", method: "GET" }];
   }
   return [];
 }
@@ -112862,10 +112882,16 @@ function serviceOwnsChangedPaths(svc, changedPaths) {
   if (!root) return true;
   return [...changedPaths].some((p) => p === root || p.startsWith(root + "/"));
 }
-async function probeUrl(url2, authToken, timeoutMs = PROBE_TIMEOUT_MS) {
+async function probeUrl(url2, authToken, method = "GET", timeoutMs = PROBE_TIMEOUT_MS) {
   const headers = { Accept: "application/json" };
   if (authToken) {
     headers["Authorization"] = authToken.startsWith("Bearer ") ? authToken : `Bearer ${authToken}`;
+  }
+  const isWriteMethod = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
+  let body2;
+  if (isWriteMethod) {
+    headers["Content-Type"] = "application/json";
+    body2 = "{}";
   }
   let lastOutcome = { statusCode: 0 };
   for (let attempt = 0; attempt <= PROBE_RETRIES; attempt++) {
@@ -112875,7 +112901,7 @@ async function probeUrl(url2, authToken, timeoutMs = PROBE_TIMEOUT_MS) {
     }
     const { signal, cancel: cancel3 } = abortAfter(timeoutMs);
     try {
-      const res = await fetch(url2, { method: "GET", headers, signal });
+      const res = await fetch(url2, { method, headers, body: body2, signal });
       cancel3();
       lastOutcome = { statusCode: res.status };
       if (!isRetryableStatus(res.status)) return lastOutcome;
@@ -112887,7 +112913,7 @@ async function probeUrl(url2, authToken, timeoutMs = PROBE_TIMEOUT_MS) {
   }
   return lastOutcome;
 }
-function classifyProbe(path21, outcome) {
+function classifyProbe(path21, outcome, method = "GET") {
   if (outcome.statusCode === 0) {
     return {
       kind: "NOT_DEPLOYED",
@@ -112897,7 +112923,13 @@ function classifyProbe(path21, outcome) {
     };
   }
   if (path21 === "/") return null;
-  const kind = outcome.statusCode === 404 ? "STALE_IMAGE" : outcome.statusCode === 401 || outcome.statusCode === 403 ? "AUTH_FAILURE" : outcome.statusCode >= 500 ? "UNHEALTHY" : null;
+  const isWriteMethod = method === "POST" || method === "PUT" || method === "PATCH" || method === "DELETE";
+  const kind = outcome.statusCode === 404 ? "STALE_IMAGE" : outcome.statusCode === 401 ? "AUTH_FAILURE" : (
+    // 403 on a write-method probe means the endpoint exists but rejected our
+    // empty body or requires specific permissions — not a missing auth token.
+    // Treat it the same as 405/400: endpoint exists, proceed.
+    outcome.statusCode === 403 && isWriteMethod ? null : outcome.statusCode === 403 ? "AUTH_FAILURE" : outcome.statusCode >= 500 ? "UNHEALTHY" : null
+  );
   if (!kind) return null;
   const messages = {
     STALE_IMAGE: `${path21} returned 404. The endpoint was not found \u2014 the service may be running a stale image that does not include this route, or the auth layer may be returning 404 instead of 401/403.`,
@@ -113161,12 +113193,12 @@ async function runPreflightCheck(opts) {
         return { ready: true, skipped: true, issues: [], probedEndpoints: [] };
       }
       debug2(`Pre-flight: no static routes found; using ${paramHints.length} parameterised hint(s) to resolve collection endpoint(s)`);
-      endpoints = paramHints;
-    } else if (endpoints.length === 1 && endpoints[0] === "/") {
+      endpoints = paramHints.map((path21) => ({ path: path21, method: "GET" }));
+    } else if (endpoints.length === 1 && endpoints[0].path === "/") {
       const paramHints = extractParamHintsFromDiff(diffContent);
       if (paramHints.length > 0) {
         debug2(`Pre-flight: diff has only parameterised routes; using ${paramHints.length} hint(s) to resolve collection endpoint(s)`);
-        endpoints = paramHints;
+        endpoints = paramHints.map((path21) => ({ path: path21, method: "GET" }));
       }
     }
     const changedPaths = extractChangedPaths(diffContent);
@@ -113175,12 +113207,26 @@ async function runPreflightCheck(opts) {
       info("No services match the changed files in diff \u2014 skipping pre-flight check");
       return { ready: true, skipped: true, issues: [], probedEndpoints: [] };
     }
+    const methodByRawPath = new Map(endpoints.map((e) => [e.path, e.method]));
+    const lookupMethod = (resolvedPath) => {
+      const exact = methodByRawPath.get(resolvedPath);
+      if (exact) return exact;
+      let bestMethod = "GET";
+      let bestLen = 0;
+      for (const [raw, method] of methodByRawPath) {
+        if (raw !== "/" && resolvedPath.endsWith(raw) && raw.length > bestLen) {
+          bestMethod = method;
+          bestLen = raw.length;
+        }
+      }
+      return bestMethod;
+    };
     const serviceResults = await Promise.all(relevantServices.map(async (svc) => {
       const svcIssues = [];
       const svcProbed = [];
       const baseUrl2 = resolveBaseUrl(svc).replace(/\/$/, "");
       info(`Pre-flight: probing ${endpoints.length} new endpoint(s) against ${baseUrl2}`);
-      const probePaths = await resolvePathsViaOpenApi(baseUrl2, endpoints, authToken, {
+      const probePaths = await resolvePathsViaOpenApi(baseUrl2, endpoints.map((e) => e.path), authToken, {
         schemaPath: svc.schemaPath,
         diffContent,
         anthropicApiKey
@@ -113195,19 +113241,20 @@ async function runPreflightCheck(opts) {
         return { svcIssues, svcProbed };
       }
       const probeResults = await Promise.all(probeablePaths.map(async (path21) => {
+        const method = lookupMethod(path21);
         const url2 = `${baseUrl2}${path21}`;
-        const outcome = await probeUrl(url2, authToken);
-        return { path: path21, url: url2, outcome };
+        const outcome = await probeUrl(url2, authToken, method);
+        return { path: path21, url: url2, outcome, method };
       }));
-      for (const { path: path21, url: url2, outcome } of probeResults) {
+      for (const { path: path21, url: url2, outcome, method } of probeResults) {
         svcProbed.push(url2);
-        debug2(`Pre-flight probe ${url2}: ${outcome.statusCode}`);
-        const issue2 = classifyProbe(path21, outcome);
+        debug2(`Pre-flight probe ${method} ${url2}: ${outcome.statusCode}`);
+        const issue2 = classifyProbe(path21, outcome, method);
         if (issue2) {
           svcIssues.push(issue2);
           error(`Pre-flight [${issue2.kind}]: ${issue2.message}`);
         } else {
-          notice(`Pre-flight: ${path21} \u2192 ${outcome.statusCode} \u2713`);
+          notice(`Pre-flight: ${method} ${path21} \u2192 ${outcome.statusCode} \u2713`);
         }
       }
       return { svcIssues, svcProbed };
@@ -113249,6 +113296,7 @@ async function configureGitIdentity(botName, botEmail) {
   endGroup();
 }
 async function stageTestFiles(config, opts) {
+  await exec2("git", ["update-index", "--again"], { silent: true });
   const dirs = /* @__PURE__ */ new Set();
   for (const svc of config.services) {
     if (svc.testDirectory) dirs.add(svc.testDirectory);
