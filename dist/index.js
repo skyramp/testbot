@@ -109837,6 +109837,13 @@ async function executeAgent(opts) {
     if ((transientCrash || emptyResult) && attempt < maxRetries) {
       const reason = transientCrash ? "transient error" : "no report produced";
       warning(`Agent ${reason} (attempt ${attempt}/${maxRetries}). Retrying in ${retryDelay}s...`);
+      try {
+        await exec2("git", ["checkout", "--", "."], { cwd: workingDir, silent: true, ignoreReturnCode: true });
+        await exec2("git", ["clean", "-fd"], { cwd: workingDir, silent: true, ignoreReturnCode: true });
+        debug2("Cleaned up generated test files from failed attempt before retry");
+      } catch (err) {
+        debug2(`Cleanup before retry failed (non-fatal): ${err}`);
+      }
       await sleep(retryDelay);
       continue;
     }
