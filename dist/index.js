@@ -105387,7 +105387,7 @@ async function loadConfig(inputs) {
   } else {
     notice("No .skyramp/workspace.yml found, using action input defaults");
   }
-  if (!executorVersion) executorVersion = "v1.3.24";
+  if (!executorVersion) executorVersion = "v1.3.23";
   if (!mcpVersion) mcpVersion = "latest";
   const config = {
     targetSetupCommand,
