@@ -135,7 +135,7 @@ Before using this action, ensure you have:
 ### Basic Usage with Claude Code
 
 ```yaml
-- uses: skyramp/testbot@v0.9.3
+- uses: skyramp/testbot@v0.9.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -145,7 +145,7 @@ Before using this action, ensure you have:
 ### Basic Usage with Cursor
 
 ```yaml
-- uses: skyramp/testbot@v0.9.3
+- uses: skyramp/testbot@v0.9.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -154,7 +154,7 @@ Before using this action, ensure you have:
 ### Using GitHub Copilot CLI
 
 ```yaml
-- uses: skyramp/testbot@v0.9.3
+- uses: skyramp/testbot@v0.9.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     copilotApiKey: ${{ secrets.COPILOT_PAT }}
@@ -163,7 +163,7 @@ Before using this action, ensure you have:
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v0.9.3
+- uses: skyramp/testbot@v0.9.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -173,7 +173,7 @@ Before using this action, ensure you have:
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v0.9.3
+- uses: skyramp/testbot@v0.9.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -212,7 +212,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v0.9.3
+      - uses: skyramp/testbot@v0.9.4
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -223,7 +223,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v0.9.3
+- uses: skyramp/testbot@v0.9.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -235,7 +235,7 @@ The token is automatically masked in GitHub Actions logs via `::add-mask::`. If 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v0.9.3
+- uses: skyramp/testbot@v0.9.4
   id: skyramp
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
@@ -272,7 +272,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead of GITHUB_TOKEN
 
-      - uses: skyramp/testbot@v0.9.3
+      - uses: skyramp/testbot@v0.9.4
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           cursorApiKey: ${{ secrets.CURSOR_API_KEY }}

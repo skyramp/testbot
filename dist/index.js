@@ -109147,6 +109147,7 @@ async function installMcp(config, inputs, tempDir) {
   return withGroup("Installing Skyramp MCP", async () => {
     let command;
     let args;
+    let nodeModulesDir;
     const mcpInstallDir = path17.join(tempDir, "mcp");
     fs14.mkdirSync(mcpInstallDir, { recursive: true });
     if (config.skyrampMcpSource === "github") {
@@ -109215,7 +109216,8 @@ async function installMcp(config, inputs, tempDir) {
       }
       command = "node";
       args = path17.join(mcpPkgDir, "build", "index.js");
-      exportVariable("NODE_PATH", path17.join(mcpPkgDir, "node_modules"));
+      nodeModulesDir = path17.join(mcpPkgDir, "node_modules");
+      exportVariable("NODE_PATH", nodeModulesDir);
       exportVariable("SKYRAMP_MCP_INSTALL_PATH", mcpInstallDir);
     } else {
       const pkg = `@skyramp/mcp@${config.skyrampMcpVersion}`;
@@ -109240,11 +109242,12 @@ async function installMcp(config, inputs, tempDir) {
       const mcpPkgDir = path17.join(mcpInstallDir, "node_modules", "@skyramp", "mcp");
       command = "node";
       args = path17.join(mcpPkgDir, "build", "index.js");
-      exportVariable("NODE_PATH", path17.join(mcpInstallDir, "node_modules"));
+      nodeModulesDir = path17.join(mcpInstallDir, "node_modules");
+      exportVariable("NODE_PATH", nodeModulesDir);
       exportVariable("SKYRAMP_MCP_INSTALL_PATH", mcpInstallDir);
     }
     notice(`Skyramp MCP installed successfully (source: ${config.skyrampMcpSource})`);
-    return { command, args, licensePath: "" };
+    return { command, args, licensePath: "", nodeModulesDir };
   });
 }
 async function configureMcp(agent, mcpCommand, mcpArgs, licensePath, testExecutionTimeout) {
@@ -113606,22 +113609,21 @@ async function handleDevPrClosed(options) {
 // src/playwright.ts
 var os9 = __toESM(require("os"));
 var path19 = __toESM(require("path"));
-async function installPlaywright() {
+async function installPlaywrightBrowsers(nodeModulesDir) {
   await withGroup("Installing Playwright browsers", async () => {
+    const playwrightBin = path19.join(nodeModulesDir, ".bin", "playwright");
     const playwrightCachePath = path19.join(os9.homedir(), ".cache", "ms-playwright");
     exportVariable("PLAYWRIGHT_BROWSERS_PATH", playwrightCachePath);
-    const { stdout: pwVersionRaw } = await exec2("npm", ["view", "@playwright/test", "version"]);
-    const pwVersion = pwVersionRaw.trim() || "unknown";
+    const { stdout: pwVersionRaw } = await exec2(playwrightBin, ["--version"]);
+    const pwVersion = pwVersionRaw.trim().replace(/^Version\s*/i, "") || "unknown";
     const playwrightCacheKey = `playwright-${process.platform}-${process.arch}-${pwVersion}`;
     const cached = await restoreFromCache([playwrightCachePath], playwrightCacheKey, "Playwright browsers");
     if (cached) {
-      await exec2("npm", ["install", "-g", "@playwright/test"]);
-      await exec2("playwright", ["install-deps", "chromium"]);
+      await exec2(playwrightBin, ["install-deps", "chromium"]);
     } else {
       await withRetry(
         async () => {
-          await exec2("npm", ["install", "-g", "@playwright/test"]);
-          await exec2("playwright", ["install", "--with-deps", "chromium"]);
+          await exec2(playwrightBin, ["install", "--with-deps", "chromium"]);
           notice("Playwright chromium browser installed successfully");
         },
         { retries: 2, delay: 5, label: "Playwright install" }
@@ -113953,7 +113955,7 @@ Your Skyramp license may be expired or invalid. Please generate a new license fi
     );
     notice("Successfully pulled Skyramp Executor");
   });
-  await installPlaywright();
+  await installPlaywrightBrowsers(mcp.nodeModulesDir);
   agent.exportEnv(inputs, config);
   await installAgentCli(agent);
   await configureMcp(agent, mcp.command, mcp.args, mcp.licensePath, config.testExecutionTimeout);
