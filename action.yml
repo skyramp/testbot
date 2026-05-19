@@ -107,6 +107,15 @@ inputs:
     description: 'Where generated/maintained tests are delivered. "separate-branch" (default) opens a new PR/MR from a bot-owned branch into the feature branch, keeping the feature PR clean. "same-branch" pushes a commit directly onto the feature branch (legacy behavior). Note: for downstream CI (lint/tests/etc.) to auto-run on the side PR, the `githubToken` input must be a GitHub App installation token or PAT — the default `GITHUB_TOKEN` will not trigger other workflows.'
     required: false
     default: 'separate-branch'
+  testRepo:
+    description: 'Cross-repo test delivery: GitHub repository (`owner/name`) that holds test files. When set, generated tests are committed and a side PR is opened in this repo instead of the app repo. Requires `testRepoToken`. Note: the agent writes test files to the app repo by default; redirect to the test repo clone is coming in a follow-up.'
+    required: false
+  testRepoBranch:
+    description: 'Branch in `testRepo` to target with the side PR. Defaults to that repo''s default branch.'
+    required: false
+  testRepoToken:
+    description: 'GitHub token with `contents: write` and `pull-requests: write` permissions on `testRepo`. Required when `testRepo` is set. Store in GitHub Secrets.'
+    required: false
   postPrComment:
     description: 'Post summary as PR comment'
     required: false
