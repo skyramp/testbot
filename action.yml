@@ -55,7 +55,7 @@ inputs:
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.23".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.25".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
@@ -87,6 +87,10 @@ inputs:
     description: 'Maximum seconds to wait for ready check command to succeed'
     required: false
     default: '30'
+  targetReadyCheckInterval:
+    description: 'Seconds between ready check poll attempts'
+    required: false
+    default: '2'
   targetReadyCheckDiagnosticsCommand:
     description: 'Shell command to collect diagnostics on ready check timeout. Runs when targetReadyCheckCommand times out.'
     required: false
