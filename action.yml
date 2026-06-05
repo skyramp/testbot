@@ -164,6 +164,16 @@ inputs:
     description: 'Enable debug logging'
     required: false
     default: 'true'
+
+  # SUT Setup inputs
+  sutSetupMode:
+    description: 'SUT setup mode. When not "none", Testbot enters bootstrap mode to generate SUT files. After validation succeeds or bootstrap times out, sets to "none". First milestone supports: none | adapt_workflow.'
+    required: false
+    default: 'none'
+  sutSourceWorkflowFile:
+    description: 'Path to an existing workflow file to adapt (for adapt_workflow mode). Example: .github/workflows/e2e-tests.yml'
+    required: false
+    default: ''
 outputs:
   test_summary:
     description: 'Full summary of test maintenance actions'
