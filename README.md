@@ -48,7 +48,7 @@ If you prefer to set things up manually:
             with:
               fetch-depth: 0
 
-          - uses: skyramp/testbot@v0.10
+          - uses: skyramp/testbot@v0.1
             with:
               skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     ```
@@ -95,8 +95,8 @@ Before using this action, ensure you have:
 | `targetSetupCommand` | Command to start services before test maintenance | `docker compose up -d` |
 | `skipTargetSetup` | Skip running service startup command | `false` |
 | `targetReadyCheckCommand` | Command to verify services are ready (retried until success or timeout) | `sleep 5` |
-| `targetReadyCheckTimeout` | Max seconds to wait for ready check to succeed | `30` |
-| `targetReadyCheckInterval` | Seconds between ready check poll attempts | `2` |
+| `targetReadyCheckTimeout` | Max seconds to wait for ready check to succeed | `1800` |
+| `targetReadyCheckInterval` | Seconds between ready check poll attempts | `30` |
 | `targetReadyCheckDiagnosticsCommand` | Command to collect diagnostics on ready check timeout | Docker container status/logs |
 | `targetTeardownCommand` | Command to tear down services after tests (runs in post step, guaranteed even on failure/cancellation) | `''` |
 | `skipTargetTeardown` | Skip running service teardown command | `false` |
@@ -106,7 +106,7 @@ Before using this action, ensure you have:
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `skyrampExecutorVersion` | Skyramp Executor Docker image version | `v1.3.26` |
+| `skyrampExecutorVersion` | Skyramp Executor Docker image version | `v1.3.28` |
 | `skyrampMcpVersion` | Skyramp MCP package version | `latest` |
 | `nodeVersion` | Node.js version to use | `lts/*` |
 | `workingDirectory` | Working directory for the action | `.` |
@@ -144,7 +144,7 @@ Before using this action, ensure you have:
 ### Basic Usage with Claude Code
 
 ```yaml
-- uses: skyramp/testbot@v0.10.3
+- uses: skyramp/testbot@v0.1.0
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -154,7 +154,7 @@ Before using this action, ensure you have:
 ### Basic Usage with Cursor
 
 ```yaml
-- uses: skyramp/testbot@v0.10.3
+- uses: skyramp/testbot@v0.1.0
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -163,7 +163,7 @@ Before using this action, ensure you have:
 ### Using GitHub Copilot CLI
 
 ```yaml
-- uses: skyramp/testbot@v0.10.3
+- uses: skyramp/testbot@v0.1.0
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     copilotApiKey: ${{ secrets.COPILOT_PAT }}
@@ -172,7 +172,7 @@ Before using this action, ensure you have:
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v0.10.3
+- uses: skyramp/testbot@v0.1.0
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -182,7 +182,7 @@ Before using this action, ensure you have:
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v0.10.3
+- uses: skyramp/testbot@v0.1.0
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -221,7 +221,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v0.10.3
+      - uses: skyramp/testbot@v0.1.0
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -232,7 +232,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v0.10.3
+- uses: skyramp/testbot@v0.1.0
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
@@ -244,7 +244,7 @@ The token is automatically masked in GitHub Actions logs via `::add-mask::`. If 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v0.10.3
+- uses: skyramp/testbot@v0.1.0
   id: skyramp
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
@@ -281,7 +281,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead of GITHUB_TOKEN
 
-      - uses: skyramp/testbot@v0.10.3
+      - uses: skyramp/testbot@v0.1.0
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           cursorApiKey: ${{ secrets.CURSOR_API_KEY }}

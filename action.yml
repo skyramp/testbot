@@ -55,7 +55,7 @@ inputs:
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.26".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.28".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
@@ -84,13 +84,13 @@ inputs:
     required: false
     default: ''
   targetReadyCheckTimeout:
-    description: 'Maximum seconds to wait for ready check command to succeed'
+    description: 'Maximum seconds to wait for ready check command to succeed. Default accommodates `docker compose --build --wait` cold builds; the loop exits on first success so fast services pay no extra cost.'
     required: false
-    default: '30'
+    default: '1800'
   targetReadyCheckInterval:
     description: 'Seconds between ready check poll attempts'
     required: false
-    default: '2'
+    default: '30'
   targetReadyCheckDiagnosticsCommand:
     description: 'Shell command to collect diagnostics on ready check timeout. Runs when targetReadyCheckCommand times out.'
     required: false
@@ -167,11 +167,15 @@ inputs:
 
   # SUT Setup inputs
   sutSetupMode:
-    description: 'SUT setup mode. When not "none", Testbot enters bootstrap mode to generate SUT files. After validation succeeds or bootstrap times out, sets to "none". First milestone supports: none | adapt_workflow.'
+    description: 'SUT setup mode. When not "none", Testbot enters bootstrap mode to generate SUT files. After validation succeeds or bootstrap times out, sets to "none". Supported: none | adapt_workflow | docker_compose.'
     required: false
     default: 'none'
   sutSourceWorkflowFile:
     description: 'Path to an existing workflow file to adapt (for adapt_workflow mode). Example: .github/workflows/e2e-tests.yml'
+    required: false
+    default: ''
+  sutSourceDockerComposeFile:
+    description: 'Path to an existing docker-compose file to reuse (for docker_compose mode). Example: docker-compose.yml'
     required: false
     default: ''
 outputs:
