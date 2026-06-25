@@ -1,22 +1,28 @@
 # Skyramp Testbot
 
-> Automated test maintenance for your REST APIs using Skyramp's AI-powered Testbot
+> Automated test generation and maintenance for your APIs and UIs using Skyramp's AI-powered Testbot
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Skyramp%20Testbot-blue?logo=github)](https://github.com/marketplace/actions/skyramp-testbot)
 [![License](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 
 ## Features
 
-- 🤖 **Skyramp Powered Test Maintenance** - Automatically updates tests when code changes
-- 🔍 **Smart Change Detection** - Analyzes git diffs to identify impacted tests
-- ✨ **Test Generation** - Creates new tests for new code additions
-- ✅ **Automated Test Execution** - Runs tests and validates results
-- 💬 **PR Integration** - Posts detailed summaries as PR comments
-- 🔄 **Auto-commit** - Optionally commits test changes automatically
+- 🤖 **Bring Your Own Agent** - Runs on Claude Code, Cursor CLI, or GitHub Copilot CLI — auto-detected from the API key you provide
+- 🔍 **Smart Change Detection** - Analyzes the PR diff to identify impacted and missing tests
+- ✨ **Multi-type Test Generation** - Creates API tests (integration, contract) plus browser **E2E and UI** tests for new behavior
+- 🎭 **Browser Recording** - Records browser interactions for UI/E2E tests, logging in first with `uiCredentials` when the app requires auth, and links execution videos in the report
+- 🔁 **Before/After Maintenance** - Runs impacted tests before and after updating them so you can see exactly what the change fixed
+- ✅ **Automated Test Execution** - Runs generated and maintained tests and validates results
+- 🌿 **Clean Side-PR Delivery** - By default opens a separate PR with the test changes into your feature branch, keeping the feature PR clean (or commit directly with `same-branch`)
+- 🔗 **Multi-repo Aware** - Analyzes related repositories as shared context and can deliver tests to a separate test repo
+- 💬 **Rich PR Reports** - Posts a detailed, collapsible summary as a PR comment with timing breakdowns
+- 🔒 **Author Allowlisting** - Restrict which PR authors Testbot acts on
 
 ## Quick Start
 
 The fastest way to get started is with the **Skyramp Testbot Installer** — a guided wizard that installs the GitHub App, configures secrets, and opens a ready-to-merge setup PR in your repository.
+
+> ⚠️ **Permissions required:** Installing the GitHub App on an organization requires org-owner (or an admin with app-install) permissions, and configuring secrets and opening the setup PR requires admin/write access to the target repository. If you don't have these, ask an org/repo admin to run the installer, or set up the workflow manually via the [Usage Examples](#usage-examples) instead.
 
 1. Go to [testbot.skyramp.dev](https://testbot.skyramp.dev) and sign in with GitHub.
 2. Install the Skyramp Testbot GitHub App on your organization or personal account.
@@ -24,109 +30,104 @@ The fastest way to get started is with the **Skyramp Testbot Installer** — a g
 4. Click **Deploy** — the installer creates a PR with the workflow file and configures your secrets automatically.
 5. Merge the PR, and Testbot will run on every pull request.
 
-### Manual Setup
+The installer detects your stack, writes the workflow file, and configures your `SKYRAMP_LICENSE` and agent API key secrets for you — no need to hand-write any YAML. To wire up the workflow yourself instead, see the [Usage Examples](#usage-examples) below.
 
-If you prefer to set things up manually:
-
-1. Add 2 secrets to your repository:
-    1. Obtain a [Skyramp](https://skyramp.dev) license key and store it as `SKYRAMP_LICENSE`.
-    2. Add an API key for your chosen AI agent (`ANTHROPIC_API_KEY`, `CURSOR_API_KEY`, or `COPILOT_PAT`).
-2. Add this workflow to your repository (`.github/workflows/skyramp-testbot.yml`):
-
-    ```yaml
-    name: Skyramp Testbot
-    on: [pull_request]
-
-    jobs:
-      testbot:
-        runs-on: ubuntu-latest
-        permissions:
-          contents: write
-          pull-requests: write
-        steps:
-          - uses: actions/checkout@v4
-            with:
-              fetch-depth: 0
-
-          - uses: skyramp/testbot@v0.10
-            with:
-              skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-    ```
+Once the setup PR is merged, Testbot runs automatically on each subsequent pull request: it analyzes the diff, generates new tests and updates impacted ones, and — in the default `separate-branch` mode — opens a **separate test PR** targeting that feature branch with the changes (rather than committing onto the PR directly). See [`generatedTestsMode`](#test-generation--delivery) to change this behavior.
 
 ## Agent Customization
 
-Should you want to use your own AI agent subscription, provision a key and use the appropriate input.
+Testbot drives a coding agent under the hood. Provide a key for the agent you want to use, and the agent type is **auto-detected** from which key is present.
 
-- Claude Code - Coding Agent by Anthropic
-- **Cursor CLI** - Powerful AI agent from Cursor
-- **GitHub Copilot CLI** - GitHub's AI coding assistant
+| Agent | Input | Description |
+|-------|-------|-------------|
+| **Claude Code** | `anthropicApiKey` | Coding agent by Anthropic (default recommendation) |
+| **Cursor CLI** | `cursorApiKey` | AI agent from Cursor |
+| **GitHub Copilot CLI** | `copilotApiKey` | GitHub's AI coding assistant (GitHub PAT with "Copilot Requests" permission) |
 
-Choose the agent that best fits your needs and existing subscriptions.
+Provide exactly one agent key. Choose the agent that best fits your existing subscriptions.
 
 ## Prerequisites
 
 Before using this action, ensure you have:
 
 - [ ] Skyramp license file content stored in GitHub Secrets as `SKYRAMP_LICENSE`
-- [ ] **For Claude Code**: Claude Code API key stored in GitHub Secrets as `ANTHROPIC_API_KEY`
-- [ ] **For Cursor**: Cursor API key stored in GitHub Secrets as `CURSOR_API_KEY`
-- [ ] **For Copilot**: GitHub token with Copilot access stored in GitHub Secrets as `GITHUB_TOKEN` or `COPILOT_PAT`
-- [ ] Docker available in your runner (for Skyramp Executor)
-- [ ] Node.js compatible project (action installs Node.js automatically)
-- [ ] Existing Skyramp tests or a test directory structure
+- [ ] An API key for exactly one agent, stored in GitHub Secrets:
+  - **Claude Code**: `ANTHROPIC_API_KEY`
+  - **Cursor**: `CURSOR_API_KEY`
+  - **Copilot**: a GitHub PAT with "Copilot Requests" permission (commonly stored as `COPILOT_PAT`)
+- [ ] Docker available in your runner (for the Skyramp Executor)
+- [ ] A project whose services can be started in CI (the action runs `docker compose up -d` by default)
+- [ ] Existing Skyramp tests or a test directory structure (Testbot creates `.skyramp/workspace.yml` on its first run)
 
-> **Note:** The agent type is automatically detected based on which API key you provide. Provide only one key (not both).
+> **Note:** The agent type is automatically detected based on which API key you provide. Provide **exactly one** key — the action fails fast with an error if no agent key is supplied (there is no default agent), and likewise if more than one is supplied.
 
 ## Inputs
+
+`action.yml` is the source of truth for inputs and defaults. The tables below summarize the most useful ones.
 
 ### Required
 
 | Input | Description |
 |-------|-------------|
 | `skyrampLicenseFile` | Skyramp license file content (store in GitHub Secrets) |
-| `anthropicApiKey` | Anthropic API key (provide this to use Claude Code) |
-| `cursorApiKey` | Cursor API key (provide this to use Cursor agent) |
-| `copilotApiKey` | GitHub token with Copilot access (provide this to use Copilot agent) |
 
-### Optional - Service Lifecycle
+Plus **one** agent key — `anthropicApiKey`, `cursorApiKey`, or `copilotApiKey` (see [Agent Customization](#agent-customization)).
+
+### Service Lifecycle
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `targetSetupCommand` | Command to start services before test maintenance | `docker compose up -d` |
-| `skipTargetSetup` | Skip running service startup command | `false` |
-| `targetReadyCheckCommand` | Command to verify services are ready (retried until success or timeout) | `sleep 5` |
-| `targetReadyCheckTimeout` | Max seconds to wait for ready check to succeed | `1800` |
+| `targetSetupCommand` | Command to start services before testing. Can emit a JSON object on its last stdout line to override the workspace `baseUrl` at runtime (e.g. `{"baseUrl": "http://remote-host:8000"}`, or `{"services": {"backend": {"baseUrl": "..."}}}` for multi-service) | `docker compose up -d` |
+| `skipTargetSetup` | Skip running the service startup command | `false` |
+| `targetSetupRetries` | Retries for `targetSetupCommand` on failure (e.g. transient DockerHub 502s) | `3` |
+| `targetSetupRetryDelay` | Delay in seconds between setup retries | `10` |
+| `targetReadyCheckCommand` | Command to verify services are ready (retried until success or timeout). When empty, auto-generates curl health checks against the workspace service base URLs | `''` (auto) |
+| `targetReadyCheckTimeout` | Max seconds to wait for the ready check to succeed | `1800` |
 | `targetReadyCheckInterval` | Seconds between ready check poll attempts | `30` |
-| `targetReadyCheckDiagnosticsCommand` | Command to collect diagnostics on ready check timeout | Docker container status/logs |
-| `targetTeardownCommand` | Command to tear down services after tests (runs in post step, guaranteed even on failure/cancellation) | `''` |
-| `skipTargetTeardown` | Skip running service teardown command | `false` |
-| `authTokenCommand` | Shell command to generate an authentication token (stdout is captured and set as `SKYRAMP_TEST_TOKEN`) | `''` |
+| `targetReadyCheckDiagnosticsCommand` | Command to collect diagnostics on ready-check timeout | Docker container status/logs |
+| `targetTeardownCommand` | Command to tear down services (runs in the post step, guaranteed even on failure/cancellation) | `''` |
+| `skipTargetTeardown` | Skip running the service teardown command | `false` |
 
-### Optional - Other
+### Authentication & Access
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `skyrampExecutorVersion` | Skyramp Executor Docker image version | `v1.3.29` |
-| `skyrampMcpVersion` | Skyramp MCP package version | `latest` |
-| `nodeVersion` | Node.js version to use | `lts/*` |
-| `workingDirectory` | Working directory for the action | `.` |
-| `autoCommit` | Automatically commit test changes | `true` |
+| `authTokenCommand` | Shell command to generate an auth token. Runs after services start; stdout is captured and set as `SKYRAMP_TEST_TOKEN` for test execution | `''` |
+| `uiCredentials` | Browser login credentials for apps that require auth before UI test recording. Format `username:password`, one per line for multiple users. Store in GitHub Secrets | `''` |
+| `allowedAuthors` | Newline-separated GitHub usernames whose PRs Testbot will act on. Empty allows all authors | `''` |
+
+### Test Generation & Delivery
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `maxRecommendations` | Total number of test recommendations to produce (generated + additional) | `20` |
+| `maxGenerate` | Number of tests to generate and execute this run; the rest are listed as additional recommendations | `3` |
+| `generatedTestsMode` | Where test changes are delivered: `separate-branch` (default) opens a side PR into the feature branch to keep it clean; `same-branch` commits directly onto the feature branch | `separate-branch` |
+| `testRepoPath` | Cross-repo delivery: local path to a separately checked-out test repository. When set, tests are committed and a side PR is opened there instead of the app repo | `''` |
+| `relatedRepoPaths` | Multi-repo analysis: newline-separated paths to related repos (checked out as sibling dirs) analyzed read-only as shared context. Max 5 | `''` |
+| `autoCommit` | Automatically commit/deliver test changes | `true` |
 | `commitMessage` | Commit message for test changes | `Skyramp Testbot: test maintenance suggestions` |
-| `postPrComment` | Post summary as PR comment | `true` |
-| `testbotMaxRetries` | Maximum number of retries for transient agent CLI errors | `3` |
-| `testbotRetryDelay` | Delay in seconds between agent retry attempts | `10` |
-| `testExecutionTimeout` | Timeout in seconds for individual MCP tool calls (e.g., test execution) | `300` |
-| `testbotTimeout` | Timeout in minutes for the agent execution | `60` |
-| `reportCollapsed` | Wrap report sections in collapsible `<details>` blocks | `true` |
-| `enableDebug` | Enable debug logging | `true` |
 
-### Optional - Cross-repo test delivery
+### Skyramp & MCP Versions
 
 | Input | Description | Default |
 |-------|-------------|---------|
-| `testRepo` | GitHub repository (`owner/name`) that holds test files. When set, the side PR is opened in this repo instead of the app repo. Requires `testRepoToken`. **Note:** the agent currently writes test files to the app repo; redirecting writes to the test repo clone is a planned follow-up. | `''` |
-| `testRepoBranch` | Branch in `testRepo` to target with the side PR. Defaults to that repo's default branch. | `''` |
-| `testRepoToken` | GitHub token with `contents: write` + `pull-requests: write` on `testRepo`. Required when `testRepo` is set. Store in GitHub Secrets. | `''` |
+| `skyrampExecutorVersion` | Skyramp Executor Docker image version | workspace.yml, else `v1.3.29` |
+| `skyrampMcpVersion` | Skyramp MCP package version | workspace.yml, else `latest` |
+
+### Behavior, Retries & Reporting
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `githubToken` | Token for PR comments and API access. Use a GitHub App token or PAT if you want side-PR CI to auto-run | `${{ github.token }}` |
+| `workingDirectory` | Working directory for the action | `.` |
+| `postPrComment` | Post the summary as a PR comment | `true` |
+| `reportCollapsed` | Wrap report sections in collapsible `<details>` blocks | `true` |
+| `testbotMaxRetries` | Max retries for transient agent CLI errors | `3` |
+| `testbotRetryDelay` | Delay in seconds between agent retry attempts | `10` |
+| `testExecutionTimeout` | Timeout (seconds) for individual MCP tool calls, e.g. test execution | `300` |
+| `testbotTimeout` | Timeout (minutes) for agent execution (safety net; does not kill the child process) | `60` |
+| `enableDebug` | Enable verbose debug logging (for NDJSON-capable agents this produces the `agent-log.ndjson` that is uploaded as an artifact) | `true` |
 
 ## Outputs
 
@@ -136,8 +137,11 @@ Before using this action, ensure you have:
 | `tests_modified` | Number of tests modified |
 | `tests_created` | Number of tests created |
 | `tests_executed` | Number of tests executed |
-| `skipped_self_trigger` | Whether execution was skipped due to detecting own commit |
-| `commit_sha` | SHA of the commit made by testbot (empty if no commit) |
+| `skipped_self_trigger` | Whether execution was skipped due to detecting its own commit |
+| `commit_sha` | SHA of the commit made by Testbot (empty if no commit) |
+| `side_pr_url` | URL of the side PR opened by Testbot. Empty when no side PR was opened (no test changes, or `generatedTestsMode=same-branch`) |
+| `side_pr_number` | Number of the side PR opened by Testbot. Empty under the same conditions as `side_pr_url` |
+| `duration_setup` / `duration_analyzing` / `duration_generating` / `duration_executing` / `duration_maintaining` / `duration_reporting` / `duration_total` | Per-phase and total durations in seconds |
 
 ## Usage Examples
 
@@ -148,7 +152,6 @@ Before using this action, ensure you have:
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
-
 ```
 
 ### Basic Usage with Cursor
@@ -175,8 +178,20 @@ Before using this action, ensure you have:
 - uses: skyramp/testbot@v0.10.6
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
     targetSetupCommand: 'npm run start:services'
+```
+
+### UI / E2E Tests Behind a Login
+
+For apps that require authentication before recording browser flows, pass credentials via `uiCredentials` (store as a secret). Testbot logs in once before recording UI/E2E tests.
+
+```yaml
+- uses: skyramp/testbot@v0.10.6
+  with:
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
+    uiCredentials: ${{ secrets.TESTBOT_UI_CREDENTIALS }}  # "user@example.com:password"
 ```
 
 ### Without Auto-commit (Manual Review)
@@ -185,8 +200,20 @@ Before using this action, ensure you have:
 - uses: skyramp/testbot@v0.10.6
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
     autoCommit: false
+```
+
+### Commit Directly to the Feature Branch
+
+By default Testbot opens a side PR with the test changes into your feature branch. To commit the changes directly onto the feature branch instead:
+
+```yaml
+- uses: skyramp/testbot@v0.10.6
+  with:
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
+    generatedTestsMode: same-branch
 ```
 
 ### Custom Test Directory Location
@@ -198,8 +225,6 @@ services:
   - serviceName: api
     testDirectory: api/tests
 ```
-
-See the [configuration guide](./docs/configuration.md#workspace-configuration) for details.
 
 ### Authentication
 
@@ -224,7 +249,7 @@ jobs:
       - uses: skyramp/testbot@v0.10.6
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+          anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 #### Dynamic Token
@@ -235,11 +260,30 @@ If your token must be generated at runtime (e.g. by calling a login endpoint or 
 - uses: skyramp/testbot@v0.10.6
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
     authTokenCommand: 'curl -s https://my-api.com/auth/token'
 ```
 
 The token is automatically masked in GitHub Actions logs via `::add-mask::`. If the command fails, the action stops before running any tests.
+
+### Multi-repo Analysis
+
+When a change spans repositories (e.g. a frontend and a backend), check out the related repos as sibling directories and pass their paths so Testbot correlates cross-repo changes before generating tests:
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- uses: actions/checkout@v4
+  with:
+    repository: my-org/backend
+    path: backend
+- uses: skyramp/testbot@v0.10.6
+  with:
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
+    relatedRepoPaths: backend
+```
 
 ### Using Outputs
 
@@ -248,69 +292,29 @@ The token is automatically masked in GitHub Actions logs via `::add-mask::`. If 
   id: skyramp
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
+    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
 
 - name: Check Results
   run: |
     echo "Tests Modified: ${{ steps.skyramp.outputs.tests_modified }}"
     echo "Tests Created: ${{ steps.skyramp.outputs.tests_created }}"
     echo "Tests Executed: ${{ steps.skyramp.outputs.tests_executed }}"
+    echo "Side PR: ${{ steps.skyramp.outputs.side_pr_url }}"
 ```
-
-## Triggering Other Workflows
-
-By default, commits made by GitHub Actions using `GITHUB_TOKEN` don't trigger other workflows (this is GitHub's built-in recursion prevention). If you want Testbot's commits to trigger your CI/CD pipelines, linters, or other workflows, you need to use a Personal Access Token (PAT).
-
-### Setup Steps
-
-1. **Create a fine-grained PAT** scoped to your repository with `Contents: Read and Write` permission at [github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens). Set an expiration date and rotate regularly.
-2. **Add it as a secret** named `PAT_TOKEN` in your repository settings
-3. **Update your workflow** to use the PAT at checkout and add recursion prevention:
-
-```yaml
-jobs:
-  test-maintenance:
-    runs-on: ubuntu-latest
-    # Prevent infinite loops - on push events, skip if triggered by Testbot's own commits
-    # head_commit is only available on push events; pull_request events are handled by the action-level check
-    if: github.event_name != 'push' || github.event.head_commit.author.name != 'Skyramp Testbot'
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.PAT_TOKEN }}  # Use PAT instead of GITHUB_TOKEN
-
-      - uses: skyramp/testbot@v0.10.6
-        with:
-          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-          cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
-```
-
-See [examples/trigger-workflows.yml](examples/trigger-workflows.yml) for a complete example.
-
-### How It Works
-
-The recursion prevention has two layers:
-
-1. **Job-level condition**: On `push` events, skips the entire job if the commit was made by Testbot
-2. **Action-level detection**: The action detects self-triggers (using `git log` for `pull_request` events where `head_commit` is unavailable) and exits gracefully
-
-This ensures Testbot never runs on its own commits while allowing other workflows to run normally.
 
 ## How It Works
 
-1. **Change Detection** - Generates a git diff between the base branch and current PR
-2. **License Setup** - Configures Skyramp license from secrets
-3. **Environment Setup** - Installs Node.js, Skyramp MCP, and selected AI agent CLI
+1. **Change Detection** - Generates a git diff between the base branch and the current PR (correlating related repos when `relatedRepoPaths` is set)
+2. **License Setup** - Configures the Skyramp license from secrets
+3. **Environment Setup** - Installs Node.js, the Skyramp MCP server, and the selected AI agent CLI
 4. **MCP Configuration** - Configures the Skyramp MCP server for agent access
-5. **Service Startup** - Starts your services using the configured command
-6. **AI Analysis** - AI agent analyzes changes and identifies test impacts
-7. **Test Maintenance** - Updates existing tests or generates new ones using Skyramp MCP
+5. **Service Startup** - Starts your services using the configured command and runs the ready check
+6. **AI Analysis** - The agent analyzes changes and identifies test impacts and gaps
+7. **Test Generation & Maintenance** - Generates new API and UI/E2E tests and updates impacted tests (running them before and after)
 8. **Test Execution** - Runs tests and validates results
-9. **Summary Generation** - Creates detailed summary of actions taken
-10. **PR Comment** - Posts summary to PR (if enabled)
-11. **Auto-commit** - Commits test changes (if enabled)
+9. **Report Generation** - Builds a detailed summary with metrics, timing, and any recorded UI videos
+10. **PR Comment** - Posts the summary to the PR (if enabled)
+11. **Delivery** - Opens a side PR with the test changes (default) or commits directly to the feature branch
 
 ## Troubleshooting
 
@@ -338,28 +342,22 @@ This ensures Testbot never runs on its own commits while allowing other workflow
 
 **Agent timeout or failures**
 
+- **Claude Code**: Check that `ANTHROPIC_API_KEY` is valid and has quota remaining
 - **Cursor**: Check API key is valid and has quota remaining
 - **Copilot**: Verify Copilot subscription is active and token is valid
-- Review agent logs for specific errors
+- Review the agent logs — the `skyramp-agent-logs` NDJSON artifact is uploaded automatically whenever the agent produces one (Cursor and Claude Code; enable `enableDebug` for fuller output)
 - Enable debug mode for more detailed output
-
-For more detailed troubleshooting, see [docs/troubleshooting.md](docs/troubleshooting.md).
-
-## Configuration Guide
-
-For advanced configuration options and patterns, see [docs/configuration.md](docs/configuration.md).
 
 ## Security Best Practices
 
 1. **Never commit secrets** - Always use GitHub Secrets for sensitive values
 2. **Limit permissions** - Only grant necessary permissions in workflow
-3. **Pin versions** - Use specific versions (`@v1.0.0`) for production workflows
-4. **Review auto-commits** - Consider disabling auto-commit for sensitive repositories
+3. **Pin versions** - Use a specific version (`@v0.10.6`) for production workflows, or the floating minor tag (`@v0.10`) to get patches automatically
+4. **Review test changes** - Rely on the default side-PR delivery (or disable auto-commit) for sensitive repositories
 5. **Audit logs** - Enable debug mode periodically to review action behavior
 
 ## Support
 
-- **Documentation**: [docs/](docs/)
 - **Website**: [skyramp.dev](https://skyramp.dev)
 
 ## License
