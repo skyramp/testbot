@@ -7,16 +7,16 @@
 
 ## Features
 
-- 🤖 **Bring Your Own Agent** - Runs on Claude Code, Cursor CLI, or GitHub Copilot CLI — auto-detected from the API key you provide
 - 🔍 **Smart Change Detection** - Analyzes the PR diff to identify impacted and missing tests
 - ✨ **Multi-type Test Generation** - Creates API tests (integration, contract) plus browser **E2E and UI** tests for new behavior
-- 🎭 **Browser Recording** - Records browser interactions for UI/E2E tests, logging in first with `uiCredentials` when the app requires auth, and links execution videos in the report
+- 🎭 **Browser Recording** - Your UI tests are grounded in real DOM elements and recorded browser interactions — logging in first with credentials you provide when the app requires auth — and execution videos are linked in the report
 - 🔁 **Before/After Maintenance** - Runs impacted tests before and after updating them so you can see exactly what the change fixed
 - ✅ **Automated Test Execution** - Runs generated and maintained tests and validates results
-- 🌿 **Clean Side-PR Delivery** - By default opens a separate PR with the test changes into your feature branch, keeping the feature PR clean (or commit directly with `same-branch`)
+- 🌿 **Clean Side-PR Delivery** - By default opens a separate PR with the test changes into your feature branch, keeping the feature PR clean (or commits directly onto the feature branch)
 - 🔗 **Multi-repo Aware** - Analyzes related repositories as shared context and can deliver tests to a separate test repo
 - 💬 **Rich PR Reports** - Posts a detailed, collapsible summary as a PR comment with timing breakdowns
 - 🔒 **Author Allowlisting** - Restrict which PR authors Testbot acts on
+- 🤖 **Bring Your Own LLM Key** - Runs on Claude Code with your own Anthropic API key
 
 ## Quick Start
 
@@ -34,34 +34,31 @@ The installer detects your stack, writes the workflow file, and configures your 
 
 Once the setup PR is merged, Testbot runs automatically on each subsequent pull request: it analyzes the diff, generates new tests and updates impacted ones, and — in the default `separate-branch` mode — opens a **separate test PR** targeting that feature branch with the changes (rather than committing onto the PR directly). See [`generatedTestsMode`](#test-generation--delivery) to change this behavior.
 
-## Agent Customization
+## How It Works
 
-Testbot drives a coding agent under the hood. Provide a key for the agent you want to use, and the agent type is **auto-detected** from which key is present.
-
-| Agent | Input | Description |
-|-------|-------|-------------|
-| **Claude Code** | `anthropicApiKey` | Coding agent by Anthropic (default recommendation) |
-| **Cursor CLI** | `cursorApiKey` | AI agent from Cursor |
-| **GitHub Copilot CLI** | `copilotApiKey` | GitHub's AI coding assistant (GitHub PAT with "Copilot Requests" permission) |
-
-Provide exactly one agent key. Choose the agent that best fits your existing subscriptions.
+1. **Change Detection** - Generates a git diff between the base branch and the current PR (correlating related repos when `relatedRepoPaths` is set)
+2. **License Setup** - Configures the Skyramp license from secrets
+3. **Environment Setup** - Installs Node.js, the Skyramp MCP server, and the selected AI agent CLI
+4. **MCP Configuration** - Configures the Skyramp MCP server for agent access
+5. **Service Startup** - Starts your services using the configured command and runs the ready check
+6. **AI Analysis** - The agent analyzes changes and identifies test impacts and gaps
+7. **Test Generation & Maintenance** - Generates new API and UI/E2E tests and updates impacted tests (running them before and after)
+8. **Test Execution** - Runs tests and validates results
+9. **Report Generation** - Builds a detailed summary with metrics, timing, and any recorded UI videos
+10. **PR Comment** - Posts the summary to the PR (if enabled)
+11. **Delivery** - Opens a side PR with the test changes (default) or commits directly to the feature branch
 
 ## Prerequisites
 
 Before using this action, ensure you have:
 
 - [ ] Skyramp license file content stored in GitHub Secrets as `SKYRAMP_LICENSE`
-- [ ] An API key for exactly one agent, stored in GitHub Secrets:
-  - **Claude Code**: `ANTHROPIC_API_KEY`
-  - **Cursor**: `CURSOR_API_KEY`
-  - **Copilot**: a GitHub PAT with "Copilot Requests" permission (commonly stored as `COPILOT_PAT`)
+- [ ] A Claude Code API key stored in GitHub Secrets as `ANTHROPIC_API_KEY`
 - [ ] Docker available in your runner (for the Skyramp Executor)
 - [ ] A project whose services can be started in CI (the action runs `docker compose up -d` by default)
 - [ ] Existing Skyramp tests or a test directory structure (Testbot creates `.skyramp/workspace.yml` on its first run)
 
-> **Note:** The agent type is automatically detected based on which API key you provide. Provide **exactly one** key — the action fails fast with an error if no agent key is supplied (there is no default agent), and likewise if more than one is supplied.
-
-## Inputs
+## Action Inputs
 
 `action.yml` is the source of truth for inputs and defaults. The tables below summarize the most useful ones.
 
@@ -70,10 +67,11 @@ Before using this action, ensure you have:
 | Input | Description |
 |-------|-------------|
 | `skyrampLicenseFile` | Skyramp license file content (store in GitHub Secrets) |
+| `anthropicApiKey` * | Anthropic API key for Claude Code (store in GitHub Secrets) |
 
-Plus **one** agent key — `anthropicApiKey`, `cursorApiKey`, or `copilotApiKey` (see [Agent Customization](#agent-customization)).
+<sub>\* Provide exactly one agent key. Testbot also supports Cursor (`cursorApiKey`) and GitHub Copilot (`copilotApiKey`) as alternate agents.</sub>
 
-### Service Lifecycle
+### Target Lifecycle
 
 | Input | Description | Default |
 |-------|-------------|---------|
@@ -145,7 +143,9 @@ Plus **one** agent key — `anthropicApiKey`, `cursorApiKey`, or `copilotApiKey`
 
 ## Usage Examples
 
-### Basic Usage with Claude Code
+### Basic Usage
+
+Testbot runs on Claude Code:
 
 ```yaml
 - uses: skyramp/testbot@v0.10.6
@@ -154,23 +154,15 @@ Plus **one** agent key — `anthropicApiKey`, `cursorApiKey`, or `copilotApiKey`
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-### Basic Usage with Cursor
+<details>
+<summary>Using a different agent (Cursor or GitHub Copilot)</summary>
 
-```yaml
-- uses: skyramp/testbot@v0.10.6
-  with:
-    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-    cursorApiKey: ${{ secrets.CURSOR_API_KEY }}
-```
+Testbot also supports Cursor and GitHub Copilot. Provide **exactly one** agent key — Testbot auto-detects which agent to use from the key present. Replace the `anthropicApiKey` line in the example above with one of:
 
-### Using GitHub Copilot CLI
+- **Cursor:** `cursorApiKey: ${{ secrets.CURSOR_API_KEY }}`
+- **GitHub Copilot:** `copilotApiKey: ${{ secrets.COPILOT_PAT }}` (a GitHub PAT with "Copilot Requests" permission)
 
-```yaml
-- uses: skyramp/testbot@v0.10.6
-  with:
-    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-    copilotApiKey: ${{ secrets.COPILOT_PAT }}
-```
+</details>
 
 ### Custom Service Startup Command
 
@@ -181,6 +173,46 @@ Plus **one** agent key — `anthropicApiKey`, `cursorApiKey`, or `copilotApiKey`
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
     targetSetupCommand: 'npm run start:services'
 ```
+
+### API Token Authentication
+
+If your API under test requires authentication, there are two ways to provide a token for test execution.
+
+#### Static Token
+
+If your token is fixed (e.g. a test API key), set `SKYRAMP_TEST_TOKEN` as a workflow environment variable:
+
+```yaml
+env:
+  SKYRAMP_TEST_TOKEN: ${{ secrets.SKYRAMP_TEST_TOKEN }}
+
+jobs:
+  test-maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: skyramp/testbot@v0.10.6
+        with:
+          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+          anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+#### Dynamic Token
+
+If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
+
+```yaml
+- uses: skyramp/testbot@v0.10.6
+  with:
+    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
+    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
+    authTokenCommand: 'curl -s https://my-api.com/auth/token'
+```
+
+The token is automatically registered as a secret so it is masked in the workflow logs. If the command fails, the action stops before running any tests.
 
 ### UI / E2E Tests Behind a Login
 
@@ -226,46 +258,6 @@ services:
     testDirectory: api/tests
 ```
 
-### Authentication
-
-If your API under test requires authentication, there are two ways to provide a token for test execution.
-
-#### Static Token
-
-If your token is fixed (e.g. a test API key), set `SKYRAMP_TEST_TOKEN` as a workflow environment variable:
-
-```yaml
-env:
-  SKYRAMP_TEST_TOKEN: ${{ secrets.SKYRAMP_TEST_TOKEN }}
-
-jobs:
-  test-maintenance:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: skyramp/testbot@v0.10.6
-        with:
-          skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-          anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
-```
-
-#### Dynamic Token
-
-If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
-
-```yaml
-- uses: skyramp/testbot@v0.10.6
-  with:
-    skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
-    anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
-    authTokenCommand: 'curl -s https://my-api.com/auth/token'
-```
-
-The token is automatically masked in GitHub Actions logs via `::add-mask::`. If the command fails, the action stops before running any tests.
-
 ### Multi-repo Analysis
 
 When a change spans repositories (e.g. a frontend and a backend), check out the related repos as sibling directories and pass their paths so Testbot correlates cross-repo changes before generating tests:
@@ -301,20 +293,6 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
     echo "Tests Executed: ${{ steps.skyramp.outputs.tests_executed }}"
     echo "Side PR: ${{ steps.skyramp.outputs.side_pr_url }}"
 ```
-
-## How It Works
-
-1. **Change Detection** - Generates a git diff between the base branch and the current PR (correlating related repos when `relatedRepoPaths` is set)
-2. **License Setup** - Configures the Skyramp license from secrets
-3. **Environment Setup** - Installs Node.js, the Skyramp MCP server, and the selected AI agent CLI
-4. **MCP Configuration** - Configures the Skyramp MCP server for agent access
-5. **Service Startup** - Starts your services using the configured command and runs the ready check
-6. **AI Analysis** - The agent analyzes changes and identifies test impacts and gaps
-7. **Test Generation & Maintenance** - Generates new API and UI/E2E tests and updates impacted tests (running them before and after)
-8. **Test Execution** - Runs tests and validates results
-9. **Report Generation** - Builds a detailed summary with metrics, timing, and any recorded UI videos
-10. **PR Comment** - Posts the summary to the PR (if enabled)
-11. **Delivery** - Opens a side PR with the test changes (default) or commits directly to the feature branch
 
 ## Troubleshooting
 
