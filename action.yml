@@ -55,7 +55,7 @@ inputs:
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.29".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.30".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
@@ -162,6 +162,20 @@ inputs:
     description: 'Enable debug logging'
     required: false
     default: 'true'
+
+  # SUT Setup inputs
+  sutSetupMode:
+    description: 'SUT setup mode. When not "none", Testbot enters bootstrap mode to generate SUT files. After validation succeeds or bootstrap times out, sets to "none". Supported: none | adapt_workflow | docker_compose.'
+    required: false
+    default: 'none'
+  sutSourceWorkflowFile:
+    description: 'Path to an existing workflow file to adapt (for adapt_workflow mode). Example: .github/workflows/e2e-tests.yml'
+    required: false
+    default: ''
+  sutSourceDockerComposeFile:
+    description: 'Path to an existing docker-compose file to reuse (for docker_compose mode). Example: docker-compose.yml'
+    required: false
+    default: ''
 outputs:
   test_summary:
     description: 'Full summary of test maintenance actions'
