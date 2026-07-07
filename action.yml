@@ -55,7 +55,7 @@ inputs:
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.30".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.33".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
@@ -152,6 +152,14 @@ inputs:
     default: '3'
   targetSetupRetryDelay:
     description: 'Delay in seconds between targetSetupCommand retries'
+    required: false
+    default: '10'
+  authTokenRetries:
+    description: 'Total attempts for authTokenCommand (e.g. 6 = 1 initial + 5 retries). Tolerates SUTs whose auth surface comes up after the HTTP port (async post-start data seeding). Set to 1 to disable retries.'
+    required: false
+    default: '6'
+  authTokenRetryDelay:
+    description: 'Delay in seconds between authTokenCommand retries'
     required: false
     default: '10'
   reportCollapsed:
