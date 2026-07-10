@@ -12,6 +12,22 @@ inputs:
     description: 'GitHub token for PR comments and API access. Defaults to the automatic GITHUB_TOKEN.'
     required: false
     default: ${{ github.token }}
+  githubAppId:
+    description: >-
+      GitHub App ID used to mint fresh installation tokens during the run. GitHub App
+      installation tokens expire after 1 hour, so on longer runs a workflow-minted
+      githubToken is already dead by the time tests are delivered — with githubAppId +
+      githubAppPrivateKey set, the action mints a fresh token right before git pushes and
+      API calls instead. Pair with the same App the workflow uses for its token step.
+      The App installation must cover this repository (and the test repository, if
+      testRepoPath is used — same owner only).
+    required: false
+  githubAppPrivateKey:
+    description: >-
+      Private key (PEM, PKCS#1 or PKCS#8) of the GitHub App named by githubAppId
+      (store in GitHub Secrets). Required for on-demand token minting on runs
+      exceeding the 1-hour installation-token lifetime.
+    required: false
 
   # Required inputs
   skyrampLicenseFile:
@@ -55,7 +71,7 @@ inputs:
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.33".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.34".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
@@ -112,7 +128,7 @@ inputs:
     required: false
     default: 'separate-branch'
   testRepoPath:
-    description: 'Cross-repo test delivery: local filesystem path (relative to `$GITHUB_WORKSPACE`) where the workflow has checked out a separate test repository (via `actions/checkout` with `path:`, on its default branch, with `persist-credentials: true` and a token that has `contents: write` + `pull-requests: write` on it). When set, generated tests are committed and a side PR is opened in that repo instead of the app repo — Testbot derives its `owner/repo` from the checkout and reuses the action''s `githubToken` for the push and side-PR API. Leave empty to commit tests in the app repo.'
+    description: 'Cross-repo test delivery: local filesystem path (relative to `$GITHUB_WORKSPACE`) where the workflow has checked out a separate test repository (via `actions/checkout` with `path:`, on its default branch, with a token that has `contents: write` + `pull-requests: write` on it). `persist-credentials` is not required — Testbot injects credentials from `githubToken` ephemerally for its git operations (push, and side-PR fetch/ls-remote), never written to `.git/config`. When set, generated tests are committed and a side PR is opened in that repo instead of the app repo — Testbot derives its `owner/repo` from the checkout and reuses the action''s `githubToken` for the push and side-PR API. Leave empty to commit tests in the app repo.'
     required: false
   relatedRepoPaths:
     description: 'Multi-repo analysis: newline-separated local filesystem paths (relative to `$GITHUB_WORKSPACE`) of related repositories the workflow has already checked out as sibling directories (via `actions/checkout` with `path:`). Each is analyzed read-only as shared context alongside the primary repo, with cross-repo changes correlated before tests are generated. The primary checkout repo still receives the report and test commits. Maximum 5 entries.'
