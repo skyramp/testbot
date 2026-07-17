@@ -150,7 +150,7 @@ Before using this action, ensure you have:
 Testbot runs on Claude Code:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.0
+- uses: skyramp/testbot@v0.11.1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -169,7 +169,7 @@ Testbot also supports Cursor and GitHub Copilot. Provide **exactly one** agent k
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v0.11.0
+- uses: skyramp/testbot@v0.11.1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -196,7 +196,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v0.11.0
+      - uses: skyramp/testbot@v0.11.1
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -207,7 +207,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.0
+- uses: skyramp/testbot@v0.11.1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -221,7 +221,7 @@ The token is automatically registered as a secret so it is masked in the workflo
 For apps that require authentication before recording browser flows, pass credentials via `uiCredentials` (store as a secret). Testbot logs in once before recording UI/E2E tests.
 
 ```yaml
-- uses: skyramp/testbot@v0.11.0
+- uses: skyramp/testbot@v0.11.1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -231,7 +231,7 @@ For apps that require authentication before recording browser flows, pass creden
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v0.11.0
+- uses: skyramp/testbot@v0.11.1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -243,7 +243,7 @@ For apps that require authentication before recording browser flows, pass creden
 By default Testbot opens a side PR with the test changes into your feature branch. To commit the changes directly onto the feature branch instead:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.0
+- uses: skyramp/testbot@v0.11.1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -272,7 +272,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
   with:
     repository: my-org/backend
     path: backend
-- uses: skyramp/testbot@v0.11.0
+- uses: skyramp/testbot@v0.11.1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -282,7 +282,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v0.11.0
+- uses: skyramp/testbot@v0.11.1
   id: skyramp
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
