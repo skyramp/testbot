@@ -1,15 +1,15 @@
-name: 'Skyramp Testbot'
+name: "Skyramp Testbot"
 description: "Github Action for using Skyramp's Testbot for AI-Powered Deterministic Testing"
-author: 'Skyramp Inc'
+author: "Skyramp Inc"
 
 branding:
-  icon: 'zap'
-  color: 'purple'
+  icon: "zap"
+  color: "purple"
 
 inputs:
   # GitHub token (automatically provided by the runner)
   githubToken:
-    description: 'GitHub token for PR comments and API access. Defaults to the automatic GITHUB_TOKEN.'
+    description: "GitHub token for PR comments and API access. Defaults to the automatic GITHUB_TOKEN."
     required: false
     default: ${{ github.token }}
   githubAppId:
@@ -31,47 +31,57 @@ inputs:
 
   # Required inputs
   skyrampLicenseFile:
-    description: 'Skyramp license file content (store in GitHub Secrets)'
+    description: "Skyramp license file content (store in GitHub Secrets)"
     required: true
   cursorApiKey:
-    description: 'Cursor API key for AI agent access (store in GitHub Secrets)'
+    description: "Cursor API key for AI agent access (store in GitHub Secrets)"
     required: false
   copilotApiKey:
     description: 'Copilot API key for AI agent access. Requires a GitHub PAT with "Copilot Requests" permission.'
     required: false
   anthropicApiKey:
-    description: 'Anthropic API key for Claude Code agent access (store in GitHub Secrets)'
+    description: "Anthropic API key for Claude Code agent access (store in GitHub Secrets)"
+    required: false
+  useBedrock:
+    description: "Run the Claude Code agent through AWS Bedrock instead of the Anthropic API. Requires AWS credentials in the environment (e.g. an aws-actions/configure-aws-credentials OIDC step before Testbot). No anthropicApiKey needed."
+    required: false
+    default: "false"
+  awsRegion:
+    description: "AWS region for Bedrock (e.g. us-east-1). Sets AWS_REGION and selects the inference-profile geography. Only used when useBedrock is true."
+    required: false
+  model:
+    description: "Model alias the Claude agent runs on. One of: sonnet, opus (default sonnet). Not a raw model id — Testbot maps it to a tested model/inference profile."
     required: false
 
   # High priority optional inputs (per-service fields like testDirectory live in .skyramp/workspace.yml under services[].testDirectory)
   allowedAuthors:
-    description: 'Newline-separated list of GitHub usernames whose PRs Testbot will act on. When empty (default), all authors are allowed.'
+    description: "Newline-separated list of GitHub usernames whose PRs Testbot will act on. When empty (default), all authors are allowed."
     required: false
-    default: ''
+    default: ""
   targetSetupCommand:
     description: 'Command to start services before test maintenance. Can optionally emit a JSON object as its last stdout line to override workspace baseUrl at runtime (e.g., {"baseUrl": "http://remote-host:8000"} for single-service, or {"services": {"backend": {"baseUrl": "..."}, "frontend": {"baseUrl": "..."}}} for multi-service). Sets SKYRAMP_TEST_BASE_URL (single) or SKYRAMP_TEST_SERVICE_URL_<NAME> (multi) env vars for test execution.'
     required: false
-    default: 'docker compose up -d'
+    default: "docker compose up -d"
   authTokenCommand:
-    description: 'Shell command to generate an authentication token. Runs after services start; stdout is captured and set as SKYRAMP_TEST_TOKEN for test execution.'
+    description: "Shell command to generate an authentication token. Runs after services start; stdout is captured and set as SKYRAMP_TEST_TOKEN for test execution."
     required: false
-    default: ''
+    default: ""
   uiCredentials:
     description: 'Browser login credentials for apps that require authentication before UI test recording. Format: "username:password" (one credential per line for multiple users). Store in GitHub Secrets.'
     required: false
-    default: ''
+    default: ""
   targetTeardownCommand:
-    description: 'Command to tear down services after test execution (runs in post step, guaranteed even on failure/cancellation)'
+    description: "Command to tear down services after test execution (runs in post step, guaranteed even on failure/cancellation)"
     required: false
-    default: ''
+    default: ""
   skipTargetTeardown:
-    description: 'Skip running service teardown command'
+    description: "Skip running service teardown command"
     required: false
-    default: 'false'
+    default: "false"
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.34".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.35".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
@@ -79,160 +89,164 @@ inputs:
   skyrampMcpSource:
     description: 'Source for Skyramp MCP package: "npm" or "github"'
     required: false
-    default: 'npm'
+    default: "npm"
   skyrampMcpGithubToken:
     description: 'GitHub PAT with read access to letsramp/mcp (required when source is "github")'
     required: false
   skyrampMcpGithubRef:
     description: 'Git ref (branch/tag/commit) for letsramp/mcp (used when source is "github")'
     required: false
-    default: 'main'
+    default: "main"
   nodeVersion:
-    description: 'Node.js version to use'
+    description: "Node.js version to use"
     required: false
-    default: 'lts/*'
+    default: "lts/*"
   skipTargetSetup:
-    description: 'Skip running target setup command'
+    description: "Skip running target setup command"
     required: false
-    default: 'false'
+    default: "false"
   targetReadyCheckCommand:
-    description: 'Shell command to verify services are ready (retried until success or timeout). When empty (default), auto-generates curl health checks against service base URLs from workspace config.'
+    description: "Shell command to verify services are ready (retried until success or timeout). When empty (default), auto-generates curl health checks against service base URLs from workspace config."
     required: false
-    default: ''
+    default: ""
   targetReadyCheckTimeout:
-    description: 'Maximum seconds to wait for ready check command to succeed. Default accommodates `docker compose --build --wait` cold builds; the loop exits on first success so fast services pay no extra cost.'
+    description: "Maximum seconds to wait for ready check command to succeed. Default accommodates `docker compose --build --wait` cold builds; the loop exits on first success so fast services pay no extra cost."
     required: false
-    default: '1800'
+    default: "1800"
   targetReadyCheckInterval:
-    description: 'Seconds between ready check poll attempts'
+    description: "Seconds between ready check poll attempts"
     required: false
-    default: '30'
+    default: "30"
   targetReadyCheckDiagnosticsCommand:
-    description: 'Shell command to collect diagnostics on ready check timeout. Runs when targetReadyCheckCommand times out.'
+    description: "Shell command to collect diagnostics on ready check timeout. Runs when targetReadyCheckCommand times out."
     required: false
     default: "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' && docker ps -a --format '{{.Names}}' | while read name; do [ -n \"$name\" ] && echo \"--- logs $name (last 30) ---\" && docker logs --tail 30 \"$name\"; done"
   workingDirectory:
-    description: 'Working directory for the action'
+    description: "Working directory for the action"
     required: false
-    default: '.'
+    default: "."
   autoCommit:
-    description: 'Automatically commit test changes'
+    description: "Automatically commit test changes"
     required: false
-    default: 'true'
+    default: "true"
   commitMessage:
-    description: 'Commit message for test changes'
+    description: "Commit message for test changes"
     required: false
-    default: 'Skyramp Testbot: test maintenance suggestions'
+    default: "Skyramp Testbot: test maintenance suggestions"
   generatedTestsMode:
     description: 'Where generated/maintained tests are delivered. "separate-branch" (default) opens a new PR/MR from a bot-owned branch into the feature branch, keeping the feature PR clean. "same-branch" pushes a commit directly onto the feature branch (legacy behavior). Note: for downstream CI (lint/tests/etc.) to auto-run on the side PR, the `githubToken` input must be a GitHub App installation token or PAT — the default `GITHUB_TOKEN` will not trigger other workflows.'
     required: false
-    default: 'separate-branch'
+    default: "separate-branch"
   testRepoPath:
-    description: 'Cross-repo test delivery: local filesystem path (relative to `$GITHUB_WORKSPACE`) where the workflow has checked out a separate test repository (via `actions/checkout` with `path:`, on its default branch, with a token that has `contents: write` + `pull-requests: write` on it). `persist-credentials` is not required — Testbot injects credentials from `githubToken` ephemerally for its git operations (push, and side-PR fetch/ls-remote), never written to `.git/config`. When set, generated tests are committed and a side PR is opened in that repo instead of the app repo — Testbot derives its `owner/repo` from the checkout and reuses the action''s `githubToken` for the push and side-PR API. Leave empty to commit tests in the app repo.'
+    description: "Cross-repo test delivery: local filesystem path (relative to `$GITHUB_WORKSPACE`) where the workflow has checked out a separate test repository (via `actions/checkout` with `path:`, on its default branch, with a token that has `contents: write` + `pull-requests: write` on it). `persist-credentials` is not required — Testbot injects credentials from `githubToken` ephemerally for its git operations (push, and side-PR fetch/ls-remote), never written to `.git/config`. When set, generated tests are committed and a side PR is opened in that repo instead of the app repo — Testbot derives its `owner/repo` from the checkout and reuses the action's `githubToken` for the push and side-PR API. Leave empty to commit tests in the app repo."
     required: false
   relatedRepoPaths:
-    description: 'Multi-repo analysis: newline-separated local filesystem paths (relative to `$GITHUB_WORKSPACE`) of related repositories the workflow has already checked out as sibling directories (via `actions/checkout` with `path:`). Each is analyzed read-only as shared context alongside the primary repo, with cross-repo changes correlated before tests are generated. The primary checkout repo still receives the report and test commits. Maximum 5 entries.'
+    description: "Multi-repo analysis: newline-separated local filesystem paths (relative to `$GITHUB_WORKSPACE`) of related repositories the workflow has already checked out as sibling directories (via `actions/checkout` with `path:`). Each is analyzed read-only as shared context alongside the primary repo, with cross-repo changes correlated before tests are generated. The primary checkout repo still receives the report and test commits. Maximum 5 entries."
     required: false
-    default: ''
+    default: ""
   postPrComment:
-    description: 'Post summary as PR comment'
+    description: "Post summary as PR comment"
     required: false
-    default: 'true'
+    default: "true"
   maxRecommendations:
-    description: 'Total number of test recommendations to produce (generated + additional). Defaults to 20.'
+    description: "Total number of test recommendations to produce (generated + additional). Defaults to 20."
     required: false
-    default: '20'
+    default: "20"
   maxGenerate:
-    description: 'Number of tests to generate and execute in this run. The remainder are listed as additional recommendations. Defaults to 3.'
+    description: "Number of tests to generate and execute in this run. The remainder are listed as additional recommendations. Defaults to 3."
     required: false
-    default: '3'
+    default: "3"
   testbotMaxRetries:
     description: 'Maximum number of retries for transient agent CLI errors (e.g., Cursor "Connection stalled")'
     required: false
-    default: '3'
+    default: "3"
   testbotRetryDelay:
-    description: 'Delay in seconds between agent retry attempts'
+    description: "Delay in seconds between agent retry attempts"
     required: false
-    default: '10'
+    default: "10"
   testExecutionTimeout:
-    description: 'Timeout in seconds for individual MCP tool calls (e.g., test execution). Increase if tests take longer than 5 minutes.'
+    description: "Timeout in seconds for individual MCP tool calls (e.g., test execution). Increase if tests take longer than 5 minutes."
     required: false
-    default: '300'
+    default: "300"
   testbotTimeout:
-    description: 'Timeout in minutes for the agent execution (safety net; does not kill the child process)'
+    description: "Timeout in minutes for the agent execution (safety net; does not kill the child process)"
     required: false
-    default: '60'
+    default: "60"
   targetSetupRetries:
-    description: 'Number of retries for targetSetupCommand on failure (e.g. transient DockerHub 502 errors)'
+    description: "Number of retries for targetSetupCommand on failure (e.g. transient DockerHub 502 errors)"
     required: false
-    default: '3'
+    default: "3"
   targetSetupRetryDelay:
-    description: 'Delay in seconds between targetSetupCommand retries'
+    description: "Delay in seconds between targetSetupCommand retries"
     required: false
-    default: '10'
+    default: "10"
   authTokenRetries:
-    description: 'Total attempts for authTokenCommand (e.g. 6 = 1 initial + 5 retries). Tolerates SUTs whose auth surface comes up after the HTTP port (async post-start data seeding). Set to 1 to disable retries.'
+    description: "Total attempts for authTokenCommand (e.g. 6 = 1 initial + 5 retries). Tolerates SUTs whose auth surface comes up after the HTTP port (async post-start data seeding). Set to 1 to disable retries."
     required: false
-    default: '6'
+    default: "6"
   authTokenRetryDelay:
-    description: 'Delay in seconds between authTokenCommand retries'
+    description: "Delay in seconds between authTokenCommand retries"
     required: false
-    default: '10'
+    default: "10"
   reportCollapsed:
-    description: 'Wrap report sections in collapsible <details> blocks with a summary line'
+    description: "Wrap report sections in collapsible <details> blocks with a summary line"
     required: false
-    default: 'true'
+    default: "true"
+  language:
+    description: "Language for user-facing Testbot output (PR comments, report, side PR body). Supported: en, ja"
+    required: false
+    default: "en"
   enableDebug:
-    description: 'Enable debug logging'
+    description: "Enable debug logging"
     required: false
-    default: 'true'
+    default: "true"
 
   # SUT Setup inputs
   sutSetupMode:
     description: 'SUT setup mode. When not "none", Testbot enters bootstrap mode to generate SUT files. After validation succeeds or bootstrap times out, sets to "none". Supported: none | adapt_workflow | docker_compose.'
     required: false
-    default: 'none'
+    default: "none"
   sutSourceWorkflowFile:
-    description: 'Path to an existing workflow file to adapt (for adapt_workflow mode). Example: .github/workflows/e2e-tests.yml'
+    description: "Path to an existing workflow file to adapt (for adapt_workflow mode). Example: .github/workflows/e2e-tests.yml"
     required: false
-    default: ''
+    default: ""
   sutSourceDockerComposeFile:
-    description: 'Path to an existing docker-compose file to reuse (for docker_compose mode). Example: docker-compose.yml'
+    description: "Path to an existing docker-compose file to reuse (for docker_compose mode). Example: docker-compose.yml"
     required: false
-    default: ''
+    default: ""
 outputs:
   test_summary:
-    description: 'Full summary of test maintenance actions'
+    description: "Full summary of test maintenance actions"
   tests_modified:
-    description: 'Number of tests modified'
+    description: "Number of tests modified"
   tests_created:
-    description: 'Number of tests created'
+    description: "Number of tests created"
   tests_executed:
-    description: 'Number of tests executed'
+    description: "Number of tests executed"
   skipped_self_trigger:
-    description: 'Whether execution was skipped due to detecting own commit'
+    description: "Whether execution was skipped due to detecting own commit"
   commit_sha:
-    description: 'SHA of the commit made by testbot (empty if no commit)'
+    description: "SHA of the commit made by testbot (empty if no commit)"
   side_pr_url:
-    description: 'URL of the side PR opened by testbot (empty unless generatedTestsMode=separate-pr and changes were produced)'
+    description: "URL of the side PR opened by testbot (empty unless generatedTestsMode=separate-pr and changes were produced)"
   side_pr_number:
-    description: 'Number of the side PR opened by testbot (empty unless generatedTestsMode=separate-pr and changes were produced)'
+    description: "Number of the side PR opened by testbot (empty unless generatedTestsMode=separate-pr and changes were produced)"
   duration_setup:
-    description: 'Duration of the setup step in seconds'
+    description: "Duration of the setup step in seconds"
   duration_analyzing:
-    description: 'Duration of the analyzing step in seconds'
+    description: "Duration of the analyzing step in seconds"
   duration_generating:
-    description: 'Duration of the generating step in seconds'
+    description: "Duration of the generating step in seconds"
   duration_executing:
-    description: 'Duration of the executing step in seconds'
+    description: "Duration of the executing step in seconds"
   duration_maintaining:
-    description: 'Duration of the maintaining step in seconds'
+    description: "Duration of the maintaining step in seconds"
   duration_reporting:
-    description: 'Duration of the reporting step in seconds'
+    description: "Duration of the reporting step in seconds"
   duration_total:
-    description: 'Total duration of all steps in seconds'
+    description: "Total duration of all steps in seconds"
 
 runs:
-  using: 'node24'
-  main: 'dist/index.js'
-  post: 'dist/post.js'
+  using: "node24"
+  main: "dist/index.js"
+  post: "dist/post.js"
