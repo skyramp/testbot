@@ -67,7 +67,7 @@ inputs:
     required: false
     default: ""
   uiCredentials:
-    description: 'Browser login credentials for apps that require authentication before UI test recording. Format: "username:password" (one credential per line for multiple users). Store in GitHub Secrets.'
+    description: 'Browser login credentials for apps that require authentication before UI test recording. One credential per line; three formats: ";"-delimited key=value pairs — "username=<val>;password=<val>" plus any additional login-form fields the app needs (e.g. ";tenantId=<val>") and optional ";role=<val>" for credential selection; a JSON object per line (preferred when a value contains = or ;); or legacy "username:password". The string is passed to the agent as-is — formats are hints the agent interprets, not a parsed grammar. Store in GitHub Secrets.'
     required: false
     default: ""
   targetTeardownCommand:
@@ -169,7 +169,7 @@ inputs:
     required: false
     default: "300"
   testbotTimeout:
-    description: "Timeout in minutes for the agent execution (safety net; does not kill the child process)"
+    description: "Timeout in minutes for the agent execution; the agent process is sent SIGTERM when it is exceeded"
     required: false
     default: "60"
   targetSetupRetries:
@@ -225,6 +225,8 @@ outputs:
     description: "Number of tests executed"
   skipped_self_trigger:
     description: "Whether execution was skipped due to detecting own commit"
+  skipped_pr_closed:
+    description: "Whether the run stopped early because its pull request was closed without being merged"
   commit_sha:
     description: "SHA of the commit made by testbot (empty if no commit)"
   side_pr_url:

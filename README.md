@@ -101,7 +101,7 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 | Input              | Description                                                                                                                                                         | Default |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `authTokenCommand` | Shell command to generate an auth token. Runs after services start; stdout is captured and set as `SKYRAMP_TEST_TOKEN` for test execution                           | `''`    |
-| `uiCredentials`    | Browser login credentials for apps that require auth before UI test recording. Format `username:password`, one per line for multiple users. Store in GitHub Secrets | `''`    |
+| `uiCredentials`    | Browser login credentials for apps that require auth before UI test recording. Format: `key=value` pairs `username=<val>;password=<val>` plus any extra login-form fields (e.g. `;tenantId=<val>`); a JSON object per line when a value contains `=` or `;`; legacy `username:password` still accepted. One credential per line for multiple users. Store in GitHub Secrets | `''`    |
 | `allowedAuthors`   | Newline-separated GitHub usernames whose PRs Testbot will act on. Empty allows all authors                                                                          | `''`    |
 
 ### Test Generation & Delivery
@@ -160,7 +160,7 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 Testbot runs on Claude Code:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.3
+- uses: skyramp/testbot@v0.11.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -190,7 +190,7 @@ steps:
     with:
       role-to-assume: ${{ vars.SKYRAMP_TESTBOT_AWS_ROLE_ARN }} # not a secret
       aws-region: us-east-1
-  - uses: skyramp/testbot@v0.11.3
+  - uses: skyramp/testbot@v0.11.4
     with:
       useBedrock: true
       awsRegion: us-east-1
@@ -214,7 +214,7 @@ steps:
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v0.11.3
+- uses: skyramp/testbot@v0.11.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -241,7 +241,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v0.11.3
+      - uses: skyramp/testbot@v0.11.4
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -252,7 +252,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.3
+- uses: skyramp/testbot@v0.11.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -263,20 +263,22 @@ The token is automatically registered as a secret so it is masked in the workflo
 
 ### UI / E2E Tests Behind a Login
 
-For apps that require authentication before recording browser flows, pass credentials via `uiCredentials` (store as a secret). Testbot logs in once before recording UI/E2E tests.
+For apps that require authentication before recording browser flows, pass credentials via `uiCredentials` (store as a secret). Testbot logs in once before recording UI/E2E tests. Declare **every** field the login form needs as a `key=value` pair — not just username/password. If the form has extra fields (a tenant ID, company code, domain, …), add them as additional pairs; a login field with no matching pair is reported as a missing credential instead of being submitted empty.
 
 ```yaml
-- uses: skyramp/testbot@v0.11.3
+- uses: skyramp/testbot@v0.11.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
-    uiCredentials: ${{ secrets.TESTBOT_UI_CREDENTIALS }} # "user@example.com:password"
+    # "username=user@example.com;password=secret" — add every login-form
+    # field the app needs, e.g. "tenantId=1;username=...;password=..."
+    uiCredentials: ${{ secrets.TESTBOT_UI_CREDENTIALS }}
 ```
 
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v0.11.3
+- uses: skyramp/testbot@v0.11.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -288,7 +290,7 @@ For apps that require authentication before recording browser flows, pass creden
 By default Testbot opens a side PR with the test changes into your feature branch. To commit the changes directly onto the feature branch instead:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.3
+- uses: skyramp/testbot@v0.11.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -317,7 +319,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
   with:
     repository: my-org/backend
     path: backend
-- uses: skyramp/testbot@v0.11.3
+- uses: skyramp/testbot@v0.11.4
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -327,7 +329,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v0.11.3
+- uses: skyramp/testbot@v0.11.4
   id: skyramp
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
