@@ -50,7 +50,7 @@ inputs:
     description: "AWS region for Bedrock (e.g. us-east-1). Sets AWS_REGION and selects the inference-profile geography. Only used when useBedrock is true."
     required: false
   model:
-    description: "Model alias the Claude agent runs on. One of: sonnet, opus (default sonnet). Not a raw model id — Testbot maps it to a tested model/inference profile."
+    description: "Model the Claude agent runs on. A tested alias — sonnet (default) or opus — mapped to a tested model/inference profile, or a raw model id (e.g. claude-opus-5) passed to the agent verbatim with a warning; on Bedrock a raw id must be a resolvable inference-profile id (e.g. us.anthropic.claude-opus-4-6-v1[1m])."
     required: false
 
   # High priority optional inputs (per-service fields like testDirectory live in .skyramp/workspace.yml under services[].testDirectory)
@@ -59,9 +59,9 @@ inputs:
     required: false
     default: ""
   targetSetupCommand:
-    description: 'Command to start services before test maintenance. Can optionally emit a JSON object as its last stdout line to override workspace baseUrl at runtime (e.g., {"baseUrl": "http://remote-host:8000"} for single-service, or {"services": {"backend": {"baseUrl": "..."}, "frontend": {"baseUrl": "..."}}} for multi-service). Sets SKYRAMP_TEST_BASE_URL (single) or SKYRAMP_TEST_SERVICE_URL_<NAME> (multi) env vars for test execution.'
+    description: 'Command to start services before test maintenance. When unset, falls back to .skyramp/workspace.yml serverStartCommand, then to "docker compose up -d --build". Can optionally emit a JSON object as its last stdout line to override workspace baseUrl at runtime (e.g., {"baseUrl": "http://remote-host:8000"} for single-service, or {"services": {"backend": {"baseUrl": "..."}, "frontend": {"baseUrl": "..."}}} for multi-service). Sets SKYRAMP_TEST_BASE_URL (single) or SKYRAMP_TEST_SERVICE_URL_<NAME> (multi) env vars for test execution.'
     required: false
-    default: "docker compose up -d"
+    default: ""
   authTokenCommand:
     description: "Shell command to generate an authentication token. Runs after services start; stdout is captured and set as SKYRAMP_TEST_TOKEN for test execution."
     required: false
@@ -81,7 +81,7 @@ inputs:
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.38".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.39".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
