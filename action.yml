@@ -50,7 +50,7 @@ inputs:
     description: "AWS region for Bedrock (e.g. us-east-1). Sets AWS_REGION and selects the inference-profile geography. Only used when useBedrock is true."
     required: false
   model:
-    description: "Model the Claude agent runs on. A tested alias — sonnet (default) or opus — mapped to a tested model/inference profile, or a raw model id (e.g. claude-opus-5) passed to the agent verbatim with a warning; on Bedrock a raw id must be a resolvable inference-profile id (e.g. us.anthropic.claude-opus-4-6-v1[1m])."
+    description: "Model the Claude agent runs on. A tested alias — opus (default, resolving to claude-opus-5[1m]) or sonnet — mapped to a tested model/inference profile, or a raw model id (e.g. claude-sonnet-5[1m]) passed to the agent verbatim with a warning; on Bedrock a raw id must be a resolvable inference-profile id (e.g. us.anthropic.claude-opus-5[1m])."
     required: false
 
   # High priority optional inputs (per-service fields like testDirectory live in .skyramp/workspace.yml under services[].testDirectory)

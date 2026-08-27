@@ -77,7 +77,7 @@ Before using this action, ensure you have:
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------- | -------- |
 | `useBedrock` | Run the Claude agent through AWS Bedrock instead of the Anthropic API. No `anthropicApiKey` needed.                           | `false`  |
 | `awsRegion`  | AWS region for Bedrock (e.g. `us-east-1`). Sets `AWS_REGION` and selects the inference-profile geography.                     | —        |
-| `model`      | Model the Claude agent runs on: a tested alias (`sonnet` or `opus`) mapped to a tested inference profile, or a raw model id (e.g. `claude-opus-5`) passed to the agent verbatim with a warning. | `sonnet` |
+| `model`      | Model the Claude agent runs on: a tested alias (`opus` or `sonnet`) mapped to a tested inference profile, or a raw model id (e.g. `claude-sonnet-5[1m]`) passed to the agent verbatim with a warning. | `opus` (`claude-opus-5[1m]`) |
 
 See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, example workflow).
 
@@ -160,7 +160,7 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 Testbot runs on Claude Code:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.10
+- uses: skyramp/testbot@v0.11.11
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -190,11 +190,11 @@ steps:
     with:
       role-to-assume: ${{ vars.SKYRAMP_TESTBOT_AWS_ROLE_ARN }} # not a secret
       aws-region: us-east-1
-  - uses: skyramp/testbot@v0.11.10
+  - uses: skyramp/testbot@v0.11.11
     with:
       useBedrock: true
       awsRegion: us-east-1
-      model: sonnet # sonnet | opus
+      model: opus # opus (default) | sonnet
       skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
       # no anthropicApiKey
 ```
@@ -207,14 +207,14 @@ steps:
 
 **Notes:**
 
-- `model` aliases (`sonnet` | `opus`) map to a tested cross-region inference profile, prefixing the geography from `awsRegion` (`us-east-1` → `us.`, `eu-central-1` → `eu.`, `ap-…` → `apac.`). A raw model id is passed through verbatim, so on Bedrock it must already be a resolvable inference-profile id (e.g. `us.anthropic.claude-opus-4-6-v1[1m]`).
+- `model` aliases (`opus` | `sonnet`) map to a tested cross-region inference profile, prefixing the geography from `awsRegion` (`us-east-1` → `us.`, `eu-central-1` → `eu.`, `ap-…` → `apac.`). A raw model id is passed through verbatim, so on Bedrock it must already be a resolvable inference-profile id (e.g. `us.anthropic.claude-opus-5[1m]`).
 - If the 1M-context beta isn't available in your region (a `Unexpected anthropic-beta header` error), set `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1` via `env:` on the job.
 - Static AWS access keys also work — set them in the `configure-aws-credentials` step (or as job `env:`); Testbot reads whatever the AWS SDK credential chain resolves.
 
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v0.11.10
+- uses: skyramp/testbot@v0.11.11
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -241,7 +241,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v0.11.10
+      - uses: skyramp/testbot@v0.11.11
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -252,7 +252,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.10
+- uses: skyramp/testbot@v0.11.11
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -266,7 +266,7 @@ The token is automatically registered as a secret so it is masked in the workflo
 For apps that require authentication before recording browser flows, pass credentials via `uiCredentials` (store as a secret). Testbot logs in once before recording UI/E2E tests. Declare **every** field the login form needs as a `key=value` pair — not just username/password. If the form has extra fields (a tenant ID, company code, domain, …), add them as additional pairs; a login field with no matching pair is reported as a missing credential instead of being submitted empty.
 
 ```yaml
-- uses: skyramp/testbot@v0.11.10
+- uses: skyramp/testbot@v0.11.11
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -278,7 +278,7 @@ For apps that require authentication before recording browser flows, pass creden
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v0.11.10
+- uses: skyramp/testbot@v0.11.11
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -290,7 +290,7 @@ For apps that require authentication before recording browser flows, pass creden
 By default Testbot opens a side PR with the test changes into your feature branch. To commit the changes directly onto the feature branch instead:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.10
+- uses: skyramp/testbot@v0.11.11
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -319,7 +319,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
   with:
     repository: my-org/backend
     path: backend
-- uses: skyramp/testbot@v0.11.10
+- uses: skyramp/testbot@v0.11.11
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -329,7 +329,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v0.11.10
+- uses: skyramp/testbot@v0.11.11
   id: skyramp
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
