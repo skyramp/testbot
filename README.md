@@ -12,7 +12,7 @@
 - 🎭 **Browser Recording** - Your UI tests are grounded in real DOM elements and recorded browser interactions — logging in first with credentials you provide when the app requires auth — and execution videos are linked in the report
 - 🔁 **Before/After Maintenance** - Runs impacted tests before and after updating them so you can see exactly what the change fixed
 - ✅ **Automated Test Execution** - Runs generated and maintained tests and validates results
-- 🌿 **Clean Side-PR Delivery** - By default opens a separate PR with the test changes into your feature branch, keeping the feature PR clean (or commits directly onto the feature branch)
+- 🌿 **Clean Testbot PR Delivery** - By default opens a separate PR with the test changes into your feature branch, keeping the feature PR clean (or commits directly onto the feature branch)
 - 🔗 **Multi-repo Aware** - Analyzes related repositories as shared context and can deliver tests to a separate test repo
 - 💬 **Rich PR Reports** - Posts a detailed, collapsible summary as a PR comment with timing breakdowns
 - 🔒 **Author Allowlisting** - Restrict which PR authors Testbot acts on
@@ -46,7 +46,7 @@ Once the setup PR is merged, Testbot runs automatically on each subsequent pull 
 8. **Test Execution** - Runs tests and validates results
 9. **Report Generation** - Builds a detailed summary with metrics, timing, and any recorded UI videos
 10. **PR Comment** - Posts the summary to the PR (if enabled)
-11. **Delivery** - Opens a side PR with the test changes (default) or commits directly to the feature branch
+11. **Delivery** - Opens a Testbot PR with the test changes (default) or commits directly to the feature branch
 
 ## Prerequisites
 
@@ -101,7 +101,7 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 | Input              | Description                                                                                                                                                         | Default |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `authTokenCommand` | Shell command to generate an auth token. Runs after services start; stdout is captured and set as `SKYRAMP_TEST_TOKEN` for test execution                           | `''`    |
-| `uiCredentials`    | Browser login credentials for apps that require auth before UI test recording. Format: `key=value` pairs `username=<val>;password=<val>` plus any extra login-form fields (e.g. `;tenantId=<val>`); a JSON object per line when a value contains `=` or `;`; legacy `username:password` still accepted. One credential per line for multiple users. Store in GitHub Secrets | `''`    |
+| `uiCredentials`    | Browser login credentials for apps that require auth before UI test recording. Format: `key=value` pairs `username=<val>;password=<val>` plus any extra login-form fields (e.g. `;tenantId=<val>`); a JSON object per line when a value contains `=` or `;`; legacy `username:password` still accepted. One credential per line for multiple users (each line also exported keyed as `SKYRAMP_UI_USERNAME_<KEY>`/`SKYRAMP_UI_PASSWORD_<KEY>` — see [Multiple credentials](#multiple-credentials-per-role-testing)). Store in GitHub Secrets | `''`    |
 | `allowedAuthors`   | Newline-separated GitHub usernames whose PRs Testbot will act on. Empty allows all authors                                                                          | `''`    |
 
 ### Test Generation & Delivery
@@ -110,8 +110,8 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
 | `maxRecommendations` | Total number of test recommendations to produce (generated + additional)                                                                                                       | `20`                                            |
 | `maxGenerate`        | Number of tests to generate and execute this run; the rest are listed as additional recommendations                                                                            | `3`                                             |
-| `generatedTestsMode` | Where test changes are delivered: `separate-branch` (default) opens a side PR into the feature branch to keep it clean; `same-branch` commits directly onto the feature branch | `separate-branch`                               |
-| `testRepoPath`       | Cross-repo delivery: local path to a separately checked-out test repository. When set, tests are committed and a side PR is opened there instead of the app repo               | `''`                                            |
+| `generatedTestsMode` | Where test changes are delivered: `separate-branch` (default) opens a Testbot PR into the feature branch to keep it clean; `same-branch` commits directly onto the feature branch | `separate-branch`                               |
+| `testRepoPath`       | Cross-repo delivery: local path to a separately checked-out test repository. When set, tests are committed and a Testbot PR is opened there instead of the app repo               | `''`                                            |
 | `relatedRepoPaths`   | Multi-repo analysis: newline-separated paths to related repos (checked out as sibling dirs) analyzed read-only as shared context. Max 5                                        | `''`                                            |
 | `autoCommit`         | Automatically commit/deliver test changes                                                                                                                                      | `true`                                          |
 | `commitMessage`      | Commit message for test changes                                                                                                                                                | `Skyramp Testbot: test maintenance suggestions` |
@@ -127,7 +127,7 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 
 | Input                  | Description                                                                                                                                                                                                                       | Default               |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| `githubToken`          | Token for PR comments and API access. Use a GitHub App token or PAT if you want side-PR CI to auto-run                                                                                                                            | `${{ github.token }}` |
+| `githubToken`          | Token for PR comments and API access. Use a GitHub App token or PAT if you want Testbot PR CI to auto-run                                                                                                                            | `${{ github.token }}` |
 | `githubAppId`          | GitHub App ID for minting fresh installation tokens mid-run. App tokens expire after 1 hour, so set this (with `githubAppPrivateKey`) if runs can exceed that — otherwise the final git push fails with `could not read Username` | —                     |
 | `githubAppPrivateKey`  | Private key (PEM) of the App named by `githubAppId` (store in GitHub Secrets)                                                                                                                                                     | —                     |
 | `workingDirectory`     | Working directory for the action                                                                                                                                                                                                  | `.`                   |
@@ -149,9 +149,14 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 | `tests_executed`                                                                                                                                          | Number of tests executed                                                                                                      |
 | `skipped_self_trigger`                                                                                                                                    | Whether execution was skipped due to detecting its own commit                                                                 |
 | `commit_sha`                                                                                                                                              | SHA of the commit made by Testbot (empty if no commit)                                                                        |
-| `side_pr_url`                                                                                                                                             | URL of the side PR opened by Testbot. Empty when no side PR was opened (no test changes, or `generatedTestsMode=same-branch`) |
-| `side_pr_number`                                                                                                                                          | Number of the side PR opened by Testbot. Empty under the same conditions as `side_pr_url`                                     |
+| `testbot_pr_url`                                                                                                                                          | URL of the Testbot PR. Also set on a no-change run when an earlier Testbot PR is still open; empty otherwise                  |
+| `testbot_pr_number`                                                                                                                                       | Number of the Testbot PR. Set, or empty, under the same conditions as `testbot_pr_url`                                        |
 | `duration_setup` / `duration_analyzing` / `duration_generating` / `duration_executing` / `duration_maintaining` / `duration_reporting` / `duration_total` | Per-phase and total durations in seconds                                                                                      |
+
+> **Breaking change.** `testbot_pr_url` and `testbot_pr_number` were named
+> `side_pr_url` and `side_pr_number` in earlier releases. A workflow still
+> reading the old names gets an empty string rather than an error, so update
+> any `steps.<id>.outputs.side_pr_*` references when upgrading.
 
 ## Usage Examples
 
@@ -160,7 +165,7 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 Testbot runs on Claude Code:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.11
+- uses: skyramp/testbot@v0.11.12
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -190,7 +195,7 @@ steps:
     with:
       role-to-assume: ${{ vars.SKYRAMP_TESTBOT_AWS_ROLE_ARN }} # not a secret
       aws-region: us-east-1
-  - uses: skyramp/testbot@v0.11.11
+  - uses: skyramp/testbot@v0.11.12
     with:
       useBedrock: true
       awsRegion: us-east-1
@@ -214,7 +219,7 @@ steps:
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v0.11.11
+- uses: skyramp/testbot@v0.11.12
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -241,7 +246,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v0.11.11
+      - uses: skyramp/testbot@v0.11.12
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -252,7 +257,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.11
+- uses: skyramp/testbot@v0.11.12
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -266,7 +271,7 @@ The token is automatically registered as a secret so it is masked in the workflo
 For apps that require authentication before recording browser flows, pass credentials via `uiCredentials` (store as a secret). Testbot logs in once before recording UI/E2E tests. Declare **every** field the login form needs as a `key=value` pair — not just username/password. If the form has extra fields (a tenant ID, company code, domain, …), add them as additional pairs; a login field with no matching pair is reported as a missing credential instead of being submitted empty.
 
 ```yaml
-- uses: skyramp/testbot@v0.11.11
+- uses: skyramp/testbot@v0.11.12
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -275,10 +280,36 @@ For apps that require authentication before recording browser flows, pass creden
     uiCredentials: ${{ secrets.TESTBOT_UI_CREDENTIALS }}
 ```
 
+#### Multiple credentials (per-role testing)
+
+Provide one credential per line to let Testbot pick per test case — an app with
+role-based authorization typically needs an admin flow and a restricted-user
+flow tested with different accounts. Label each line with `role=<name>` so the
+agent can select by role:
+
+```
+role=admin;username=admin@example.com;password=<secret>
+role=readonly;username=viewer@example.com;password=<secret>
+```
+
+Each line is also exported to the environment as
+`SKYRAMP_UI_USERNAME_<KEY>` / `SKYRAMP_UI_PASSWORD_<KEY>`, where `KEY` is the
+line's `role` — uppercased, with any other characters becoming `_` (e.g.
+`role=read only` → `READ_ONLY`) — or, when it has no role, its 1-based
+position among the non-empty lines (blank lines don't count). When two lines
+would get the same `KEY` (duplicate roles), the later line's position is
+appended (`QA`, `QA_2`), again if that name is also taken by another role —
+so prefer distinct roles, which keep the variable names predictable. A generated test reads the variable of the credential it was recorded
+with — e.g. `process.env.SKYRAMP_UI_PASSWORD_READONLY` — and its guard names
+that variable when unset, so re-running the test in your own CI only requires
+binding that variable to the matching secret. The first line is additionally
+exported unkeyed (`SKYRAMP_UI_USERNAME` / `SKYRAMP_UI_PASSWORD`), and a
+single-credential input behaves exactly as before.
+
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v0.11.11
+- uses: skyramp/testbot@v0.11.12
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -287,10 +318,10 @@ For apps that require authentication before recording browser flows, pass creden
 
 ### Commit Directly to the Feature Branch
 
-By default Testbot opens a side PR with the test changes into your feature branch. To commit the changes directly onto the feature branch instead:
+By default Testbot opens a Testbot PR with the test changes into your feature branch. To commit the changes directly onto the feature branch instead:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.11
+- uses: skyramp/testbot@v0.11.12
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -319,7 +350,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
   with:
     repository: my-org/backend
     path: backend
-- uses: skyramp/testbot@v0.11.11
+- uses: skyramp/testbot@v0.11.12
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -329,7 +360,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v0.11.11
+- uses: skyramp/testbot@v0.11.12
   id: skyramp
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
@@ -340,7 +371,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
     echo "Tests Modified: ${{ steps.skyramp.outputs.tests_modified }}"
     echo "Tests Created: ${{ steps.skyramp.outputs.tests_created }}"
     echo "Tests Executed: ${{ steps.skyramp.outputs.tests_executed }}"
-    echo "Side PR: ${{ steps.skyramp.outputs.side_pr_url }}"
+    echo "Testbot PR: ${{ steps.skyramp.outputs.testbot_pr_url }}"
 ```
 
 ## Troubleshooting
@@ -380,7 +411,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
 1. **Never commit secrets** - Always use GitHub Secrets for sensitive values
 2. **Limit permissions** - Only grant necessary permissions in workflow
 3. **Pin versions** - Use a specific version (`@v0.10.6`) for production workflows, or the floating minor tag (`@v0.10`) to get patches automatically
-4. **Review test changes** - Rely on the default side-PR delivery (or disable auto-commit) for sensitive repositories
+4. **Review test changes** - Rely on the default Testbot PR delivery (or disable auto-commit) for sensitive repositories
 5. **Audit logs** - Enable debug mode periodically to review action behavior
 
 ## Support
