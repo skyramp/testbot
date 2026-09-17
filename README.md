@@ -120,7 +120,7 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 
 | Input                    | Description                           | Default                       |
 | ------------------------ | ------------------------------------- | ----------------------------- |
-| `skyrampExecutorVersion` | Skyramp Executor Docker image version | workspace.yml, else `v1.3.40` |
+| `skyrampExecutorVersion` | Skyramp Executor Docker image version | workspace.yml, else `v1.3.45` |
 | `skyrampMcpVersion`      | Skyramp MCP package version           | workspace.yml, else `latest`  |
 
 ### Behavior, Retries & Reporting
@@ -165,7 +165,7 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 Testbot runs on Claude Code:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.12
+- uses: skyramp/testbot@v0.11.13
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -195,7 +195,7 @@ steps:
     with:
       role-to-assume: ${{ vars.SKYRAMP_TESTBOT_AWS_ROLE_ARN }} # not a secret
       aws-region: us-east-1
-  - uses: skyramp/testbot@v0.11.12
+  - uses: skyramp/testbot@v0.11.13
     with:
       useBedrock: true
       awsRegion: us-east-1
@@ -219,7 +219,7 @@ steps:
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v0.11.12
+- uses: skyramp/testbot@v0.11.13
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -246,7 +246,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v0.11.12
+      - uses: skyramp/testbot@v0.11.13
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -257,7 +257,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.12
+- uses: skyramp/testbot@v0.11.13
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -271,7 +271,7 @@ The token is automatically registered as a secret so it is masked in the workflo
 For apps that require authentication before recording browser flows, pass credentials via `uiCredentials` (store as a secret). Testbot logs in once before recording UI/E2E tests. Declare **every** field the login form needs as a `key=value` pair — not just username/password. If the form has extra fields (a tenant ID, company code, domain, …), add them as additional pairs; a login field with no matching pair is reported as a missing credential instead of being submitted empty.
 
 ```yaml
-- uses: skyramp/testbot@v0.11.12
+- uses: skyramp/testbot@v0.11.13
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -309,7 +309,7 @@ single-credential input behaves exactly as before.
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v0.11.12
+- uses: skyramp/testbot@v0.11.13
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -321,7 +321,7 @@ single-credential input behaves exactly as before.
 By default Testbot opens a Testbot PR with the test changes into your feature branch. To commit the changes directly onto the feature branch instead:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.12
+- uses: skyramp/testbot@v0.11.13
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -350,7 +350,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
   with:
     repository: my-org/backend
     path: backend
-- uses: skyramp/testbot@v0.11.12
+- uses: skyramp/testbot@v0.11.13
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -360,7 +360,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v0.11.12
+- uses: skyramp/testbot@v0.11.13
   id: skyramp
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}

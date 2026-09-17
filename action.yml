@@ -81,7 +81,7 @@ inputs:
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.40".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.45".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
@@ -149,13 +149,13 @@ inputs:
     required: false
     default: "true"
   maxRecommendations:
-    description: "Total number of test recommendations to produce (generated + additional). Defaults to 20."
+    description: "Deprecated. Accepted for older MCP versions and not sent unless set. The plan decides how many tests the change needs."
     required: false
-    default: "20"
+    default: ""
   maxGenerate:
-    description: "Number of tests to generate and execute in this run. The remainder are listed as additional recommendations. Defaults to 3."
+    description: "Deprecated. Accepted for older MCP versions and not sent unless set. The plan decides how many tests the change needs."
     required: false
-    default: "3"
+    default: ""
   testbotMaxRetries:
     description: 'Maximum number of retries for transient agent CLI errors (e.g., Cursor "Connection stalled")'
     required: false
