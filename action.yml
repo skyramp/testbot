@@ -50,8 +50,12 @@ inputs:
     description: "AWS region for Bedrock (e.g. us-east-1). Sets AWS_REGION and selects the inference-profile geography. Only used when useBedrock is true."
     required: false
   model:
-    description: "Model the Claude agent runs on. A tested alias — opus (default, resolving to claude-opus-5[1m]) or sonnet — mapped to a tested model/inference profile, or a raw model id (e.g. claude-sonnet-5[1m]) passed to the agent verbatim with a warning; on Bedrock a raw id must be a resolvable inference-profile id (e.g. us.anthropic.claude-opus-5[1m])."
+    description: "Model the Claude agent runs on. A tested alias — opus (default, resolving to claude-opus-5-5[1m]) or sonnet — mapped to a tested model/inference profile, or a raw model id (e.g. claude-sonnet-5[1m]) passed to the agent verbatim with a warning; on Bedrock a raw id must be a resolvable inference-profile id (e.g. us.anthropic.claude-opus-5-5[1m])."
     required: false
+  effort:
+    description: "Effort level the model uses: low, medium, high (default), xhigh, or max. Higher effort makes the model think more per turn, which costs more tokens and time. An unknown value falls back to high with a warning."
+    required: false
+    default: "high"
 
   # High priority optional inputs (per-service fields like testDirectory live in .skyramp/workspace.yml under services[].testDirectory)
   allowedAuthors:
@@ -81,7 +85,7 @@ inputs:
 
   # Medium priority optional inputs
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.45".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.48".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
@@ -164,6 +168,10 @@ inputs:
     description: "Delay in seconds between agent retry attempts"
     required: false
     default: "10"
+  perTestMaxFixAttempts:
+    description: "Per-file cap on skyramp_execute_test calls in the final phase: the first run plus the fix-and-rerun iterations the agent may spend on a fixable failure (SKYR-4460). Whole number 1-10. Empty (default) leaves the Skyramp MCP's own default in force; an unusable value is ignored with a warning."
+    required: false
+    default: ""
   testExecutionTimeout:
     description: "Timeout in seconds for individual MCP tool calls (e.g., test execution). Increase if tests take longer than 5 minutes."
     required: false
