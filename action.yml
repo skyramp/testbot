@@ -31,8 +31,8 @@ inputs:
 
   # Required inputs
   skyrampLicenseFile:
-    description: "Skyramp license file content (store in GitHub Secrets)"
-    required: true
+    description: "Skyramp license file content (store in GitHub Secrets). Not needed by a Testbot V3 run when Skyramp sends it a run token."
+    required: false
   cursorApiKey:
     description: "Cursor API key for AI agent access (store in GitHub Secrets)"
     required: false
