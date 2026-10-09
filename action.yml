@@ -86,6 +86,10 @@ inputs:
     description: 'Extra environment for the test-running stages, one KEY=VALUE per line — the variables your CI sets from secrets (the staged pipeline reads your CI workflow for the literal ones; these are the ones it cannot see). Store in GitHub Secrets. Staged pipeline only.'
     required: false
     default: ""
+  showStageBreakdown:
+    description: "Appends the engine's per-stage time / cost / context table to the workflow run summary page. The job log always has it. Staged pipeline only."
+    required: false
+    default: ""
   onboard:
     description: "Runs the opt-in onboard stage, which writes the SUT recipe (.skyramp/sut/ and .skyramp/workspace.yml) with the setup-testbot-target-sut skill, and lets it re-onboard over an existing recipe. Staged pipeline only."
     required: false
