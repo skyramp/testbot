@@ -3,7 +3,7 @@
 > Automated test generation and maintenance for your APIs and UIs using Skyramp's AI-powered Testbot
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Skyramp%20Testbot-blue?logo=github)](https://github.com/marketplace/actions/skyramp-testbot)
-[![License](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Proprietary-blue.svg)](LICENSE.md)
 
 ## Features
 
@@ -48,6 +48,19 @@ Once the setup PR is merged, Testbot runs automatically on each subsequent pull 
 10. **PR Comment** - Posts the summary to the PR (if enabled)
 11. **Delivery** - Opens a Testbot PR with the test changes (default) or commits directly to the feature branch
 
+### Staged pipeline (experimental)
+
+Setting `pipeline: staged` swaps the single-agent flow for a ten-stage pipeline. Each stage runs in its own Claude Code session, its output is checked by deterministic exit gates, and a failed gate earns one retry with the failure fed back. The stages: preflight → analyze → deploy → recommend → generate / generate-ui → adapt → finalize → report → deliver. Stages without a dependency between them run in parallel. The report stage runs whenever the run itself was not stopped from outside, and when its own checks fail it is assembled deterministically from the other stages' output (the check run is then `neutral`, not `success`). Deliver opens or updates a Testbot PR from a `skyramp-testbot/<dev-branch>-tests` branch; the classic flow uses `skyramp-testbot/pr-<n>`, so a repo that switches pipelines gets a second tests PR until the old one is closed.
+
+Same outputs, PR comment and check run. The `target*` lifecycle inputs are not used (the app is brought up from the repo's own `.skyramp/` recipe), and `generatedTestsMode: same-branch` is not supported — nothing is committed and a warning is logged. Differences to know about:
+
+- The test runtime (pytest, the Skyramp SDK, Playwright browsers) is installed from the repo's own CI workflow so adapt can run the tests it places.
+- `testbotTimeout` is a whole-run budget. Shortly before it (a grace window of 10 percent, between 1 and 3 minutes, is reserved for the report) in-flight sessions are killed and the report still runs.
+- The app the deploy stage brought up is torn down at the end of the run using the recipe's recorded teardown.
+- `authTokenCommand` and `uiCredentials` work as in the classic flow: the token (as `SKYRAMP_TEST_TOKEN`) and credentials (as `SKYRAMP_UI_CREDENTIALS`) reach the stages that write and run tests, masked in the log. Literal test env is read from the repo's own CI workflow; the `sessionEnv` input (one `KEY=VALUE` per line) supplies the values CI takes from secrets.
+- The run uploads a `skyramp-staged-run-<job>-<attempt>` artifact with every stage's JSON output, per-attempt session logs, and a per-stage time / cost / token table (also printed to the job summary).
+- Runs locally too: `cd packages/core && npm run build:staged && node dist/staged.js --repo <checkout> --base-branch origin/main`.
+
 ## Prerequisites
 
 Before using this action, ensure you have:
@@ -73,87 +86,88 @@ Before using this action, ensure you have:
 
 ### AI provider (AWS Bedrock)
 
-| Input        | Description                                                                                                                   | Default  |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `useBedrock` | Run the Claude agent through AWS Bedrock instead of the Anthropic API. No `anthropicApiKey` needed.                           | `false`  |
-| `awsRegion`  | AWS region for Bedrock (e.g. `us-east-1`). Sets `AWS_REGION` and selects the inference-profile geography.                     | —        |
-| `model`      | Model the Claude agent runs on: a tested alias (`opus` or `sonnet`) mapped to a tested inference profile, or a raw model id (e.g. `claude-sonnet-5[1m]`) passed to the agent verbatim with a warning. | `opus` (`claude-opus-5-5[1m]`) |
-| `effort`     | Effort level the model uses: `low`, `medium`, `high`, `xhigh`, or `max`. Higher effort makes the model think more per turn, which costs more tokens and time. An unknown value falls back to `high` with a warning. | `high` |
+| Input        | Description                                                                                                                                                                                                         | Default                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `useBedrock` | Run the Claude agent through AWS Bedrock instead of the Anthropic API. No `anthropicApiKey` needed.                                                                                                                 | `false`                             |
+| `awsRegion`  | AWS region for Bedrock (e.g. `us-east-1`). Sets `AWS_REGION` and selects the inference-profile geography.                                                                                                           | —                                   |
+| `model`      | Model the Claude agent runs on: a tested alias (`opus` or `sonnet`) mapped to a tested inference profile, or a raw model id (e.g. `claude-sonnet-5[1m]`) passed to the agent verbatim with a warning.               | `opus` (`claude-opus-5-5[1m]`)      |
+| `effort`     | Effort level the model uses: `low`, `medium`, `high`, `xhigh`, or `max`. Higher effort makes the model think more per turn, which costs more tokens and time. An unknown value falls back to `high` with a warning. | `high` (classic), `medium` (staged) |
 
 See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, example workflow).
 
 ### Target Lifecycle
 
-| Input                                | Description                                                                                                                                                                                                                                                   | Default                      |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Input                                | Description                                                                                                                                                                                                                                                   | Default                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | `targetSetupCommand`                 | Command to start services before testing. Can emit a JSON object on its last stdout line to override the workspace `baseUrl` at runtime (e.g. `{"baseUrl": "http://remote-host:8000"}`, or `{"services": {"backend": {"baseUrl": "..."}}}` for multi-service) | workspace.yml `serverStartCommand`, else `docker compose up -d --build` |
-| `skipTargetSetup`                    | Skip running the service startup command                                                                                                                                                                                                                      | `false`                      |
-| `targetSetupRetries`                 | Retries for `targetSetupCommand` on failure (e.g. transient DockerHub 502s)                                                                                                                                                                                   | `3`                          |
-| `targetSetupRetryDelay`              | Delay in seconds between setup retries                                                                                                                                                                                                                        | `10`                         |
-| `targetReadyCheckCommand`            | Command to verify services are ready (retried until success or timeout). When empty, auto-generates curl health checks against the workspace service base URLs                                                                                                | `''` (auto)                  |
-| `targetReadyCheckTimeout`            | Max seconds to wait for the ready check to succeed                                                                                                                                                                                                            | `1800`                       |
-| `targetReadyCheckInterval`           | Seconds between ready check poll attempts                                                                                                                                                                                                                     | `30`                         |
-| `targetReadyCheckDiagnosticsCommand` | Command to collect diagnostics on ready-check timeout                                                                                                                                                                                                         | Docker container status/logs |
-| `targetTeardownCommand`              | Command to tear down services (runs in the post step, guaranteed even on failure/cancellation)                                                                                                                                                                | `''`                         |
-| `skipTargetTeardown`                 | Skip running the service teardown command                                                                                                                                                                                                                     | `false`                      |
+| `skipTargetSetup`                    | Skip running the service startup command                                                                                                                                                                                                                      | `false`                                                                 |
+| `targetSetupRetries`                 | Retries for `targetSetupCommand` on failure (e.g. transient DockerHub 502s)                                                                                                                                                                                   | `3`                                                                     |
+| `targetSetupRetryDelay`              | Delay in seconds between setup retries                                                                                                                                                                                                                        | `10`                                                                    |
+| `targetReadyCheckCommand`            | Command to verify services are ready (retried until success or timeout). When empty, auto-generates curl health checks against the workspace service base URLs                                                                                                | `''` (auto)                                                             |
+| `targetReadyCheckTimeout`            | Max seconds to wait for the ready check to succeed                                                                                                                                                                                                            | `1800`                                                                  |
+| `targetReadyCheckInterval`           | Seconds between ready check poll attempts                                                                                                                                                                                                                     | `30`                                                                    |
+| `targetReadyCheckDiagnosticsCommand` | Command to collect diagnostics on ready-check timeout                                                                                                                                                                                                         | Docker container status/logs                                            |
+| `targetTeardownCommand`              | Command to tear down services (runs in the post step, guaranteed even on failure/cancellation)                                                                                                                                                                | `''`                                                                    |
+| `skipTargetTeardown`                 | Skip running the service teardown command                                                                                                                                                                                                                     | `false`                                                                 |
 
 ### Authentication & Access
 
-| Input              | Description                                                                                                                                                         | Default |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `authTokenCommand` | Shell command to generate an auth token. Runs after services start; stdout is captured and set as `SKYRAMP_TEST_TOKEN` for test execution                           | `''`    |
+| Input              | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Default |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `authTokenCommand` | Shell command to generate an auth token. Runs after services start; stdout is captured and set as `SKYRAMP_TEST_TOKEN` for test execution                                                                                                                                                                                                                                                                                                                                                                                                   | `''`    |
 | `uiCredentials`    | Browser login credentials for apps that require auth before UI test recording. Format: `key=value` pairs `username=<val>;password=<val>` plus any extra login-form fields (e.g. `;tenantId=<val>`); a JSON object per line when a value contains `=` or `;`; legacy `username:password` still accepted. One credential per line for multiple users (each line also exported keyed as `SKYRAMP_UI_USERNAME_<KEY>`/`SKYRAMP_UI_PASSWORD_<KEY>` — see [Multiple credentials](#multiple-credentials-per-role-testing)). Store in GitHub Secrets | `''`    |
-| `allowedAuthors`   | Newline-separated GitHub usernames whose PRs Testbot will act on. Empty allows all authors                                                                          | `''`    |
+| `allowedAuthors`   | Newline-separated GitHub usernames whose PRs Testbot will act on. Empty allows all authors                                                                                                                                                                                                                                                                                                                                                                                                                                                  | `''`    |
 
 ### Test Generation & Delivery
 
-| Input                | Description                                                                                                                                                                    | Default                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
-| `maxRecommendations` | Total number of test recommendations to produce (generated + additional)                                                                                                       | `20`                                            |
-| `maxGenerate`        | Number of tests to generate and execute this run; the rest are listed as additional recommendations                                                                            | `3`                                             |
+| Input                | Description                                                                                                                                                                       | Default                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `maxRecommendations` | Total number of test recommendations to produce (generated + additional)                                                                                                          | `20`                                            |
+| `maxGenerate`        | Number of tests to generate and execute this run; the rest are listed as additional recommendations                                                                               | `3`                                             |
 | `generatedTestsMode` | Where test changes are delivered: `separate-branch` (default) opens a Testbot PR into the feature branch to keep it clean; `same-branch` commits directly onto the feature branch | `separate-branch`                               |
 | `testRepoPath`       | Cross-repo delivery: local path to a separately checked-out test repository. When set, tests are committed and a Testbot PR is opened there instead of the app repo               | `''`                                            |
-| `relatedRepoPaths`   | Multi-repo analysis: newline-separated paths to related repos (checked out as sibling dirs) analyzed read-only as shared context. Max 5                                        | `''`                                            |
-| `autoCommit`         | Automatically commit/deliver test changes                                                                                                                                      | `true`                                          |
-| `commitMessage`      | Commit message for test changes                                                                                                                                                | `Skyramp Testbot: test maintenance suggestions` |
+| `relatedRepoPaths`   | Multi-repo analysis: newline-separated paths to related repos (checked out as sibling dirs) analyzed read-only as shared context. Max 5                                           | `''`                                            |
+| `autoCommit`         | Automatically commit/deliver test changes                                                                                                                                         | `true`                                          |
+| `commitMessage`      | Commit message for test changes                                                                                                                                                   | `Skyramp Testbot: test maintenance suggestions` |
 
 ### Skyramp & MCP Versions
 
-| Input                    | Description                           | Default                       |
-| ------------------------ | ------------------------------------- | ----------------------------- |
-| `skyrampExecutorVersion` | Skyramp Executor Docker image version | workspace.yml, else `v1.3.48` |
-| `skyrampMcpVersion`      | Skyramp MCP package version           | workspace.yml, else `latest`  |
+| Input                    | Description                                                                                 | Default                       |
+| ------------------------ | ------------------------------------------------------------------------------------------- | ----------------------------- |
+| `engineVersion`          | Testbot engine version: an exact version, a semver range, or an npm dist-tag such as `next` | npm `latest`                  |
+| `skyrampExecutorVersion` | Skyramp Executor Docker image version                                                       | workspace.yml, else `v1.3.51` |
+| `skyrampMcpVersion`      | Skyramp MCP package version                                                                 | workspace.yml, else `latest`  |
 
 ### Behavior, Retries & Reporting
 
-| Input                  | Description                                                                                                                                                                                                                       | Default               |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| `githubToken`          | Token for PR comments and API access. Use a GitHub App token or PAT if you want Testbot PR CI to auto-run                                                                                                                            | `${{ github.token }}` |
-| `githubAppId`          | GitHub App ID for minting fresh installation tokens mid-run. App tokens expire after 1 hour, so set this (with `githubAppPrivateKey`) if runs can exceed that — otherwise the final git push fails with `could not read Username` | —                     |
-| `githubAppPrivateKey`  | Private key (PEM) of the App named by `githubAppId` (store in GitHub Secrets)                                                                                                                                                     | —                     |
-| `workingDirectory`     | Working directory for the action                                                                                                                                                                                                  | `.`                   |
-| `postPrComment`        | Post the summary as a PR comment                                                                                                                                                                                                  | `true`                |
-| `reportCollapsed`      | Wrap report sections in collapsible `<details>` blocks                                                                                                                                                                            | `true`                |
-| `testbotMaxRetries`    | Max retries for transient agent CLI errors                                                                                                                                                                                        | `3`                   |
-| `testbotRetryDelay`    | Delay in seconds between agent retry attempts                                                                                                                                                                                     | `10`                  |
-| `perTestMaxFixAttempts`| Per-file cap on `skyramp_execute_test` calls in the final phase: the first run plus the fix-and-rerun iterations spent on a fixable failure (SKYR-4460). Whole number 1-10; empty leaves the Skyramp MCP's default in force                            | _(MCP default)_       |
-| `testExecutionTimeout` | Timeout (seconds) for individual MCP tool calls, e.g. test execution                                                                                                                                                              | `300`                 |
-| `testbotTimeout`       | Timeout (minutes) for agent execution (safety net; does not kill the child process)                                                                                                                                               | `60`                  |
-| `enableDebug`          | Enable verbose debug logging (for NDJSON-capable agents this produces the `agent-log.ndjson` that is uploaded as an artifact)                                                                                                     | `true`                |
+| Input                   | Description                                                                                                                                                                                                                       | Default               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| `githubToken`           | Token for PR comments and API access. Use a GitHub App token or PAT if you want Testbot PR CI to auto-run                                                                                                                         | `${{ github.token }}` |
+| `githubAppId`           | GitHub App ID for minting fresh installation tokens mid-run. App tokens expire after 1 hour, so set this (with `githubAppPrivateKey`) if runs can exceed that — otherwise the final git push fails with `could not read Username` | —                     |
+| `githubAppPrivateKey`   | Private key (PEM) of the App named by `githubAppId` (store in GitHub Secrets)                                                                                                                                                     | —                     |
+| `workingDirectory`      | Working directory for the action                                                                                                                                                                                                  | `.`                   |
+| `postPrComment`         | Post the summary as a PR comment                                                                                                                                                                                                  | `true`                |
+| `reportCollapsed`       | Wrap report sections in collapsible `<details>` blocks                                                                                                                                                                            | `true`                |
+| `testbotMaxRetries`     | Max retries for transient agent CLI errors                                                                                                                                                                                        | `3`                   |
+| `testbotRetryDelay`     | Delay in seconds between agent retry attempts                                                                                                                                                                                     | `10`                  |
+| `perTestMaxFixAttempts` | Per-file cap on `skyramp_execute_test` calls in the final phase: the first run plus the fix-and-rerun iterations spent on a fixable failure (SKYR-4460). Whole number 1-10; empty leaves the Skyramp MCP's default in force       | _(MCP default)_       |
+| `testExecutionTimeout`  | Timeout (seconds) for individual MCP tool calls, e.g. test execution                                                                                                                                                              | `300`                 |
+| `testbotTimeout`        | Timeout (minutes) for agent execution (safety net; does not kill the child process)                                                                                                                                               | `60`                  |
+| `enableDebug`           | Enable verbose debug logging (for NDJSON-capable agents this produces the `agent-log.ndjson` that is uploaded as an artifact)                                                                                                     | `true`                |
 
 ## Outputs
 
-| Output                                                                                                                                                    | Description                                                                                                                   |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `test_summary`                                                                                                                                            | Full summary of test maintenance actions                                                                                      |
-| `tests_modified`                                                                                                                                          | Number of tests modified                                                                                                      |
-| `tests_created`                                                                                                                                           | Number of tests created                                                                                                       |
-| `tests_executed`                                                                                                                                          | Number of tests executed                                                                                                      |
-| `skipped_self_trigger`                                                                                                                                    | Whether execution was skipped due to detecting its own commit                                                                 |
-| `commit_sha`                                                                                                                                              | SHA of the commit made by Testbot (empty if no commit)                                                                        |
-| `testbot_pr_url`                                                                                                                                          | URL of the Testbot PR. Also set on a no-change run when an earlier Testbot PR is still open; empty otherwise                  |
-| `testbot_pr_number`                                                                                                                                       | Number of the Testbot PR. Set, or empty, under the same conditions as `testbot_pr_url`                                        |
-| `duration_setup` / `duration_analyzing` / `duration_generating` / `duration_executing` / `duration_maintaining` / `duration_reporting` / `duration_total` | Per-phase and total durations in seconds                                                                                      |
+| Output                                                                                                                                                    | Description                                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `test_summary`                                                                                                                                            | Full summary of test maintenance actions                                                                     |
+| `tests_modified`                                                                                                                                          | Number of tests modified                                                                                     |
+| `tests_created`                                                                                                                                           | Number of tests created                                                                                      |
+| `tests_executed`                                                                                                                                          | Number of tests executed                                                                                     |
+| `skipped_self_trigger`                                                                                                                                    | Whether execution was skipped due to detecting its own commit                                                |
+| `commit_sha`                                                                                                                                              | SHA of the commit made by Testbot (empty if no commit)                                                       |
+| `testbot_pr_url`                                                                                                                                          | URL of the Testbot PR. Also set on a no-change run when an earlier Testbot PR is still open; empty otherwise |
+| `testbot_pr_number`                                                                                                                                       | Number of the Testbot PR. Set, or empty, under the same conditions as `testbot_pr_url`                       |
+| `duration_setup` / `duration_analyzing` / `duration_generating` / `duration_executing` / `duration_maintaining` / `duration_reporting` / `duration_total` | Per-phase and total durations in seconds                                                                     |
 
 > **Breaking change.** `testbot_pr_url` and `testbot_pr_number` were named
 > `side_pr_url` and `side_pr_number` in earlier releases. A workflow still
@@ -167,7 +181,7 @@ See [AWS Bedrock](#aws-bedrock) for the full setup (OIDC, IAM permissions, examp
 Testbot runs on Claude Code:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.14
+- uses: skyramp/testbot@v1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -197,7 +211,7 @@ steps:
     with:
       role-to-assume: ${{ vars.SKYRAMP_TESTBOT_AWS_ROLE_ARN }} # not a secret
       aws-region: us-east-1
-  - uses: skyramp/testbot@v0.11.14
+  - uses: skyramp/testbot@v1
     with:
       useBedrock: true
       awsRegion: us-east-1
@@ -221,7 +235,7 @@ steps:
 ### Custom Service Startup Command
 
 ```yaml
-- uses: skyramp/testbot@v0.11.14
+- uses: skyramp/testbot@v1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -248,7 +262,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: skyramp/testbot@v0.11.14
+      - uses: skyramp/testbot@v1
         with:
           skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
           anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -259,7 +273,7 @@ jobs:
 If your token must be generated at runtime (e.g. by calling a login endpoint or running a CLI), use the `authTokenCommand` input. The command runs after services start, and its stdout is captured as the token:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.14
+- uses: skyramp/testbot@v1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -273,7 +287,7 @@ The token is automatically registered as a secret so it is masked in the workflo
 For apps that require authentication before recording browser flows, pass credentials via `uiCredentials` (store as a secret). Testbot logs in once before recording UI/E2E tests. Declare **every** field the login form needs as a `key=value` pair — not just username/password. If the form has extra fields (a tenant ID, company code, domain, …), add them as additional pairs; a login field with no matching pair is reported as a missing credential instead of being submitted empty.
 
 ```yaml
-- uses: skyramp/testbot@v0.11.14
+- uses: skyramp/testbot@v1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -311,7 +325,7 @@ single-credential input behaves exactly as before.
 ### Without Auto-commit (Manual Review)
 
 ```yaml
-- uses: skyramp/testbot@v0.11.14
+- uses: skyramp/testbot@v1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -323,7 +337,7 @@ single-credential input behaves exactly as before.
 By default Testbot opens a Testbot PR with the test changes into your feature branch. To commit the changes directly onto the feature branch instead:
 
 ```yaml
-- uses: skyramp/testbot@v0.11.14
+- uses: skyramp/testbot@v1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -352,7 +366,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
   with:
     repository: my-org/backend
     path: backend
-- uses: skyramp/testbot@v0.11.14
+- uses: skyramp/testbot@v1
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
     anthropicApiKey: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -362,7 +376,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
 ### Using Outputs
 
 ```yaml
-- uses: skyramp/testbot@v0.11.14
+- uses: skyramp/testbot@v1
   id: skyramp
   with:
     skyrampLicenseFile: ${{ secrets.SKYRAMP_LICENSE }}
@@ -412,7 +426,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
 
 1. **Never commit secrets** - Always use GitHub Secrets for sensitive values
 2. **Limit permissions** - Only grant necessary permissions in workflow
-3. **Pin versions** - Use a specific version (`@v0.10.6`) for production workflows, or the floating minor tag (`@v0.10`) to get patches automatically
+3. **Pin versions** - The action downloads the Testbot engine from npm on each run (`latest` by default). To freeze what runs, pin the action to an exact release tag and set `engineVersion` to an exact engine version
 4. **Review test changes** - Rely on the default Testbot PR delivery (or disable auto-commit) for sensitive repositories
 5. **Audit logs** - Enable debug mode periodically to review action behavior
 
@@ -422,7 +436,7 @@ When a change spans repositories (e.g. a frontend and a backend), check out the 
 
 ## License
 
-This project is licensed under the ISC License - see the [LICENSE](LICENSE) file for details.
+© Skyramp Inc. All rights reserved. Use is subject to the [Skyramp Terms of Service](https://docs.skyramp.dev/terms-of-service). See [LICENSE.md](LICENSE.md).
 
 ---
 

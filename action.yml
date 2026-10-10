@@ -45,7 +45,7 @@ inputs:
   useBedrock:
     description: "Run the Claude Code agent through AWS Bedrock instead of the Anthropic API. Requires AWS credentials in the environment (e.g. an aws-actions/configure-aws-credentials OIDC step before Testbot). No anthropicApiKey needed."
     required: false
-    default: "false"
+    default: ""
   awsRegion:
     description: "AWS region for Bedrock (e.g. us-east-1). Sets AWS_REGION and selects the inference-profile geography. Only used when useBedrock is true."
     required: false
@@ -53,9 +53,9 @@ inputs:
     description: "Model the Claude agent runs on. A tested alias — opus (default, resolving to claude-opus-5-5[1m]) or sonnet — mapped to a tested model/inference profile, or a raw model id (e.g. claude-sonnet-5[1m]) passed to the agent verbatim with a warning; on Bedrock a raw id must be a resolvable inference-profile id (e.g. us.anthropic.claude-opus-5-5[1m])."
     required: false
   effort:
-    description: "Effort level the model uses: low, medium, high (default), xhigh, or max. Higher effort makes the model think more per turn, which costs more tokens and time. An unknown value falls back to high with a warning."
+    description: "Effort level the model uses: low, medium, high, xhigh, or max. Unset, it is high for the classic pipeline and medium for the staged pipeline. Higher effort makes the model think more per turn, which costs more tokens and time. An unknown value falls back to high with a warning."
     required: false
-    default: "high"
+    default: ""
 
   # High priority optional inputs (per-service fields like testDirectory live in .skyramp/workspace.yml under services[].testDirectory)
   allowedAuthors:
@@ -74,6 +74,14 @@ inputs:
     description: 'Browser login credentials for apps that require authentication before UI test recording. One credential per line; three formats: ";"-delimited key=value pairs — "username=<val>;password=<val>" plus any additional login-form fields the app needs (e.g. ";tenantId=<val>") and optional ";role=<val>" for credential selection; a JSON object per line (preferred when a value contains = or ;); or legacy "username:password". The string is passed to the agent as-is — formats are hints the agent interprets, not a parsed grammar. With several credentials, each line is also exported as SKYRAMP_UI_USERNAME_<KEY>/SKYRAMP_UI_PASSWORD_<KEY> (KEY from its normalized role, e.g. "read only" -> READ_ONLY; else its 1-based position among the non-empty lines; a duplicate KEY gets the later line''s position appended), and each generated test names the variable of the credential it was recorded with — bind that variable to re-run the test in your own CI. Store in GitHub Secrets.'
     required: false
     default: ""
+  deliverBranch:
+    description: 'Branch the staged pipeline pushes generated tests to (the Testbot PR head). Default: skyramp-testbot/<dev-branch>-tests. Staged pipeline only.'
+    required: false
+    default: ""
+  sessionEnv:
+    description: 'Extra environment for the test-running stages, one KEY=VALUE per line — the variables your CI sets from secrets (the staged pipeline reads your CI workflow for the literal ones; these are the ones it cannot see). Store in GitHub Secrets. Staged pipeline only.'
+    required: false
+    default: ""
   targetTeardownCommand:
     description: "Command to tear down services after test execution (runs in post step, guaranteed even on failure/cancellation)"
     required: false
@@ -81,11 +89,15 @@ inputs:
   skipTargetTeardown:
     description: "Skip running service teardown command"
     required: false
-    default: "false"
+    default: ""
 
   # Medium priority optional inputs
+  engineVersion:
+    description: 'Testbot engine (@skyramp/testbot-core) version to run: an exact version (e.g. "0.12.0"), a semver range, or an npm dist-tag (e.g. "next"). Empty (default) runs the version the npm "latest" dist-tag names; on a build/<branch> ref, it runs the engine of that branch.'
+    required: false
+    default: ""
   skyrampExecutorVersion:
-    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.48".'
+    description: 'Skyramp Executor Docker image version. Falls back to workspace.yml metadata, then "v1.3.51".'
     required: false
   skyrampMcpVersion:
     description: 'Skyramp MCP package version. Falls back to workspace.yml metadata, then "latest".'
@@ -93,22 +105,22 @@ inputs:
   skyrampMcpSource:
     description: 'Source for Skyramp MCP package: "npm" or "github"'
     required: false
-    default: "npm"
+    default: ""
   skyrampMcpGithubToken:
     description: 'GitHub PAT with read access to letsramp/mcp (required when source is "github")'
     required: false
   skyrampMcpGithubRef:
     description: 'Git ref (branch/tag/commit) for letsramp/mcp (used when source is "github")'
     required: false
-    default: "main"
+    default: ""
   nodeVersion:
     description: "Node.js version to use"
     required: false
-    default: "lts/*"
+    default: ""
   skipTargetSetup:
     description: "Skip running target setup command"
     required: false
-    default: "false"
+    default: ""
   targetReadyCheckCommand:
     description: "Shell command to verify services are ready (retried until success or timeout). When empty (default), auto-generates curl health checks against service base URLs from workspace config."
     required: false
@@ -116,31 +128,35 @@ inputs:
   targetReadyCheckTimeout:
     description: "Maximum seconds to wait for ready check command to succeed. Default accommodates `docker compose --build --wait` cold builds; the loop exits on first success so fast services pay no extra cost."
     required: false
-    default: "1800"
+    default: ""
   targetReadyCheckInterval:
     description: "Seconds between ready check poll attempts"
     required: false
-    default: "30"
+    default: ""
   targetReadyCheckDiagnosticsCommand:
-    description: "Shell command to collect diagnostics on ready check timeout. Runs when targetReadyCheckCommand times out."
+    description: "Shell command to collect diagnostics on ready check timeout. Runs when targetReadyCheckCommand times out. Set to none to turn it off."
     required: false
-    default: "docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' && docker ps -a --format '{{.Names}}' | while read name; do [ -n \"$name\" ] && echo \"--- logs $name (last 30) ---\" && docker logs --tail 30 \"$name\"; done"
+    default: ""
   workingDirectory:
     description: "Working directory for the action"
     required: false
-    default: "."
+    default: ""
   autoCommit:
     description: "Automatically commit test changes"
     required: false
-    default: "true"
+    default: ""
   commitMessage:
     description: "Commit message for test changes"
     required: false
-    default: "Skyramp Testbot: test maintenance suggestions"
+    default: ""
   generatedTestsMode:
     description: 'Where generated/maintained tests are delivered. "separate-branch" (default) opens a new PR/MR from a bot-owned branch into the feature branch, keeping the feature PR clean. "same-branch" pushes a commit directly onto the feature branch (legacy behavior). Note: for downstream CI (lint/tests/etc.) to auto-run on the Testbot PR, the `githubToken` input must be a GitHub App installation token or PAT — the default `GITHUB_TOKEN` will not trigger other workflows.'
     required: false
-    default: "separate-branch"
+    default: ""
+  pipeline:
+    description: 'Which engine pipeline runs. "classic" (default): the single-agent flow. "staged": the staged pipeline (analyze → deploy → recommend → generate → adapt → finalize → report → deliver) with deterministic gates between stages; delivers through the same Testbot PR and progress comment.'
+    required: false
+    default: ""
   testRepoPath:
     description: "Cross-repo test delivery: local filesystem path (relative to `$GITHUB_WORKSPACE`) where the workflow has checked out a separate test repository (via `actions/checkout` with `path:`, on its default branch, with a token that has `contents: write` + `pull-requests: write` on it). `persist-credentials` is not required — Testbot injects credentials from `githubToken` ephemerally for its git operations (push, and Testbot PR fetch/ls-remote), never written to `.git/config`. When set, generated tests are committed and a Testbot PR is opened in that repo instead of the app repo — Testbot derives its `owner/repo` from the checkout and reuses the action's `githubToken` for the push and Testbot PR API. Leave empty to commit tests in the app repo."
     required: false
@@ -151,7 +167,7 @@ inputs:
   postPrComment:
     description: "Post summary as PR comment"
     required: false
-    default: "true"
+    default: ""
   maxRecommendations:
     description: "Deprecated. Accepted for older MCP versions and not sent unless set. The plan decides how many tests the change needs."
     required: false
@@ -163,11 +179,11 @@ inputs:
   testbotMaxRetries:
     description: 'Maximum number of retries for transient agent CLI errors (e.g., Cursor "Connection stalled")'
     required: false
-    default: "3"
+    default: ""
   testbotRetryDelay:
     description: "Delay in seconds between agent retry attempts"
     required: false
-    default: "10"
+    default: ""
   perTestMaxFixAttempts:
     description: "Per-file cap on skyramp_execute_test calls in the final phase: the first run plus the fix-and-rerun iterations the agent may spend on a fixable failure (SKYR-4460). Whole number 1-10. Empty (default) leaves the Skyramp MCP's own default in force; an unusable value is ignored with a warning."
     required: false
@@ -175,45 +191,45 @@ inputs:
   testExecutionTimeout:
     description: "Timeout in seconds for individual MCP tool calls (e.g., test execution). Increase if tests take longer than 5 minutes."
     required: false
-    default: "300"
+    default: ""
   testbotTimeout:
     description: "Timeout in minutes for the agent execution; the agent process is sent SIGTERM when it is exceeded"
     required: false
-    default: "60"
+    default: ""
   targetSetupRetries:
     description: "Number of retries for targetSetupCommand on failure (e.g. transient DockerHub 502 errors)"
     required: false
-    default: "3"
+    default: ""
   targetSetupRetryDelay:
     description: "Delay in seconds between targetSetupCommand retries"
     required: false
-    default: "10"
+    default: ""
   authTokenRetries:
     description: "Total attempts for authTokenCommand (e.g. 6 = 1 initial + 5 retries). Tolerates SUTs whose auth surface comes up after the HTTP port (async post-start data seeding). Set to 1 to disable retries."
     required: false
-    default: "6"
+    default: ""
   authTokenRetryDelay:
     description: "Delay in seconds between authTokenCommand retries"
     required: false
-    default: "10"
+    default: ""
   reportCollapsed:
     description: "Wrap report sections in collapsible <details> blocks with a summary line"
     required: false
-    default: "true"
+    default: ""
   language:
     description: "Language for user-facing Testbot output (PR comments, report, Testbot PR body). Supported: en, ja"
     required: false
-    default: "en"
+    default: ""
   enableDebug:
     description: "Enable debug logging"
     required: false
-    default: "true"
+    default: ""
 
   # SUT Setup inputs
   sutSetupMode:
     description: 'SUT setup mode. When not "none", Testbot enters bootstrap mode to generate SUT files. After validation succeeds or bootstrap times out, sets to "none". Supported: none | adapt_workflow | docker_compose.'
     required: false
-    default: "none"
+    default: ""
   sutSourceWorkflowFile:
     description: "Path to an existing workflow file to adapt (for adapt_workflow mode). Example: .github/workflows/e2e-tests.yml"
     required: false
